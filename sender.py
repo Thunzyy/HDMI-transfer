@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import os
+import shutil
 import time
 import math
 import struct
@@ -57,22 +58,6 @@ def encode_frame(data_chunk, frame_index):
     
     return img
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python sender.py <file_to_send>")
-        return
-
-    filepath = sys.argv[1]
-    if not os.path.exists(filepath):
-        print(f"File not found: {filepath}")
-        return
-
-    file_size = os.path.getsize(filepath)
-    print(f"Sending {filepath} ({file_size} bytes)")
-    print(f"Resolution: {WIDTH}x{HEIGHT}, Block Size: {BLOCK_SIZE}")
-    print(f"Bytes per frame: {BYTES_PER_FRAME}")
-    
-    total_frames = math.ceil(file_size / BYTES_PER_FRAME)
     print(f"Total frames needed: {total_frames}")
 
     fps = 30
