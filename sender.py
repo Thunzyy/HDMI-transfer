@@ -71,6 +71,23 @@ def encode_frame(data_chunk, frame_index):
     with open(filepath, 'rb') as f:
         file_data = f.read()
 
+    # Prepend filename metadata
+    # Format: [4 bytes name_len][name_bytes][file_content]
+    filename = os.path.basename(filepath)
+    filename_bytes = filename.encode('utf-8')
+    metadata_header = struct.pack('>I', len(filename_bytes)) + filename_bytes
+    
+    file_data = metadata_header + file_data
+    file_size = len(file_data) # Update size to include header
+    
+    print(f"Sending {filepath} as '{filename}'")
+    print(f"Total Data Size: {file_size} bytes")
+    print(f"Resolution: {WIDTH}x{HEIGHT}, Block Size: {BLOCK_SIZE}")
+    print(f"Bytes per frame: {BYTES_PER_FRAME}")
+    
+    total_frames = math.ceil(file_size / BYTES_PER_FRAME)
+    print(f"Total frames needed: {total_frames}")
+
     cv2.namedWindow('HDMI Exfil Sender', cv2.WINDOW_NORMAL)
     cv2.setWindowProperty('HDMI Exfil Sender', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 

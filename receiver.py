@@ -76,12 +76,14 @@ def decode_frame(frame_grid):
     return frame_index, data, data_len
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python receiver.py <video_file_or_camera_index> <output_file>")
+    if len(sys.argv) < 2:
+        print("Usage: python receiver.py <video_file_or_camera_index> [output_dir]")
         return
 
     source = sys.argv[1]
-    output_path = sys.argv[2]
+    output_path = '.'
+    if len(sys.argv) > 2:
+        output_path = sys.argv[2]
     
     # Handle numeric camera index
     if source.isdigit():
@@ -170,15 +172,48 @@ def main():
         print(f"WARNING: Missing frames: {missing}")
         print("File will be corrupted.")
     
-    with open(output_path, 'wb') as f:
-        for i in range(max_frame_index + 1):
-            if i in received_chunks:
-                f.write(received_chunks[i])
-            else:
-                print(f"Filling missing frame {i} with zeros.")
-                f.write(b'\x00' * BYTES_PER_FRAME) # Approximation
-                
-    print(f"Saved to {output_path}")
+    # Concatenate all data
+    full_data = bytearray()
+    for i in range(max_frame_index + 1):
+        if i in received_chunks:
+            full_data.extend(received_chunks[i])
+        else:
+            print(f"Filling missing frame {i} with zeros.")
+            full_data.extend(b'\x00' * BYTES_PER_FRAME)
+            
+    # Parse Metadata
+    # Format: [4 bytes name_len][name_bytes][file_content]
+    try:
+        name_len = struct.unpack('>I', full_data[:4])[0]
+        filename = full_data[4 : 4 + name_len].decode('utf-8')
+        file_content = full_data[4 + name_len:]
+        
+        print(f"Detected Filename: {filename}")
+        
+        # Handle output path
+        # If output_path is a directory (or default '.'), save there.
+        # If it's a file, we might override or ignore. 
+        # Let's assume output_path is a directory.
+        
+        if not os.path.isdir(output_path):
+            # If user provided a file path, warn them but try to use the directory of that path
+            # Or just use the detected filename in the current directory if output_path was '.'
+            if output_path != '.':
+                 print(f"Warning: '{output_path}' is not a directory. Saving to current directory with detected name.")
+            save_path = filename
+        else:
+            save_path = os.path.join(output_path, filename)
+            
+        with open(save_path, 'wb') as f:
+            f.write(file_content)
+            
+        print(f"Saved to {save_path}")
+        
+    except Exception as e:
+        print(f"Error parsing metadata: {e}")
+        print("Saving raw data to 'dump.bin'...")
+        with open('dump.bin', 'wb') as f:
+            f.write(full_data)
 
 if __name__ == "__main__":
     main()
