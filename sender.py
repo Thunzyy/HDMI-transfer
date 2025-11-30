@@ -75,6 +75,13 @@ def main():
     total_frames = math.ceil(file_size / BYTES_PER_FRAME)
     print(f"Total frames needed: {total_frames}")
 
+    fps = 30
+    if len(sys.argv) > 2:
+        fps = int(sys.argv[2])
+        
+    delay = int(1000 / fps)
+    print(f"Target FPS: {fps} (Delay: {delay}ms)")
+
     # Read file
     with open(filepath, 'rb') as f:
         file_data = f.read()
@@ -98,8 +105,8 @@ def main():
         
         cv2.imshow('HDMI Exfil Sender', frame)
         
-        # Wait longer to ensure capture card grabs the frame (5 FPS)
-        if cv2.waitKey(200) & 0xFF == 27: # ESC to stop
+        # Wait to match target FPS
+        if cv2.waitKey(delay) & 0xFF == 27: # ESC to stop
             break
             
     end_time = time.time()
