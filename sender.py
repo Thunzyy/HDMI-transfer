@@ -1,0 +1,121 @@
+import cv2
+import numpy as np
+import os
+import time
+import math
+import struct
+import sys
+from common import *
+
+def create_calibration_frame():
+    """Creates a frame to help the receiver calibrate/align."""
+    img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+    # White border
+    cv2.rectangle(img, (0, 0), (WIDTH-1, HEIGHT-1), (255, 255, 255), 20)
+    # Center cross
+    cv2.line(img, (WIDTH//2, 0), (WIDTH//2, HEIGHT), (255, 255, 255), 5)
+    cv2.line(img, (0, HEIGHT//2), (WIDTH, HEIGHT//2), (255, 255, 255), 5)
+    # Red/Green/Blue corners for color check
+    cv2.rectangle(img, (0, 0), (100, 100), (0, 0, 255), -1) # Red (BGR)
+    cv2.rectangle(img, (WIDTH-100, 0), (WIDTH, 100), (0, 255, 0), -1) # Green
+    cv2.rectangle(img, (0, HEIGHT-100), (100, HEIGHT), (255, 0, 0), -1) # Blue
+    return img
+
+def encode_frame(data_chunk, frame_index):
+    """Encodes a chunk of bytes into a frame image using robust 3-bit encoding."""
+    img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+    
+    # Create header: Frame Index (4 bytes) + Data Length (4 bytes)
+    header = struct.pack('>II', frame_index, len(data_chunk))
+    full_data = header + data_chunk
+    
+    # Convert bytes to bits
+    # We need a fast way to do this.
+    # np.unpackbits works on uint8 arrays
+    byte_arr = np.frombuffer(full_data, dtype=np.uint8)
+    bits = np.unpackbits(byte_arr)
+    
+    # Pad bits to match the frame capacity (BLOCKS_PER_FRAME * 3)
+    total_bits_needed = BLOCKS_PER_FRAME * 3
+    padding_needed = total_bits_needed - len(bits)
+    if padding_needed > 0:
+        bits = np.pad(bits, (0, padding_needed), 'constant')
+        
+    # Reshape bits into (Blocks, 3) to get RGB values
+    # We have BLOCKS_PER_FRAME blocks.
+    # Each block needs 3 bits.
+    pixel_bits = bits.reshape((BLOCKS_PER_FRAME, 3))
+    
+    # Map 0 -> 0, 1 -> 255
+    pixel_values = pixel_bits * 255
+    
+    # Reshape to (ROWS, COLS, 3)
+    blocks_grid = pixel_values.reshape((ROWS, COLS, 3)).astype(np.uint8)
+    
+    # Scale up to full resolution
+    img = cv2.resize(blocks_grid, (WIDTH, HEIGHT), interpolation=cv2.INTER_NEAREST)
+    
+    return img
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python sender.py <file_to_send>")
+        return
+
+    filepath = sys.argv[1]
+    if not os.path.exists(filepath):
+        print(f"File not found: {filepath}")
+        return
+
+    file_size = os.path.getsize(filepath)
+    print(f"Sending {filepath} ({file_size} bytes)")
+    print(f"Resolution: {WIDTH}x{HEIGHT}, Block Size: {BLOCK_SIZE}")
+    print(f"Bytes per frame: {BYTES_PER_FRAME}")
+    
+    total_frames = math.ceil(file_size / BYTES_PER_FRAME)
+    print(f"Total frames needed: {total_frames}")
+
+    # Read file
+    with open(filepath, 'rb') as f:
+        file_data = f.read()
+
+    cv2.namedWindow('HDMI Exfil Sender', cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty('HDMI Exfil Sender', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+    print("Press any key to start transmission...")
+    cv2.imshow('HDMI Exfil Sender', create_calibration_frame())
+    cv2.waitKey(0)
+
+    # Transmission loop
+    start_time = time.time()
+    
+    for i in range(total_frames):
+        start_byte = i * BYTES_PER_FRAME
+        end_byte = min((i + 1) * BYTES_PER_FRAME, file_size)
+        chunk = file_data[start_byte:end_byte]
+        
+        frame = encode_frame(chunk, i)
+        
+        cv2.imshow('HDMI Exfil Sender', frame)
+        
+        # Wait longer to ensure capture card grabs the frame (5 FPS)
+        if cv2.waitKey(200) & 0xFF == 27: # ESC to stop
+            break
+            
+    end_time = time.time()
+    duration = end_time - start_time
+    speed = (file_size * 8) / duration / 1000000 # Mbps
+    
+    print(f"Transmission complete.")
+    print(f"Time: {duration:.2f}s")
+    print(f"Average Speed: {speed:.2f} Mbps")
+    
+    # Show end screen
+    end_img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+    cv2.putText(end_img, "DONE", (WIDTH//2 - 100, HEIGHT//2), cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 255, 0), 4)
+    cv2.imshow('HDMI Exfil Sender', end_img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
