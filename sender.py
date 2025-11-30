@@ -58,14 +58,24 @@ def encode_frame(data_chunk, frame_index):
     
     return img
 
-    print(f"Total frames needed: {total_frames}")
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python sender.py <file_or_folder_to_send> [fps]")
+        return
 
-    fps = 30
-    if len(sys.argv) > 2:
-        fps = int(sys.argv[2])
-        
-    delay = int(1000 / fps)
-    print(f"Target FPS: {fps} (Delay: {delay}ms)")
+    filepath = sys.argv[1]
+    
+    # Handle directory input
+    if os.path.isdir(filepath):
+        print(f"Directory detected. Zipping '{filepath}'...")
+        base_name = os.path.basename(os.path.normpath(filepath))
+        archive_path = shutil.make_archive(base_name, 'zip', filepath)
+        print(f"Zipped to: {archive_path}")
+        filepath = archive_path
+
+    if not os.path.exists(filepath):
+        print(f"Error: File '{filepath}' not found.")
+        return
 
     # Read file
     with open(filepath, 'rb') as f:
@@ -78,7 +88,7 @@ def encode_frame(data_chunk, frame_index):
     metadata_header = struct.pack('>I', len(filename_bytes)) + filename_bytes
     
     file_data = metadata_header + file_data
-    file_size = len(file_data) # Update size to include header
+    file_size = len(file_data)
     
     print(f"Sending {filepath} as '{filename}'")
     print(f"Total Data Size: {file_size} bytes")
@@ -87,6 +97,13 @@ def encode_frame(data_chunk, frame_index):
     
     total_frames = math.ceil(file_size / BYTES_PER_FRAME)
     print(f"Total frames needed: {total_frames}")
+
+    fps = 30
+    if len(sys.argv) > 2:
+        fps = int(sys.argv[2])
+        
+    delay = int(1000 / fps)
+    print(f"Target FPS: {fps} (Delay: {delay}ms)")
 
     cv2.namedWindow('HDMI Exfil Sender', cv2.WINDOW_NORMAL)
     cv2.setWindowProperty('HDMI Exfil Sender', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
@@ -113,7 +130,10 @@ def encode_frame(data_chunk, frame_index):
             
     end_time = time.time()
     duration = end_time - start_time
-    speed = (file_size * 8) / duration / 1000000 # Mbps
+    if duration > 0:
+        speed = (file_size * 8) / duration / 1000000 # Mbps
+    else:
+        speed = 0
     
     print(f"Transmission complete.")
     print(f"Time: {duration:.2f}s")
