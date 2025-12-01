@@ -151,9 +151,21 @@ def main():
             cv2.rectangle(debug_frame, (0,0), (WIDTH, 20), (0, 255, 0), -1)
             
             # Check for completion
-            if total_frames_expected is not None and len(received_chunks) >= total_frames_expected:
-                print("All frames received! Stopping...")
-                break
+            if total_frames_expected is not None:
+                # Draw Progress Bar on Receiver View
+                bar_height = 30
+                cv2.rectangle(debug_frame, (0, 0), (WIDTH, bar_height), (50, 50, 50), -1)
+                
+                progress = len(received_chunks) / total_frames_expected
+                bar_width = int(WIDTH * progress)
+                cv2.rectangle(debug_frame, (0, 0), (bar_width, bar_height), (0, 255, 0), -1)
+                
+                text = f"{int(progress * 100)}% ({len(received_chunks)}/{total_frames_expected})"
+                cv2.putText(debug_frame, text, (WIDTH // 2 - 100, bar_height - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+                if len(received_chunks) >= total_frames_expected:
+                    print("All frames received! Stopping...")
+                    break
             
         cv2.imshow('Receiver View', debug_frame)
         if cv2.waitKey(1) & 0xFF == 27:

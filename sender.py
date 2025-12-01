@@ -56,6 +56,19 @@ def encode_frame(data_chunk, frame_index, total_frames):
     # Scale up to full resolution
     img = cv2.resize(blocks_grid, (WIDTH, HEIGHT), interpolation=cv2.INTER_NEAREST)
     
+    # Draw Progress Bar
+    # Top 30 pixels
+    bar_height = 30
+    cv2.rectangle(img, (0, 0), (WIDTH, bar_height), (50, 50, 50), -1) # Background
+    
+    progress = (frame_index + 1) / total_frames
+    bar_width = int(WIDTH * progress)
+    cv2.rectangle(img, (0, 0), (bar_width, bar_height), (0, 255, 0), -1) # Green bar
+    
+    # Text
+    text = f"{int(progress * 100)}% ({frame_index + 1}/{total_frames})"
+    cv2.putText(img, text, (WIDTH // 2 - 100, bar_height - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+    
     return img
 
 def main():
@@ -116,7 +129,30 @@ def main():
     start_time = time.time()
     interrupted = False
     
-    for i in range(total_frames):
+    # Transmission loop
+    start_time = time.time()
+    interrupted = False
+    paused = False
+    
+    i = 0
+    while i < total_frames:
+        if paused:
+            # Show Pause Screen
+            pause_img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+            cv2.putText(pause_img, "PAUSED", (WIDTH//2 - 200, HEIGHT//2), cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 165, 255), 4) # Orange
+            cv2.putText(pause_img, "Press 'r' to RESUME, 'q' or ESC to QUIT", (WIDTH//2 - 400, HEIGHT//2 + 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv2.imshow('HDMI Exfil Sender', pause_img)
+            
+            key = cv2.waitKey(100) & 0xFF
+            if key == ord('r'):
+                paused = False
+                print("\nResuming transmission...")
+            elif key == 27 or key == ord('q'): # ESC or q
+                interrupted = True
+                break
+            continue
+
+        # Normal Transmission
         start_byte = i * BYTES_PER_FRAME
         end_byte = min((i + 1) * BYTES_PER_FRAME, file_size)
         chunk = file_data[start_byte:end_byte]
@@ -126,9 +162,13 @@ def main():
         cv2.imshow('HDMI Exfil Sender', frame)
         
         # Wait to match target FPS
-        if cv2.waitKey(delay) & 0xFF == 27: # ESC to stop
-            interrupted = True
-            break
+        key = cv2.waitKey(delay) & 0xFF
+        if key == 27: # ESC to PAUSE
+            paused = True
+            print(f"\nPaused at frame {i}/{total_frames}")
+            continue
+            
+        i += 1
             
     end_time = time.time()
     duration = end_time - start_time
