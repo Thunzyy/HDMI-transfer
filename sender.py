@@ -57,18 +57,10 @@ def encode_frame(data_chunk, frame_index, total_frames):
     # Scale up to full resolution
     img = cv2.resize(blocks_grid, (WIDTH, HEIGHT), interpolation=cv2.INTER_NEAREST)
     
-    # Draw Progress Bar
-    # Top 30 pixels
-    bar_height = 30
-    cv2.rectangle(img, (0, 0), (WIDTH, bar_height), (50, 50, 50), -1) # Background
-    
+    # Terminal Progress (overwrite line)
     progress = (frame_index + 1) / total_frames
-    bar_width = int(WIDTH * progress)
-    cv2.rectangle(img, (0, 0), (bar_width, bar_height), (0, 255, 0), -1) # Green bar
-    
-    # Text
-    text = f"{int(progress * 100)}% ({frame_index + 1}/{total_frames})"
-    cv2.putText(img, text, (WIDTH // 2 - 100, bar_height - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+    sys.stdout.write(f"\rProgress: {progress:.1%} ({frame_index + 1}/{total_frames})")
+    sys.stdout.flush()
     
     return img
 
