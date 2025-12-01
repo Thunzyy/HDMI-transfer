@@ -6,6 +6,7 @@ import time
 import math
 import struct
 import sys
+import argparse
 from common import *
 
 def create_calibration_frame():
@@ -72,11 +73,16 @@ def encode_frame(data_chunk, frame_index, total_frames):
     return img
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python sender.py <file_or_folder_to_send> [fps]")
-        return
+    parser = argparse.ArgumentParser(description="HDMI Exfiltration Sender")
+    parser.add_argument("input_path", help="File or directory to send")
+    parser.add_argument("--fps", type=int, default=240, help="Target frames per second (default: 240)")
+    parser.add_argument("--redundancy", type=int, default=1, help="Number of times to send each frame (default: 1)")
+    
+    args = parser.parse_args()
 
-    filepath = sys.argv[1]
+    filepath = args.input_path
+    fps = args.fps
+    redundancy = args.redundancy
     
     # Handle directory input
     if os.path.isdir(filepath):
@@ -111,12 +117,9 @@ def main():
     total_frames = math.ceil(file_size / BYTES_PER_FRAME)
     print(f"Total frames needed: {total_frames}")
 
-    fps = 240
-    if len(sys.argv) > 2:
-        fps = int(sys.argv[2])
-        
     delay = int(1000 / fps)
     print(f"Target FPS: {fps} (Delay: {delay}ms)")
+    print(f"Redundancy: {redundancy}x (Each frame sent {redundancy} times)")
 
     cv2.namedWindow('HDMI Exfil Sender', cv2.WINDOW_NORMAL)
     cv2.setWindowProperty('HDMI Exfil Sender', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
@@ -125,10 +128,6 @@ def main():
     cv2.imshow('HDMI Exfil Sender', create_calibration_frame())
     cv2.waitKey(0)
 
-    # Transmission loop
-    start_time = time.time()
-    interrupted = False
-    
     # Transmission loop
     start_time = time.time()
     interrupted = False
@@ -159,13 +158,18 @@ def main():
         
         frame = encode_frame(chunk, i, total_frames)
         
-        cv2.imshow('HDMI Exfil Sender', frame)
+        # Redundancy loop
+        for _ in range(redundancy):
+            cv2.imshow('HDMI Exfil Sender', frame)
+            
+            # Wait to match target FPS
+            key = cv2.waitKey(delay) & 0xFF
+            if key == 27: # ESC to PAUSE
+                paused = True
+                print(f"\nPaused at frame {i}/{total_frames}")
+                break # Break redundancy loop to handle pause
         
-        # Wait to match target FPS
-        key = cv2.waitKey(delay) & 0xFF
-        if key == 27: # ESC to PAUSE
-            paused = True
-            print(f"\nPaused at frame {i}/{total_frames}")
+        if paused:
             continue
             
         i += 1
