@@ -98,7 +98,7 @@ def main():
     total_frames = math.ceil(file_size / BYTES_PER_FRAME)
     print(f"Total frames needed: {total_frames}")
 
-    fps = 30
+    fps = 240
     if len(sys.argv) > 2:
         fps = int(sys.argv[2])
         
@@ -114,6 +114,7 @@ def main():
 
     # Transmission loop
     start_time = time.time()
+    interrupted = False
     
     for i in range(total_frames):
         start_byte = i * BYTES_PER_FRAME
@@ -126,6 +127,7 @@ def main():
         
         # Wait to match target FPS
         if cv2.waitKey(delay) & 0xFF == 27: # ESC to stop
+            interrupted = True
             break
             
     end_time = time.time()
@@ -135,17 +137,31 @@ def main():
     else:
         speed = 0
     
-    print(f"Transmission complete.")
-    print(f"Time: {duration:.2f}s")
-    print(f"Average Speed: {speed:.2f} Mbps")
-    
-    # Show end screen
-    end_img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
-    cv2.putText(end_img, "DONE", (WIDTH//2 - 100, HEIGHT//2), cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 255, 0), 4)
-    cv2.imshow('HDMI Exfil Sender', end_img)
-    
-    print("Closing in 5 seconds...")
-    cv2.waitKey(5000)
+    if interrupted:
+        print("\n!!! Transmission INTERRUPTED by user !!!")
+        print(f"Stopped at frame {i}/{total_frames}")
+        
+        # Show interruption screen
+        end_img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+        # Red background or text
+        cv2.putText(end_img, "INTERRUPTED", (WIDTH//2 - 400, HEIGHT//2), cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 0, 255), 4)
+        cv2.putText(end_img, "Press any key to exit", (WIDTH//2 - 300, HEIGHT//2 + 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        cv2.imshow('HDMI Exfil Sender', end_img)
+        cv2.waitKey(0)
+        
+    else:
+        print(f"Transmission complete.")
+        print(f"Time: {duration:.2f}s")
+        print(f"Average Speed: {speed:.2f} Mbps")
+        
+        # Show end screen
+        end_img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+        cv2.putText(end_img, "DONE", (WIDTH//2 - 100, HEIGHT//2), cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 255, 0), 4)
+        cv2.imshow('HDMI Exfil Sender', end_img)
+        
+        print("Closing in 5 seconds...")
+        cv2.waitKey(5000)
+
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
