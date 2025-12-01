@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HDMI Exfil Sender (Fountain Code)</title>
+    <style>
+      body {
+        margin: 0;
+        background-color: #000;
+        color: #fff;
+        font-family: monospace;
+        overflow: hidden; /* Hide scrollbars */
+      }
+      #controls {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 100;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 10px;
+        border: 1px solid #444;
+      }
+      canvas {
+        display: block;
+        margin: 0 auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="controls">
+      <h3>HDMI Exfil - Fountain Sender</h3>
+      <input type="file" id="fileInput" />
+      <br /><br />
+      <button id="startBtn" disabled>Start Transmission</button>
+      <button id="stopBtn" disabled>Stop</button>
+      <br /><br />
+      <div>Status: <span id="status">Idle</span></div>
+      <div>FPS: <span id="fpsCounter">0</span></div>
+    </div>
+
+    <canvas id="displayCanvas"></canvas>
+
+    <script>
+      // --- Configuration ---
+      const TARGET_FPS = 60; // Browser limit usually, but we try max
+      const BLOCK_SIZE = 8; // Pixels per bit
+      const HEADER_SIZE = 8; // Bytes for header (Seed: 4, ChunkLen: 2, TotalChunks: 2) - actually just Seed is enough if we agree on params
+      // Let's use a fixed header: [Seed (4 bytes)]
+      // We assume the receiver knows the file size? No, fountain codes usually need to know K (total chunks).
+      // So Header: [Seed (4 bytes)] [TotalChunks K (2 bytes)] -> 6 bytes.
+
+      // Resolution
+      const WIDTH = 1920;
+      const HEIGHT = 1080;
+
+      // Grid calculations
+      const COLS = Math.floor(WIDTH / BLOCK_SIZE);
+      const ROWS = Math.floor(HEIGHT / BLOCK_SIZE);
+      const BITS_PER_FRAME = COLS * ROWS;
+      const BYTES_PER_FRAME = Math.floor(BITS_PER_FRAME / 8);
+
+      // Payload size
+      // We reserve 6 bytes for header.
+      const HEADER_BYTES = 6;
+      const PAYLOAD_SIZE = BYTES_PER_FRAME - HEADER_BYTES;
+
+      // --- PRNG (SplitMix32) ---
+      // Simple, fast, seedable, and easy to port to Python.
+      class PRNG {
+        constructor(seed) {
+          this.a = seed | 0;
+        }
+        next() {
+          this.a |= 0;
+          this.a = (this.a + 0x9e3779b9) | 0;
+          let t = this.a ^ (this.a >>> 16);
+          t = Math.imul(t, 0x21f0aaad);
+          t = t ^ (t >>> 15);
+          t = Math.imul(t, 0x735a2d97);
+          return (t = t ^ (t >>> 15)) >>> 0;
+        }
+        // Float between 0 and 1
+        nextFloat() {
+          return this.next() / 4294967296;
+        }
+      }
+
+      // --- State ---
+      let fileBuffer = null;
+      let chunks = [];
+      let isRunning = false;
+      let frameCount = 0;
+      let lastTime = 0;
+      let animationId = null;
+
+      const canvas = document.getElementById("displayCanvas");
+      const ctx = canvas.getContext("2d", { alpha: false }); // Optimize
+      canvas.width = WIDTH;
+      canvas.height = HEIGHT;
+
+      const fileInput = document.getElementById("fileInput");
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const statusSpan = document.getElementById("status");
+      const fpsSpan = document.getElementById("fpsCounter");
+
+      fileInput.addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        statusSpan.innerText = "Reading file...";
+        const arrayBuffer = await file.arrayBuffer();
+        fileBuffer = new Uint8Array(arrayBuffer);
+
+        // Pad file to multiple of PAYLOAD_SIZE
+        const totalLen = fileBuffer.length;
+        const remainder = totalLen % PAYLOAD_SIZE;
+        if (remainder !== 0) {
+          const padding = PAYLOAD_SIZE - remainder;
+          const newBuffer = new Uint8Array(totalLen + padding);
+          newBuffer.set(fileBuffer);
+          fileBuffer = newBuffer;
+        }
+
+        // Split into chunks
+        chunks = [];
+        for (let i = 0; i < fileBuffer.length; i += PAYLOAD_SIZE) {
+          chunks.push(fileBuffer.subarray(i, i + PAYLOAD_SIZE));
+        }
+
+        statusSpan.innerText = `Ready. ${chunks.length} chunks.`;
+        startBtn.disabled = false;
+      });
+
+      startBtn.addEventListener("click", () => {
+        if (!fileBuffer) return;
+
+        // Auto Fullscreen
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen();
+        }
+
+        isRunning = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        document.getElementById("controls").style.opacity = 0.1; // Dim controls
+        lastTime = performance.now();
+        renderLoop();
+      });
+
+      stopBtn.addEventListener("click", () => {
+        isRunning = false;
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        document.getElementById("controls").style.opacity = 1;
+        cancelAnimationFrame(animationId);
+        statusSpan.innerText = "Stopped.";
+      });
+
+      // --- Encoding Logic ---
+      function generateDroplet() {
+        // 1. Generate a random seed for this droplet
+        const seed = Math.floor(Math.random() * 0xffffffff);
+        const prng = new PRNG(seed);
+
+        // 2. Determine degree (how many chunks to XOR)
+        // Ideally use Soliton distribution. For prototype, use simple random degree 1..K/2?
+        // Let's use a simplified distribution: mostly low degrees, some high.
+        // Or just uniform random 1..10 for test? No, that's bad for recovery.
+        // Let's use a simplified Robust Soliton approximation:
+        // 50% chance of degree 1 (to start decoding)
+        // 50% chance of degree 2..10
+
+        const K = chunks.length;
+        let degree = 1;
+        const r = prng.nextFloat();
+
+        if (r < 0.1) degree = 1; // 10% degree 1
+        else if (r < 0.6) degree = 2; // 50% degree 2
+        else degree = Math.floor(prng.nextFloat() * Math.min(K, 20)) + 1; // Random up to 20
+
+        // 3. Pick 'degree' unique indices
+        const indices = new Set();
+        while (indices.size < degree) {
+          const idx = prng.next() % K;
+          indices.add(idx);
+        }
+
+        // 4. XOR chunks
+        const dropletData = new Uint8Array(PAYLOAD_SIZE);
+        for (const idx of indices) {
+          const chunk = chunks[idx];
+          for (let i = 0; i < PAYLOAD_SIZE; i++) {
+            dropletData[i] ^= chunk[i];
+          }
+        }
+
+        return { seed, dropletData, K };
+      }
+
+      function renderLoop() {
+        if (!isRunning) return;
+
+        const now = performance.now();
+        const delta = now - lastTime;
+        if (delta >= 1000) {
+          fpsSpan.innerText = Math.round((frameCount * 1000) / delta);
+          frameCount = 0;
+          lastTime = now;
+        }
+
+        const { seed, dropletData, K } = generateDroplet();
+
+        // Prepare Frame Data: [Seed (4)][K (2)][Data...]
+        // Total bytes = 6 + PAYLOAD_SIZE = BYTES_PER_FRAME
+
+        // We need to construct the full byte array to render
+        // Header
+        const header = new Uint8Array(HEADER_BYTES);
+        // Seed (Big Endian)
+        header[0] = (seed >>> 24) & 0xff;
+        header[1] = (seed >>> 16) & 0xff;
+        header[2] = (seed >>> 8) & 0xff;
+        header[3] = seed & 0xff;
+        // K (Big Endian)
+        header[4] = (K >>> 8) & 0xff;
+        header[5] = K & 0xff;
+
+        // Combine
+        // Note: Creating new arrays every frame is bad for GC. Optimization needed for prod.
+        // But for < 60fps it might be ok.
+        const fullFrame = new Uint8Array(BYTES_PER_FRAME);
+        fullFrame.set(header, 0);
+        fullFrame.set(dropletData, HEADER_BYTES);
+
+        // Render to Canvas
+        // We need to draw squares.
+        // Direct pixel manipulation is faster.
+        const imageData = ctx.createImageData(WIDTH, HEIGHT);
+        const buf = new Uint32Array(imageData.data.buffer);
+
+        // Pre-calculate colors
+        const BLACK = 0xff000000; // Alpha=255, B=0, G=0, R=0
+        const WHITE = 0xffffffff; // Alpha=255, B=255, G=255, R=255
+
+        // Iterate bits
+        let byteIdx = 0;
+        let bitIdx = 7;
+
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            // Get bit
+            const byte = fullFrame[byteIdx];
+            const bit = (byte >>> bitIdx) & 1;
+
+            // Move to next bit
+            bitIdx--;
+            if (bitIdx < 0) {
+              bitIdx = 7;
+              byteIdx++;
+            }
+
+            const color = bit ? WHITE : BLACK;
+
+            // Draw block (BLOCK_SIZE x BLOCK_SIZE)
+            const startY = r * BLOCK_SIZE;
+            const startX = c * BLOCK_SIZE;
+
+            for (let y = 0; y < BLOCK_SIZE; y++) {
+              const rowOffset = (startY + y) * WIDTH;
+              for (let x = 0; x < BLOCK_SIZE; x++) {
+                buf[rowOffset + startX + x] = color;
+              }
+            }
+          }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
+        frameCount++;
+        animationId = requestAnimationFrame(renderLoop);
+      }
+    </script>
+  </body>
+</html>
