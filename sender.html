@@ -133,6 +133,46 @@
         startBtn.disabled = false;
       });
 
+      startBtn.addEventListener("click", () => {
+        if (!fileBuffer) return;
+
+        // Auto Fullscreen
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen();
+        }
+
+        isRunning = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        document.getElementById("controls").style.display = "none"; // Hide completely
+        lastTime = performance.now();
+        renderLoop();
+      });
+
+      // Allow stopping with Escape key since controls are hidden
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          isRunning = false;
+          startBtn.disabled = false;
+          stopBtn.disabled = true;
+          document.getElementById("controls").style.display = "block";
+          cancelAnimationFrame(animationId);
+          statusSpan.innerText = "Stopped.";
+          if (document.exitFullscreen) {
+            document.exitFullscreen();
+          }
+        }
+      });
+
+      stopBtn.addEventListener("click", () => {
+        isRunning = false;
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        document.getElementById("controls").style.display = "block";
+        cancelAnimationFrame(animationId);
+        statusSpan.innerText = "Stopped.";
+      });
+
       // --- Encoding Logic ---
       function generateDroplet() {
         // 1. Generate a random seed for this droplet
