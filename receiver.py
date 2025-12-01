@@ -47,11 +47,6 @@ def decode_frame(frame_grid):
     flat_bits = bits.reshape(-1)
     
     # Pack bits into bytes
-    # np.packbits packs 8 bits into a byte.
-    # We need to make sure we have a multiple of 8 bits.
-    # Our total bits might not be a multiple of 8 if BLOCKS_PER_FRAME * 3 is not divisible by 8.
-    # But in common.py we calculated BYTES_PER_FRAME based on floor division.
-    
     packed_bytes = np.packbits(flat_bits)
     
     # Convert to bytes object
@@ -59,21 +54,22 @@ def decode_frame(frame_grid):
     
     # Extract header
     if len(frame_bytes) < HEADER_SIZE:
-        return None, None, None
+        return None, None, None, None
         
     header = frame_bytes[:HEADER_SIZE]
     try:
-        frame_index, data_len = struct.unpack('>II', header)
+        # Unpack 3 integers: Index, Total Frames, Data Length
+        frame_index, total_frames, data_len = struct.unpack('>III', header)
     except struct.error:
-        return None, None, None
+        return None, None, None, None
     
     # Sanity check on data_len
     if data_len > BYTES_PER_FRAME or data_len == 0:
-        return None, None, None
+        return None, None, None, None
         
     data = frame_bytes[HEADER_SIZE : HEADER_SIZE + data_len]
     
-    return frame_index, data, data_len
+    return frame_index, total_frames, data, data_len
 
 def main():
     if len(sys.argv) < 2:
@@ -81,9 +77,13 @@ def main():
         return
 
     source = sys.argv[1]
-    output_path = '.'
+    output_path = 'received_files'
     if len(sys.argv) > 2:
         output_path = sys.argv[2]
+        
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+        print(f"Created output directory: {output_path}")
     
     # Handle numeric camera index
     if source.isdigit():
@@ -98,35 +98,31 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
     
+    # Try to force high FPS
+    cap.set(cv2.CAP_PROP_FPS, 240)
+    
     # Check what we actually got
     actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    print(f"Camera resolution: {actual_w}x{actual_h}")
+    actual_fps = cap.get(cv2.CAP_PROP_FPS)
+    print(f"Camera resolution: {actual_w}x{actual_h} @ {actual_fps} FPS")
         
-    # Calibration removed by user request
-    # crop_rect = calibrate_screen(cap)
-    
     print(f"Listening for data on {source}...")
     
     received_chunks = {}
     max_frame_index = -1
+    total_frames_expected = None
     
     while True:
         ret, frame = cap.read()
         if not ret:
             break
             
-        # Calibration crop removed
-        # if crop_rect:
-        #    x, y, w, h = crop_rect
-        #    frame = frame[y:y+h, x:x+w]
-        
         # Resize to expected resolution (handles scaling/stretching)
         if frame.shape[0] != HEIGHT or frame.shape[1] != WIDTH:
             frame = cv2.resize(frame, (WIDTH, HEIGHT))
             
         # VISUAL DEBUG: Draw the grid
-        # Only draw every 10th line to save performance/visibility if blocks are small
         debug_frame = frame.copy()
         for r in range(0, ROWS, 5):
             y = r * BLOCK_SIZE
@@ -136,17 +132,28 @@ def main():
             cv2.line(debug_frame, (x, 0), (x, HEIGHT), (0, 255, 255), 1)
             
         sampled = sample_frame(frame)
-        idx, data, length = decode_frame(sampled)
+        idx, total, data, length = decode_frame(sampled)
         
         if idx is not None:
             # Valid frame found
             if idx not in received_chunks:
-                print(f"Received Frame {idx} ({length} bytes)")
+                print(f"Received Frame {idx}/{total} ({length} bytes)")
                 received_chunks[idx] = data
                 if idx > max_frame_index:
                     max_frame_index = idx
+                
+                # Update expected total
+                if total_frames_expected is None:
+                    total_frames_expected = total
+                    print(f"Expecting {total_frames_expected} frames total.")
+            
             # Visual feedback for success
             cv2.rectangle(debug_frame, (0,0), (WIDTH, 20), (0, 255, 0), -1)
+            
+            # Check for completion
+            if total_frames_expected is not None and len(received_chunks) >= total_frames_expected:
+                print("All frames received! Stopping...")
+                break
             
         cv2.imshow('Receiver View', debug_frame)
         if cv2.waitKey(1) & 0xFF == 27:
@@ -190,16 +197,9 @@ def main():
         
         print(f"Detected Filename: {filename}")
         
-        # Handle output path
-        # If output_path is a directory (or default '.'), save there.
-        # If it's a file, we might override or ignore. 
-        # Let's assume output_path is a directory.
-        
         if not os.path.isdir(output_path):
-            # If user provided a file path, warn them but try to use the directory of that path
-            # Or just use the detected filename in the current directory if output_path was '.'
             if output_path != '.':
-                 print(f"Warning: '{output_path}' is not a directory. Saving to current directory with detected name.")
+                 print(f"Warning: '{output_path}' is not a directory. Saving to current directory.")
             save_path = filename
         else:
             save_path = os.path.join(output_path, filename)

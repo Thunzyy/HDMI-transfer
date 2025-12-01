@@ -1,58 +1,72 @@
 # HDMI Exfiltration Prototype
 
-This project demonstrates high-speed data transfer via HDMI by encoding binary data into video frames.
+A proof-of-concept tool to transfer files (exfiltrate data) via HDMI video signals. The "Sender" encodes files into a sequence of QR-like video frames, which are displayed on a monitor. The "Receiver" captures this video feed (via a Capture Card) and decodes it back into the original file.
 
-## Files
+## 📋 Prerequisites
 
-- `sender.py`: Run this on the source machine. It reads a file and displays it as a sequence of QR-like images.
-- `receiver.py`: Run this on the destination machine (connected to the capture card). It reads the video feed and reconstructs the file.
-- `common.py`: Configuration settings (Resolution, Block Size).
-- `test_loopback.py`: Verifies the logic without hardware.
+- **Python 3.8+** installed on both Sender and Receiver machines.
+- **Hardware**:
+  - **Sender PC**: Must have an HDMI output.
+  - **Receiver PC**: Must have a Video Capture Card (e.g., Elgato Cam Link, generic USB capture card) connected.
+  - **HDMI Cable**: Connecting the Sender's output to the Capture Card's input.
 
-## Usage
+## 🛠️ Installation
 
-### 1. Setup
+1.  **Clone or download** this repository on both machines.
+2.  **Install dependencies**:
+    Open a terminal in the project folder and run:
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-- **Source Machine**: Connect HDMI output to the Capture Card input.
-- **Destination Machine**: Connect Capture Card via USB/PCIe. Ensure it's recognized as a camera device (e.g., `/dev/video0` or index `0` or `1` on Windows).
+## 🚀 Usage
 
-### 2. Configure
+### 1. Receiver (Capture Side)
 
-Edit `common.py` if needed:
-
-- `WIDTH`, `HEIGHT`: Set to your capture resolution (e.g., 1920, 1080).
-- `BLOCK_SIZE`: Default is 8. Increase if you see corruption (e.g., to 16 or 32), decrease for higher speed if the signal is clean.
-
-### 3. Run Sender
-
-On the source machine:
+Start the receiver **first** so it's ready to catch the transmission.
 
 ```bash
-python sender.py my_secret_file.zip
+# Syntax: python receiver.py <camera_index> [output_directory]
+
+# Example: Listen on camera index 2 and save to default folder
+python receiver.py 2
+
+# Example: Listen on camera index 0 and save to "C:\Downloads"
+python receiver.py 0 "C:\Downloads"
 ```
 
-It will show a calibration screen. **Do not press a key yet.**
+- **Note**: Use `python list_devices.py` (if available) or trial-and-error (0, 1, 2...) to find your capture card index.
+- **Visual Check**: A window will open showing the capture feed with a **yellow grid**. Ensure the grid aligns roughly with the incoming video blocks.
 
-### 4. Run Receiver
+### 2. Sender (Source Side)
 
-On the destination machine:
+Run the sender to start transmitting a file or folder.
 
 ```bash
-# Replace '0' with your capture card device index
-python receiver.py 0 output_file.zip
+# Syntax: python sender.py <file_or_folder> [fps]
+
+# Example: Send a file at default 30 FPS
+python sender.py secret.pdf
+
+# Example: Send a folder (auto-zipped) at 60 FPS
+python sender.py "C:\My Documents\Project" 60
 ```
 
-The receiver will start listening.
+- **Calibration**: A crosshair screen will appear first.
+- **Start**: Ensure the Receiver is running, then **press SPACE** on the Sender window to begin.
+- **Speed**: If the Receiver misses frames (corrupted file), try lowering the FPS (e.g., `python sender.py file.txt 15`).
 
-### 5. Start Transmission
+## ⚙️ Configuration (`common.py`)
 
-Press any key on the **Sender** window to start the flashing sequence.
+You can tweak advanced settings in `common.py`:
 
-### 6. Finish
+- `WIDTH` / `HEIGHT`: Resolution (Default 1920x1080). Must match your capture card settings.
+- `BLOCK_SIZE`: Size of pixel blocks (Default 8). Larger = slower but more robust against compression.
 
-When the sender shows "DONE", check the receiver output.
+## ⚠️ Troubleshooting
 
-## Troubleshooting
-
-- **Corruption**: If the output file is corrupted, try increasing `BLOCK_SIZE` in `common.py` (must be same on both sides).
-- **Black Bars**: If the capture card adds black bars, you might need to adjust the `sample_frame` function in `receiver.py` to crop the image.
+- **"No data received"**: Ensure the Sender window is in focus when you press SPACE.
+- **Corrupted Files**:
+  - Lower the FPS on the Sender.
+  - Increase `BLOCK_SIZE` in `common.py` (must be done on BOTH machines).
+  - Ensure the Capture Card is not applying heavy compression (MJPEG artifacts can break decoding).

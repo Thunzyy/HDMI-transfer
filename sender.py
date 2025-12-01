@@ -22,12 +22,12 @@ def create_calibration_frame():
     cv2.rectangle(img, (0, HEIGHT-100), (100, HEIGHT), (255, 0, 0), -1) # Blue
     return img
 
-def encode_frame(data_chunk, frame_index):
+def encode_frame(data_chunk, frame_index, total_frames):
     """Encodes a chunk of bytes into a frame image using robust 3-bit encoding."""
     img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
     
-    # Create header: Frame Index (4 bytes) + Data Length (4 bytes)
-    header = struct.pack('>II', frame_index, len(data_chunk))
+    # Create header: Frame Index (4 bytes) + Total Frames (4 bytes) + Data Length (4 bytes)
+    header = struct.pack('>III', frame_index, total_frames, len(data_chunk))
     full_data = header + data_chunk
     
     # Convert bytes to bits
@@ -120,7 +120,7 @@ def main():
         end_byte = min((i + 1) * BYTES_PER_FRAME, file_size)
         chunk = file_data[start_byte:end_byte]
         
-        frame = encode_frame(chunk, i)
+        frame = encode_frame(chunk, i, total_frames)
         
         cv2.imshow('HDMI Exfil Sender', frame)
         
@@ -143,7 +143,9 @@ def main():
     end_img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
     cv2.putText(end_img, "DONE", (WIDTH//2 - 100, HEIGHT//2), cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 255, 0), 4)
     cv2.imshow('HDMI Exfil Sender', end_img)
-    cv2.waitKey(0)
+    
+    print("Closing in 5 seconds...")
+    cv2.waitKey(5000)
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
