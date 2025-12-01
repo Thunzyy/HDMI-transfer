@@ -4,6 +4,7 @@ import os
 import sys
 import struct
 import time
+import argparse
 from common import *
 
 def sample_frame(frame):
@@ -73,15 +74,15 @@ def decode_frame(frame_grid):
     return frame_index, total_frames, data, data_len
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python receiver.py <video_file_or_camera_index> [output_dir]")
-        return
+    parser = argparse.ArgumentParser(description="HDMI Exfiltration Receiver")
+    parser.add_argument("source", help="Video source (Camera index e.g. '0', '1' or file path)")
+    parser.add_argument("--output", default="received_files", help="Directory to save received files (default: 'received_files')")
+    
+    args = parser.parse_args()
+    
+    source = args.source
+    output_path = args.output
 
-    source = sys.argv[1]
-    output_path = 'received_files'
-    if len(sys.argv) > 2:
-        output_path = sys.argv[2]
-        
     if not os.path.exists(output_path):
         os.makedirs(output_path)
         print(f"Created output directory: {output_path}")

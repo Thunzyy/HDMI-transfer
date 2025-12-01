@@ -7,7 +7,38 @@ import math
 import struct
 import sys
 import argparse
+import ctypes
+from ctypes import wintypes
 from common import *
+
+def get_monitors():
+    """Get monitor information using Windows API."""
+    user32 = ctypes.windll.user32
+    monitors = []
+
+    class RECT(ctypes.Structure):
+        _fields_ = [
+            ("left", ctypes.c_long),
+            ("top", ctypes.c_long),
+            ("right", ctypes.c_long),
+            ("bottom", ctypes.c_long)
+        ]
+
+    def monitor_enum_proc(hMonitor, hdcMonitor, lprcMonitor, dwData):
+        rect = lprcMonitor.contents
+        monitors.append({
+            "left": rect.left,
+            "top": rect.top,
+            "right": rect.right,
+            "bottom": rect.bottom,
+            "width": rect.right - rect.left,
+            "height": rect.bottom - rect.top
+        })
+        return 1
+
+    MonitorEnumProc = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong, ctypes.POINTER(RECT), ctypes.c_double)
+    user32.EnumDisplayMonitors(None, None, MonitorEnumProc(monitor_enum_proc), 0)
+    return monitors
 
 def create_calibration_frame():
     """Creates a frame to help the receiver calibrate/align."""
@@ -115,17 +146,36 @@ def main():
     print(f"Target FPS: {fps} (Delay: {delay}ms)")
     print(f"Redundancy: {redundancy}x (Each frame sent {redundancy} times)")
 
+    # Detect Monitors
+    try:
+        monitors = get_monitors()
+        print("\nDetected Monitors:")
+        for i, m in enumerate(monitors):
+            print(f"  Monitor {i}: {m['width']}x{m['height']} at ({m['left']}, {m['top']})")
+            
+        if screen_idx < len(monitors):
+            target_monitor = monitors[screen_idx]
+            x_offset = target_monitor['left']
+            y_offset = target_monitor['top']
+            print(f"Targeting Screen {screen_idx}: Moving to ({x_offset}, {y_offset})")
+        else:
+            print(f"Warning: Screen index {screen_idx} out of range. Using Primary.")
+            x_offset = 0
+            y_offset = 0
+            
+    except Exception as e:
+        print(f"Error detecting monitors: {e}")
+        print("Fallback to manual offset.")
+        x_offset = screen_idx * 1920
+        y_offset = 0
+
     # Create Window
     cv2.namedWindow('HDMI Exfil Sender', cv2.WINDOW_NORMAL)
     
     # Move to correct screen
-    # Simple assumption: Screens are 1920 pixels wide.
-    # Screen 0: x=0, Screen 1: x=1920, Screen 2: x=3840
-    if screen_idx > 0:
-        x_offset = screen_idx * 1920
-        cv2.moveWindow('HDMI Exfil Sender', x_offset, 0)
-        print(f"Moving window to Screen {screen_idx} (Offset: {x_offset})")
+    cv2.moveWindow('HDMI Exfil Sender', x_offset, y_offset)
     
+    # Force fullscreen
     cv2.setWindowProperty('HDMI Exfil Sender', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     print("Press any key to start transmission...")
