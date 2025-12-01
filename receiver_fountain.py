@@ -160,17 +160,39 @@ def main():
     # Header size in bytes: 6 (Seed: 4, K: 2)
     HEADER_LEN = 6
     
+    frame_count = 0
+    
     while True:
         ret, frame = cap.read()
-        if not ret: break
+        if not ret:
+            print("Failed to grab frame")
+            break
+            
+        # Show frame immediately to verify camera is working
+        debug_frame = frame.copy()
+        # Draw grid (every 10th line to avoid clutter)
+        for r in range(0, ROWS, 10):
+            y = r * BLOCK_SIZE
+            cv2.line(debug_frame, (0, y), (WIDTH, y), (0, 0, 255), 1)
+        for c in range(0, COLS, 10):
+            x = c * BLOCK_SIZE
+            cv2.line(debug_frame, (x, 0), (x, HEIGHT), (0, 0, 255), 1)
+            
+        cv2.imshow('Receiver Fountain', debug_frame)
+        if cv2.waitKey(1) == 27: break
         
-        sampled = sample_frame(frame)
-        raw_bytes = decode_frame_data(sampled)
-        
-        # Parse Header
-        if len(raw_bytes) < HEADER_LEN: continue
-        
+        frame_count += 1
+        if frame_count % 60 == 0:
+            # Keep alive message
+            pass
+
         try:
+            sampled = sample_frame(frame)
+            raw_bytes = decode_frame_data(sampled)
+            
+            # Parse Header
+            if len(raw_bytes) < HEADER_LEN: continue
+            
             # Seed (4), K (2)
             seed_bytes = raw_bytes[:4]
             k_bytes = raw_bytes[4:6]
@@ -185,7 +207,7 @@ def main():
             
             # Initialize decoder on first valid packet
             if decoder is None:
-                print(f"Detected transmission! K={K} chunks.")
+                print(f"\nDetected transmission! K={K} chunks.")
                 decoder = FountainDecoder(K, len(payload))
                 start_time = time.time()
             
@@ -212,12 +234,14 @@ def main():
                     print(f"Saved to {path}")
                     print(f"Time: {duration:.2f}s")
                     break
+            else:
+                # Debug mismatch
+                # print(f"Ignored packet with K={K} (Expected {decoder.K})")
+                pass
                     
         except Exception as e:
+            # print(f"Error: {e}")
             pass
-            
-        cv2.imshow('Receiver Fountain', frame)
-        if cv2.waitKey(1) == 27: break
         
     cap.release()
     cv2.destroyAllWindows()

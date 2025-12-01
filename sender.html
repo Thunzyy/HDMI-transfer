@@ -133,31 +133,6 @@
         startBtn.disabled = false;
       });
 
-      startBtn.addEventListener("click", () => {
-        if (!fileBuffer) return;
-
-        // Auto Fullscreen
-        if (document.documentElement.requestFullscreen) {
-          document.documentElement.requestFullscreen();
-        }
-
-        isRunning = true;
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        document.getElementById("controls").style.opacity = 0.1; // Dim controls
-        lastTime = performance.now();
-        renderLoop();
-      });
-
-      stopBtn.addEventListener("click", () => {
-        isRunning = false;
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-        document.getElementById("controls").style.opacity = 1;
-        cancelAnimationFrame(animationId);
-        statusSpan.innerText = "Stopped.";
-      });
-
       // --- Encoding Logic ---
       function generateDroplet() {
         // 1. Generate a random seed for this droplet
