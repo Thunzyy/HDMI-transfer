@@ -69,12 +69,14 @@ def main():
     parser.add_argument("input_path", help="File or directory to send")
     parser.add_argument("--fps", type=int, default=240, help="Target frames per second (default: 240)")
     parser.add_argument("--redundancy", type=int, default=1, help="Number of times to send each frame (default: 1)")
+    parser.add_argument("--screen", type=int, default=0, help="Screen index to display on (0=Primary, 1=Secondary/Extended)")
     
     args = parser.parse_args()
 
     filepath = args.input_path
     fps = args.fps
     redundancy = args.redundancy
+    screen_idx = args.screen
     
     # Handle directory input
     if os.path.isdir(filepath):
@@ -113,7 +115,17 @@ def main():
     print(f"Target FPS: {fps} (Delay: {delay}ms)")
     print(f"Redundancy: {redundancy}x (Each frame sent {redundancy} times)")
 
+    # Create Window
     cv2.namedWindow('HDMI Exfil Sender', cv2.WINDOW_NORMAL)
+    
+    # Move to correct screen
+    # Simple assumption: Screens are 1920 pixels wide.
+    # Screen 0: x=0, Screen 1: x=1920, Screen 2: x=3840
+    if screen_idx > 0:
+        x_offset = screen_idx * 1920
+        cv2.moveWindow('HDMI Exfil Sender', x_offset, 0)
+        print(f"Moving window to Screen {screen_idx} (Offset: {x_offset})")
+    
     cv2.setWindowProperty('HDMI Exfil Sender', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     print("Press any key to start transmission...")
