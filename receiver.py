@@ -3,6 +3,7 @@ import numpy as np
 import os
 import sys
 import struct
+import time
 from common import *
 
 def sample_frame(frame):
@@ -112,6 +113,7 @@ def main():
     received_chunks = {}
     max_frame_index = -1
     total_frames_expected = None
+    start_time = None
     
     while True:
         ret, frame = cap.read()
@@ -137,6 +139,10 @@ def main():
         if idx is not None:
             # Valid frame found
             if idx not in received_chunks:
+                if start_time is None:
+                    start_time = time.time()
+                    print("First frame received. Timer started.")
+                    
                 print(f"Received Frame {idx}/{total} ({length} bytes)")
                 received_chunks[idx] = data
                 if idx > max_frame_index:
@@ -152,18 +158,17 @@ def main():
             
             # Check for completion
             if total_frames_expected is not None:
-                # Draw Progress Bar on Receiver View
-                bar_height = 30
-                cv2.rectangle(debug_frame, (0, 0), (WIDTH, bar_height), (50, 50, 50), -1)
-                
-                progress = len(received_chunks) / total_frames_expected
-                bar_width = int(WIDTH * progress)
-                cv2.rectangle(debug_frame, (0, 0), (bar_width, bar_height), (0, 255, 0), -1)
-                
-                text = f"{int(progress * 100)}% ({len(received_chunks)}/{total_frames_expected})"
-                cv2.putText(debug_frame, text, (WIDTH // 2 - 100, bar_height - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-
                 if len(received_chunks) >= total_frames_expected:
+                    end_time = time.time()
+                    duration = end_time - start_time
+                    total_bytes = sum(len(chunk) for chunk in received_chunks.values())
+                    speed_mbps = (total_bytes * 8) / duration / 1_000_000 if duration > 0 else 0
+                    
+                    print("\n" + "="*40)
+                    print(f"TRANSFER COMPLETE")
+                    print(f"Total Time: {duration:.2f} seconds")
+                    print(f"Average Speed: {speed_mbps:.2f} Mbps")
+                    print("="*40 + "\n")
                     print("All frames received! Stopping...")
                     break
             
