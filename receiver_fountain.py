@@ -49,6 +49,9 @@ class FountainDecoder:
         elif r < 0.6: degree = 2
         else: degree = int(prng.next_float() * min(self.K, 20)) + 1
         
+        # print(f"DEBUG: Seed={seed}, Degree={degree}") # Commented out to avoid spam, uncomment if needed
+
+        
         indices = set()
         while len(indices) < degree:
             idx = prng.next() % self.K
@@ -117,14 +120,35 @@ class FountainDecoder:
                 out.extend(b'\x00' * self.payload_size)
         return out
 
-def sample_frame(frame):
-    """Samples the center pixel of each block."""
+def sample_frame(frame, offset_x=0, offset_y=0, scale_x=1.0, scale_y=1.0):
+    """Samples the center pixel of each block with offset and scaling."""
     if frame.shape[0] != HEIGHT or frame.shape[1] != WIDTH:
         frame = cv2.resize(frame, (WIDTH, HEIGHT))
         
     half_block = BLOCK_SIZE // 2
-    sampled = frame[half_block::BLOCK_SIZE, half_block::BLOCK_SIZE]
-    return sampled[:ROWS, :COLS]
+    
+    # Calculate sampling coordinates
+    # X coordinates: center of each block
+    grid_x = np.arange(COLS)
+    sample_x = (grid_x * BLOCK_SIZE * scale_x + offset_x + half_block).astype(int)
+    
+    # Y coordinates
+    grid_y = np.arange(ROWS)
+    sample_y = (grid_y * BLOCK_SIZE * scale_y + offset_y + half_block).astype(int)
+    
+    # Clip to bounds to avoid crash
+    np.clip(sample_x, 0, WIDTH - 1, out=sample_x)
+    np.clip(sample_y, 0, HEIGHT - 1, out=sample_y)
+    
+    # Advanced indexing to sample
+    # frame is (H, W, 3)
+    # We want (ROWS, COLS, 3)
+    # sample_y is (ROWS,), sample_x is (COLS,)
+    # We use broadcasting: frame[sample_y[:, None], sample_x]
+    
+    sampled = frame[sample_y[:, None], sample_x]
+    
+    return sampled
 
 def decode_frame_data(sampled_grid):
     """Decodes black/white blocks to bytes."""
@@ -162,6 +186,11 @@ def main():
     
     frame_count = 0
     
+    offset_x = 0
+    offset_y = 0
+    scale_x = 1.0
+    scale_y = 1.0
+    
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -170,16 +199,42 @@ def main():
             
         # Show frame immediately to verify camera is working
         debug_frame = frame.copy()
-        # Draw grid (every 10th line to avoid clutter)
-        for r in range(0, ROWS, 10):
-            y = r * BLOCK_SIZE
-            cv2.line(debug_frame, (0, y), (WIDTH, y), (0, 0, 255), 1)
+        
+        # Draw grid with offset and scale
+        # Vertical lines
         for c in range(0, COLS, 10):
-            x = c * BLOCK_SIZE
-            cv2.line(debug_frame, (x, 0), (x, HEIGHT), (0, 0, 255), 1)
+            x = int(c * BLOCK_SIZE * scale_x) + offset_x
+            if 0 <= x < WIDTH:
+                cv2.line(debug_frame, (x, 0), (x, HEIGHT), (0, 0, 255), 1)
+        
+        # Horizontal lines
+        for r in range(0, ROWS, 10):
+            y = int(r * BLOCK_SIZE * scale_y) + offset_y
+            if 0 <= y < HEIGHT:
+                cv2.line(debug_frame, (0, y), (WIDTH, y), (0, 0, 255), 1)
+        
+        # Draw info text
+        info = f"Pos: {offset_x},{offset_y} | Scale: {scale_x:.3f},{scale_y:.3f}"
+        cv2.putText(debug_frame, info, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        cv2.putText(debug_frame, "Arrows: Move | W/S: Y-Scale | A/D: X-Scale", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             
         cv2.imshow('Receiver Fountain', debug_frame)
-        if cv2.waitKey(1) == 27: break
+        
+        key = cv2.waitKey(1)
+        if key == 27: break
+        
+        # Movement
+        if key == ord('j'): offset_x -= 1
+        elif key == ord('l'): offset_x += 1
+        elif key == ord('i'): offset_y -= 1
+        elif key == ord('k'): offset_y += 1
+        elif key == 2424832: pass # Arrow keys handling if needed
+        
+        # Scaling (Fine tuning)
+        elif key == ord('d'): scale_x += 0.001
+        elif key == ord('a'): scale_x -= 0.001
+        elif key == ord('w'): scale_y += 0.001
+        elif key == ord('s'): scale_y -= 0.001
         
         frame_count += 1
         if frame_count % 60 == 0:
@@ -187,7 +242,8 @@ def main():
             pass
 
         try:
-            sampled = sample_frame(frame)
+            # Pass offsets and scale to sample_frame
+            sampled = sample_frame(frame, offset_x, offset_y, scale_x, scale_y)
             raw_bytes = decode_frame_data(sampled)
             
             # Parse Header
@@ -224,19 +280,37 @@ def main():
                     duration = time.time() - start_time
                     full_data = decoder.get_file_data()
                     
-                    if not os.path.exists(args.output): os.makedirs(args.output)
-                    fname = f"received_{int(time.time())}.bin"
-                    path = os.path.join(args.output, fname)
-                    
-                    with open(path, 'wb') as f:
-                        f.write(full_data)
+                    if not os.path.exists(args.output): 
+                        os.makedirs(args.output)
+
+                    # Tente de reconstituer le nom de fichier si metadata presente
+                    save_path = None
+                    file_bytes = full_data
+                    try:
+                        name_len = struct.unpack('>I', full_data[:4])[0]
+                        if 0 < name_len < 1024 and 4 + name_len <= len(full_data):
+                            name = full_data[4:4+name_len].decode('utf-8')
+                            payload_bytes = full_data[4+name_len:]
+                            safe_name = os.path.basename(name)
+                            save_path = os.path.join(args.output, safe_name)
+                            file_bytes = payload_bytes
+                            print(f"Detected filename: {safe_name}")
+                    except Exception as e:
+                        print(f"Metadata decode failed ({e}). Saving raw payload.")
+
+                    if save_path is None:
+                        fname = f"received_{int(time.time())}.bin"
+                        save_path = os.path.join(args.output, fname)
+
+                    with open(save_path, 'wb') as f:
+                        f.write(file_bytes)
                         
-                    print(f"Saved to {path}")
+                    print(f"Saved to {save_path}")
                     print(f"Time: {duration:.2f}s")
                     break
             else:
                 # Debug mismatch
-                # print(f"Ignored packet with K={K} (Expected {decoder.K})")
+                # print(f"\rIgnored packet with K={K} (Expected {decoder.K})")
                 pass
                     
         except Exception as e:
