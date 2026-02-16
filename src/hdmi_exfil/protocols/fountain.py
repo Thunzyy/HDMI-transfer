@@ -1,8 +1,13 @@
 """Fountain-code (LT-code) encoding protocol implementation.
 
-Implements FountainProtocol (1-bit-per-block encoding with LT-code redundancy)
-and FountainDecoder (belief-propagation / peeling decoder) behind the
-``EncodingProtocol`` ABC defined in ``base.py``.
+Implements FountainProtocol (3-bit-per-block RGB binary encoding with LT-code
+redundancy) and FountainDecoder (belief-propagation / peeling decoder) behind
+the ``EncodingProtocol`` ABC defined in ``base.py``.
+
+Each block encodes 3 bits (one per R/G/B channel, each either 0 or 255),
+matching the same 3bpp pattern used by SequentialProtocol.  This gives
+12,150 bytes per frame (12,138 payload) -- a 3x capacity increase over the
+original 1bpp (4,050 bytes / 4,038 payload) encoding.
 
 Migrated from the monolithic ``receiver_fountain.py`` -- all logic is
 functionally identical, but now uses the shared ``hdmi_exfil.prng.PRNG``
@@ -29,9 +34,9 @@ FOUNT_HEADER_PRE_CRC: int = struct.calcsize(FOUNT_HEADER_FMT)  # 8
 FOUNT_CRC_SIZE: int = 4
 FOUNT_HEADER_SIZE: int = FOUNT_HEADER_PRE_CRC + FOUNT_CRC_SIZE  # 12
 
-# Fountain mode: 1 bit per block (black/white), NOT 3 bits like sequential
-FOUNTAIN_BYTES_PER_FRAME: int = (config.ROWS * config.COLS) // 8  # 4050
-PAYLOAD_SIZE: int = FOUNTAIN_BYTES_PER_FRAME - FOUNT_HEADER_SIZE  # 4038
+# 3bpp: 3 bits per block (RGB binary), same as sequential protocol
+FOUNTAIN_BYTES_PER_FRAME: int = (config.ROWS * config.COLS * 3) // 8  # 12150
+PAYLOAD_SIZE: int = FOUNTAIN_BYTES_PER_FRAME - FOUNT_HEADER_SIZE  # 12138
 
 
 # ---------------------------------------------------------------------------
@@ -141,12 +146,12 @@ class FountainDecoder:
 # ---------------------------------------------------------------------------
 
 class FountainProtocol(EncodingProtocol):
-    """1-bit-per-block fountain (LT-code) encoding protocol.
+    """3-bit-per-block fountain (LT-code) encoding protocol.
 
     Each frame carries a single fountain droplet:
       - Header: magic(2) + seed(4) + K(2) + crc32(4) = 12 bytes
-      - Payload: 4038 bytes of XOR'd chunk data
-      - Total: 4050 bytes packed as 32400 bits (1 bit per block)
+      - Payload: 12138 bytes of XOR'd chunk data
+      - Total: 12150 bytes packed as 97200 bits (3 bits per block, RGB)
     """
 
     def __init__(self) -> None:
@@ -172,7 +177,10 @@ class FountainProtocol(EncodingProtocol):
         total_frames: int,
         **kwargs: object,
     ) -> np.ndarray:
-        """Encode *data* into a 1-bit-per-block fountain frame.
+        """Encode *data* into a 3-bit-per-block fountain frame.
+
+        Uses the same RGB binary encoding as SequentialProtocol: each block
+        carries 3 bits (one per R/G/B channel, 0 or 255).
 
         Parameters
         ----------
@@ -204,19 +212,24 @@ class FountainProtocol(EncodingProtocol):
         if len(frame_bytes) < self._bytes_per_frame:
             frame_bytes += b"\x00" * (self._bytes_per_frame - len(frame_bytes))
 
-        # Convert bytes -> bits (1 bit per block)
+        # Convert bytes -> bits, 3 bits per block (RGB binary)
         byte_arr = np.frombuffer(frame_bytes, dtype=np.uint8)
         bits = np.unpackbits(byte_arr)
 
-        total_blocks = config.ROWS * config.COLS
-        bits = bits[:total_blocks]  # Trim to exact block count
+        total_bits_needed = config.BLOCKS_PER_FRAME * 3
+        if len(bits) < total_bits_needed:
+            bits = np.pad(bits, (0, total_bits_needed - len(bits)), "constant")
 
-        # Map bits to RGB: 1 -> white (255,255,255), 0 -> black (0,0,0)
-        rgb = np.zeros((total_blocks, 3), dtype=np.uint8)
-        rgb[bits == 1] = 255
+        # Reshape to (BLOCKS_PER_FRAME, 3) -> RGB values per block
+        pixel_bits = bits[:total_bits_needed].reshape(
+            (config.BLOCKS_PER_FRAME, 3),
+        )
+        pixel_values = pixel_bits * 255
 
         # Reshape to (ROWS, COLS, 3) grid
-        blocks_grid = rgb.reshape((config.ROWS, config.COLS, 3))
+        blocks_grid = pixel_values.reshape(
+            (config.ROWS, config.COLS, 3),
+        ).astype(np.uint8)
 
         # Scale up to full resolution via nearest-neighbour interpolation
         import cv2  # noqa: C0415  (lazy import -- not needed at module level)
@@ -233,16 +246,17 @@ class FountainProtocol(EncodingProtocol):
     def decode_frame(self, sampled_grid: np.ndarray) -> FrameResult:
         """Decode a sampled block grid into a ``FrameResult``.
 
-        Mirrors the decode path from ``receiver_fountain.py``:
-          1. Flatten grid, threshold green channel > 128 to get bits
+        Uses 3bpp decoding (threshold all 3 RGB channels):
+          1. Flatten grid, threshold all channels > 128 to get 3 bits/block
           2. Pack bits to bytes
           3. Parse fountain header (magic + seed + K + CRC)
           4. Verify CRC32
         """
-        # Flatten and threshold: green channel > 128 => bit=1
+        # Flatten and threshold all 3 channels: > 128 => bit=1 (3bpp)
         flat = sampled_grid.reshape(-1, 3)
-        bits = (flat[:, 1] > 128).astype(np.uint8)
-        raw_bytes = np.packbits(bits).tobytes()
+        bits = (flat > 128).astype(np.uint8)
+        flat_bits = bits.reshape(-1)
+        raw_bytes = np.packbits(flat_bits).tobytes()
 
         # Need at least a full header
         if len(raw_bytes) < FOUNT_HEADER_SIZE:
