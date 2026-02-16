@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** Maximum throughput data transfer over HDMI without leaving any trace on the source machine.
-**Current focus:** Phase 3 Architecture Refactor -- protocol implementations complete
+**Current focus:** Phase 3 Architecture Refactor -- I/O layer complete
 
 ## Current Position
 
 Phase: 3 of 6 (Architecture Refactor)
-Plan: 4 of 7 in current phase
+Plan: 5 of 7 in current phase
 Status: In progress
-Last activity: 2026-02-16 -- Completed 03-03-PLAN.md (sequential protocol)
+Last activity: 2026-02-16 -- Completed 03-05-PLAN.md (I/O layer)
 
-Progress: [████████████████░░░░░░░░░░░░░░░] 12/31 (39%)
+Progress: [█████████████████░░░░░░░░░░░░░░] 13/31 (42%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: 6min
-- Total execution time: 75min
+- Total execution time: 78min
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [████████████████░░░░░░░
 |-------|-------|-------|----------|
 | 01-test-foundation | 3/3 | 45min | 15min |
 | 02-protocol-foundation | 5/5 | 19min | 4min |
-| 03-architecture-refactor | 4/7 | 11min | 3min |
+| 03-architecture-refactor | 5/7 | 14min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 02-05 (3min), 03-01 (2min), 03-02 (3min), 03-03 (5min), 03-04 (3min)
-- Trend: Protocol implementations fast -- code already verified, just wrapping in ABC
+- Last 5 plans: 03-01 (2min), 03-02 (3min), 03-03 (5min), 03-04 (3min), 03-05 (3min)
+- Trend: I/O wrappers fast -- clean interfaces over existing cv2/screeninfo deps
 
 *Updated after each plan completion*
 
@@ -70,6 +70,10 @@ Recent decisions affecting current work:
 - [03-03]: decode_frame_legacy wraps decode_frame for backward-compat 4-tuple returns
 - [03-03]: encode_frame omits sys.stdout progress output (UI concern, belongs in CLI layer)
 - [03-04]: Protocol registry includes both sequential and fountain via PROTOCOLS dict + get_protocol() factory
+- [03-05]: CaptureSource tries preferred backend first, falls back to CAP_ANY
+- [03-05]: get_monitors() lazy imports screeninfo with broad except -- never crashes on headless/CI
+- [03-05]: write_output sanitizes filename with os.path.basename (prevents path traversal)
+- [03-05]: Context manager pattern on all I/O wrappers (CaptureSource, FrameRenderer)
 
 ### Pending Todos
 
@@ -81,6 +85,6 @@ All prior blockers resolved. No new concerns.
 
 ## Session Continuity
 
-Last session: 2026-02-16T14:02:00Z
-Stopped at: Completed 03-03-PLAN.md (sequential protocol)
+Last session: 2026-02-16T14:08:16Z
+Stopped at: Completed 03-05-PLAN.md (I/O layer)
 Resume file: None
