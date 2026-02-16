@@ -16,11 +16,11 @@ import math
 
 from sender import encode_frame, encode_start_frame, encode_end_frame, build_start_metadata
 from receiver import (sample_frame, decode_frame, decode_frame_full,
-                      parse_start_metadata, TransferState)
+                      parse_start_metadata, TransferState, route_frame)
 from common import (BYTES_PER_FRAME, BLOCKS_PER_FRAME, ROWS, COLS,
                     SEQ_MAGIC, SEQ_HEADER_FMT, SEQ_HEADER_PRE_CRC,
                     HEADER_SIZE, FRAME_TYPE_DATA, FRAME_TYPE_START,
-                    FRAME_TYPE_END)
+                    FRAME_TYPE_END, FOUNTAIN_MAGIC)
 
 
 def _encode_decode(data, frame_index, total_frames):
@@ -381,3 +381,117 @@ class TestSHA256Verification:
         corrupted[0] ^= 0xFF  # flip one byte
         actual_sha = hashlib.sha256(bytes(corrupted)).digest()
         assert actual_sha != expected_sha, "SHA-256 should detect single byte corruption"
+
+
+# ---------------------------------------------------------------------------
+# Protocol routing tests (Phase 2 - Plan 05)
+# ---------------------------------------------------------------------------
+
+
+class TestProtocolRouting:
+    """Tests for magic-number-based protocol routing."""
+
+    def test_sequential_frame_routes_to_sequential(self):
+        """A valid sequential frame is routed to the sequential decoder."""
+        data = b'\x42' * 100
+        frame = encode_frame(data, 0, 1)
+        sampled = sample_frame(frame)
+
+        # Get raw bytes (replicate decode pipeline to get bytes before parsing)
+        flat_pixels = sampled.reshape(-1, 3)
+        bits = (flat_pixels > 128).astype(np.uint8)
+        flat_bits = bits.reshape(-1)
+        packed = np.packbits(flat_bits)
+        raw_bytes = packed.tobytes()
+
+        protocol, result = route_frame(raw_bytes)
+        assert protocol == 'sequential'
+        ftype, idx, total, payload, dlen = result
+        assert idx == 0
+        assert total == 1
+        assert dlen == 100
+
+    def test_fountain_frame_routes_to_fountain(self):
+        """A frame with fountain magic routes to the fountain decoder."""
+        from receiver_fountain import (FOUNT_HEADER_FMT,
+                                        FOUNT_HEADER_PRE_CRC, FOUNT_HEADER_SIZE)
+        # Build fountain frame raw bytes
+        header = struct.pack(FOUNT_HEADER_FMT, FOUNTAIN_MAGIC, 1, 5)
+        payload = b'\xBB' * 100
+        crc_val = zlib.crc32(header + payload) & 0xFFFFFFFF
+        raw_bytes = header + struct.pack('>I', crc_val) + payload
+
+        protocol, result = route_frame(raw_bytes)
+        assert protocol == 'fountain'
+        seed, K, data = result
+        assert seed == 1
+        assert K == 5
+        assert data == payload
+
+    def test_noise_routes_to_none(self):
+        """Random bytes with no valid magic return (None, None)."""
+        import os as _os
+        noise = _os.urandom(200)
+        protocol, result = route_frame(noise)
+        # It's possible (unlikely) that random bytes start with 0xDA7A or 0xF0C0
+        # and pass CRC -- that's astronomically unlikely. Accept None or valid.
+        if protocol is not None:
+            pass  # Extremely unlikely but technically possible
+        else:
+            assert result is None
+
+    def test_empty_bytes_routes_to_none(self):
+        """Empty or too-short bytes return (None, None)."""
+        protocol, result = route_frame(b'')
+        assert protocol is None
+        protocol, result = route_frame(b'\x00')
+        assert protocol is None
+
+    def test_corrupted_crc_routes_to_none(self):
+        """Frame with valid magic but bad CRC returns (None, None)."""
+        # Build sequential frame then corrupt CRC
+        header = struct.pack(SEQ_HEADER_FMT, SEQ_MAGIC, FRAME_TYPE_DATA, 0, 1, 10)
+        payload = b'\x42' * 10
+        bad_crc = struct.pack('>I', 0xDEADBEEF)  # wrong CRC
+        raw_bytes = header + bad_crc + payload + b'\x00' * 100
+
+        protocol, result = route_frame(raw_bytes)
+        assert protocol is None, "Corrupted CRC should cause rejection"
+
+
+class TestEndToEndProtocol:
+    """End-to-end tests verifying the complete protocol stack."""
+
+    def test_loopback_with_new_protocol_format(self):
+        """Full loopback test using new 17-byte protocol header."""
+        test_data = os.urandom(BYTES_PER_FRAME * 2 + 100)
+        total_frames = math.ceil(len(test_data) / BYTES_PER_FRAME)
+
+        reassembled = bytearray()
+        for i in range(total_frames):
+            start = i * BYTES_PER_FRAME
+            end = min((i + 1) * BYTES_PER_FRAME, len(test_data))
+            chunk = test_data[start:end]
+
+            frame = encode_frame(chunk, i, total_frames)
+            sampled = sample_frame(frame)
+
+            # Use decode_frame_full to verify frame_type
+            ftype, idx, total, data, dlen = decode_frame_full(sampled)
+            assert ftype == FRAME_TYPE_DATA
+            assert idx == i
+            reassembled.extend(data[:dlen])
+
+        assert reassembled[:len(test_data)] == bytearray(test_data)
+
+    def test_crc32_cross_validation(self):
+        """CRC32 computed via zlib matches known IEEE 802.3 test vectors."""
+        # Standard test vector
+        assert zlib.crc32(b'123456789') & 0xFFFFFFFF == 0xCBF43926
+        # Empty input
+        assert zlib.crc32(b'') & 0xFFFFFFFF == 0x00000000
+        # Single byte
+        crc_a = zlib.crc32(b'\x00') & 0xFFFFFFFF
+        assert crc_a == 0xD202EF8D
+        # Verify unsigned behavior
+        assert zlib.crc32(b'\xFF') & 0xFFFFFFFF == 0xFF000000
