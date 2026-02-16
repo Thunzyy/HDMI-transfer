@@ -37,12 +37,12 @@
 
 ### Performance
 
-- [ ] **PERF-01**: 3-bit per block encoding for fountain mode (upgrade from 1bpp to 3bpp RGB binary)
-- [ ] **PERF-02**: Python fountain sender combining fountain codes + 3bpp encoding
-- [ ] **PERF-03**: Numba @njit acceleration for fountain XOR loops (target 100x+ speedup)
-- [ ] **PERF-04**: pygame-ce SDL2 display replacing cv2.imshow (unlock 240fps rendering)
-- [ ] **PERF-05**: Threaded capture pipeline with ring buffer (unlock actual high-FPS capture)
-- [ ] **PERF-06**: Actual FPS measurement and reporting during capture
+- [x] **PERF-01**: 3-bit per block encoding for fountain mode (upgrade from 1bpp to 3bpp RGB binary)
+- [x] **PERF-02**: Python fountain sender combining fountain codes + 3bpp encoding
+- [x] **PERF-03**: Numba @njit acceleration for fountain XOR loops (target 100x+ speedup)
+- [x] **PERF-04**: pygame-ce SDL2 display replacing cv2.imshow (unlock 240fps rendering)
+- [x] **PERF-05**: Threaded capture pipeline with ring buffer (unlock actual high-FPS capture)
+- [x] **PERF-06**: Actual FPS measurement and reporting during capture
 
 ### Fountain Optimization
 
@@ -108,12 +108,12 @@
 | ARCH-07 | Phase 3 | Complete |
 | ARCH-08 | Phase 3 | Complete |
 | ARCH-09 | Phase 3 | Complete |
-| PERF-01 | Phase 4 | Pending |
-| PERF-02 | Phase 4 | Pending |
-| PERF-03 | Phase 4 | Pending |
-| PERF-04 | Phase 4 | Pending |
-| PERF-05 | Phase 4 | Pending |
-| PERF-06 | Phase 4 | Pending |
+| PERF-01 | Phase 4 | Complete |
+| PERF-02 | Phase 4 | Complete |
+| PERF-03 | Phase 4 | Complete |
+| PERF-04 | Phase 4 | Complete |
+| PERF-05 | Phase 4 | Complete |
+| PERF-06 | Phase 4 | Complete |
 | FOUNT-01 | Phase 5 | Pending |
 | FOUNT-02 | Phase 5 | Pending |
 | FOUNT-03 | Phase 5 | Pending |
@@ -130,4 +130,4 @@
 
 ---
 *Requirements defined: 2026-02-16*
-*Last updated: 2026-02-16 -- Phase 3 requirements complete*
+*Last updated: 2026-02-16 -- Phase 4 requirements complete*
