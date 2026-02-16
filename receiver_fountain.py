@@ -5,7 +5,15 @@ import sys
 import struct
 import time
 import argparse
+import zlib
 from common import *
+
+# Fountain protocol constants (local to fountain files, not in common.py)
+FOUNTAIN_MAGIC = 0xF0C0
+FOUNT_HEADER_FMT = '>HIH'   # magic(2) + seed(4) + K(2)
+FOUNT_HEADER_PRE_CRC = 8     # struct.calcsize(FOUNT_HEADER_FMT)
+FOUNT_CRC_SIZE = 4
+FOUNT_HEADER_SIZE = FOUNT_HEADER_PRE_CRC + FOUNT_CRC_SIZE  # 12
 
 # --- PRNG (SplitMix32) Port ---
 class PRNG:
@@ -41,17 +49,17 @@ class FountainDecoder:
     def add_droplet(self, seed, data):
         # Reconstruct indices from seed
         prng = PRNG(seed)
-        
+
         # Degree distribution (Must match JS exactly)
         degree = 1
         r = prng.next_float()
         if r < 0.1: degree = 1
         elif r < 0.6: degree = 2
         else: degree = int(prng.next_float() * min(self.K, 20)) + 1
-        
-        # print(f"DEBUG: Seed={seed}, Degree={degree}") # Commented out to avoid spam, uncomment if needed
 
-        
+        # FIX: Cap degree to K to prevent infinite loop when degree > K
+        degree = min(degree, self.K)
+
         indices = set()
         while len(indices) < degree:
             idx = prng.next() % self.K
@@ -181,8 +189,7 @@ def main():
     decoder = None
     start_time = None
     
-    # Header size in bytes: 6 (Seed: 4, K: 2)
-    HEADER_LEN = 6
+    HEADER_LEN = FOUNT_HEADER_SIZE  # 12 (was 6)
     
     frame_count = 0
     
@@ -245,21 +252,34 @@ def main():
             # Pass offsets and scale to sample_frame
             sampled = sample_frame(frame, offset_x, offset_y, scale_x, scale_y)
             raw_bytes = decode_frame_data(sampled)
-            
-            # Parse Header
-            if len(raw_bytes) < HEADER_LEN: continue
-            
-            # Seed (4), K (2)
-            seed_bytes = raw_bytes[:4]
-            k_bytes = raw_bytes[4:6]
-            
-            seed = struct.unpack('>I', seed_bytes)[0]
-            K = struct.unpack('>H', k_bytes)[0]
-            
-            payload = raw_bytes[HEADER_LEN:]
-            
+
+            # Parse protocol header (12 bytes)
+            if len(raw_bytes) < FOUNT_HEADER_SIZE:
+                continue
+
+            # Unpack pre-CRC fields: magic(2) + seed(4) + K(2)
+            magic, seed, K = struct.unpack(FOUNT_HEADER_FMT,
+                raw_bytes[:FOUNT_HEADER_PRE_CRC])
+
+            # Magic number check
+            if magic != FOUNTAIN_MAGIC:
+                continue
+
+            # Extract stored CRC
+            stored_crc = struct.unpack('>I',
+                raw_bytes[FOUNT_HEADER_PRE_CRC:FOUNT_HEADER_SIZE])[0]
+
+            payload = raw_bytes[FOUNT_HEADER_SIZE:]
+
+            # Verify CRC32 (over pre-CRC header + payload)
+            computed_crc = zlib.crc32(
+                raw_bytes[:FOUNT_HEADER_PRE_CRC] + payload) & 0xFFFFFFFF
+            if computed_crc != stored_crc:
+                continue  # CRC mismatch -- corruption detected
+
             # Sanity check
-            if K == 0 or K > 60000: continue 
+            if K == 0 or K > 60000:
+                continue
             
             # Initialize decoder on first valid packet
             if decoder is None:
