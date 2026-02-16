@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** Maximum throughput data transfer over HDMI without leaving any trace on the source machine.
-**Current focus:** Phase 3 Architecture Refactor -- I/O layer complete
+**Current focus:** Phase 3 Architecture Refactor -- CLI & web build complete
 
 ## Current Position
 
 Phase: 3 of 6 (Architecture Refactor)
-Plan: 5 of 7 in current phase
+Plan: 6 of 7 in current phase
 Status: In progress
-Last activity: 2026-02-16 -- Completed 03-05-PLAN.md (I/O layer)
+Last activity: 2026-02-16 -- Completed 03-06-PLAN.md (CLI & web build)
 
-Progress: [█████████████████░░░░░░░░░░░░░░] 13/31 (42%)
+Progress: [██████████████████░░░░░░░░░░░░░] 14/31 (45%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13
+- Total plans completed: 14
 - Average duration: 6min
-- Total execution time: 78min
+- Total execution time: 84min
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [█████████████████░░░░░░
 |-------|-------|-------|----------|
 | 01-test-foundation | 3/3 | 45min | 15min |
 | 02-protocol-foundation | 5/5 | 19min | 4min |
-| 03-architecture-refactor | 5/7 | 14min | 3min |
+| 03-architecture-refactor | 6/7 | 20min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 03-01 (2min), 03-02 (3min), 03-03 (5min), 03-04 (3min), 03-05 (3min)
-- Trend: I/O wrappers fast -- clean interfaces over existing cv2/screeninfo deps
+- Last 5 plans: 03-02 (3min), 03-03 (5min), 03-04 (3min), 03-05 (3min), 03-06 (6min)
+- Trend: CLI wiring slightly longer due to two distinct send/receive workflows
 
 *Updated after each plan completion*
 
@@ -74,6 +74,10 @@ Recent decisions affecting current work:
 - [03-05]: get_monitors() lazy imports screeninfo with broad except -- never crashes on headless/CI
 - [03-05]: write_output sanitizes filename with os.path.basename (prevents path traversal)
 - [03-05]: Context manager pattern on all I/O wrappers (CaptureSource, FrameRenderer)
+- [03-06]: CLI modules are thin orchestrators -- zero encoding/decoding logic, just wiring
+- [03-06]: Fountain magic rendered as hex literal (0xF0C0) in JS; decimal (61632) in JSON
+- [03-06]: Build script uses importlib.resources for package-relative constants.json access
+- [03-06]: Auto-detect mode tries sequential decode first (0xDA7A), falls back to fountain (0xF0C0)
 
 ### Pending Todos
 
@@ -85,6 +89,6 @@ All prior blockers resolved. No new concerns.
 
 ## Session Continuity
 
-Last session: 2026-02-16T14:08:16Z
-Stopped at: Completed 03-05-PLAN.md (I/O layer)
+Last session: 2026-02-16T14:16:17Z
+Stopped at: Completed 03-06-PLAN.md (CLI & web build)
 Resume file: None
