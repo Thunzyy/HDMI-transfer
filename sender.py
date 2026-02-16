@@ -8,6 +8,7 @@ import struct
 import sys
 import argparse
 import ctypes
+import zlib
 from ctypes import wintypes
 from common import *
 
@@ -54,45 +55,51 @@ def create_calibration_frame():
     cv2.rectangle(img, (0, HEIGHT-100), (100, HEIGHT), (255, 0, 0), -1) # Blue
     return img
 
-def encode_frame(data_chunk, frame_index, total_frames):
-    """Encodes a chunk of bytes into a frame image using robust 3-bit encoding."""
+def encode_frame(data_chunk, frame_index, total_frames, frame_type=FRAME_TYPE_DATA):
+    """Encodes a chunk of bytes into a frame image using robust 3-bit encoding.
+
+    Frame header (17 bytes):
+      magic(2) + type(1) + index(4) + total(4) + data_len(2) + crc32(4)
+    """
     img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
-    
-    # Create header: Frame Index (4 bytes) + Total Frames (4 bytes) + Data Length (4 bytes)
-    header = struct.pack('>III', frame_index, total_frames, len(data_chunk))
-    full_data = header + data_chunk
-    
+
+    # Build header (pre-CRC portion)
+    header_pre_crc = struct.pack(SEQ_HEADER_FMT,
+        SEQ_MAGIC, frame_type, frame_index, total_frames, len(data_chunk))
+
+    # Compute CRC32 over header + payload
+    crc = zlib.crc32(header_pre_crc + data_chunk) & 0xFFFFFFFF
+    crc_bytes = struct.pack('>I', crc)
+
+    full_data = header_pre_crc + crc_bytes + data_chunk
+
     # Convert bytes to bits
-    # We need a fast way to do this.
-    # np.unpackbits works on uint8 arrays
     byte_arr = np.frombuffer(full_data, dtype=np.uint8)
     bits = np.unpackbits(byte_arr)
-    
+
     # Pad bits to match the frame capacity (BLOCKS_PER_FRAME * 3)
     total_bits_needed = BLOCKS_PER_FRAME * 3
     padding_needed = total_bits_needed - len(bits)
     if padding_needed > 0:
         bits = np.pad(bits, (0, padding_needed), 'constant')
-        
+
     # Reshape bits into (Blocks, 3) to get RGB values
-    # We have BLOCKS_PER_FRAME blocks.
-    # Each block needs 3 bits.
     pixel_bits = bits.reshape((BLOCKS_PER_FRAME, 3))
-    
+
     # Map 0 -> 0, 1 -> 255
     pixel_values = pixel_bits * 255
-    
+
     # Reshape to (ROWS, COLS, 3)
     blocks_grid = pixel_values.reshape((ROWS, COLS, 3)).astype(np.uint8)
-    
+
     # Scale up to full resolution
     img = cv2.resize(blocks_grid, (WIDTH, HEIGHT), interpolation=cv2.INTER_NEAREST)
-    
+
     # Terminal Progress (overwrite line)
     progress = (frame_index + 1) / total_frames
     sys.stdout.write(f"\rProgress: {progress:.1%} ({frame_index + 1}/{total_frames})")
     sys.stdout.flush()
-    
+
     return img
 
 def main():

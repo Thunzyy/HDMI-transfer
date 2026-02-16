@@ -5,6 +5,7 @@ import sys
 import struct
 import time
 import argparse
+import zlib
 from common import *
 
 def sample_frame(frame):
@@ -37,41 +38,59 @@ def sample_frame(frame):
     return sampled_grid
 
 def decode_frame(frame_grid):
-    """Extracts data from the sampled grid using robust 3-bit decoding."""
+    """Extracts data from the sampled grid using robust 3-bit decoding.
+
+    Verifies magic number (0xDA7A) and CRC32 integrity.
+    Returns (frame_index, total_frames, data, data_len) or (None, None, None, None).
+    """
     # Flatten the grid to (Total_Blocks, 3)
     flat_pixels = frame_grid.reshape(-1, 3)
-    
+
     # Thresholding: > 128 is 1, else 0
-    # We use uint8 for bits
     bits = (flat_pixels > 128).astype(np.uint8)
-    
+
     # Flatten bits to 1D array
     flat_bits = bits.reshape(-1)
-    
+
     # Pack bits into bytes
     packed_bytes = np.packbits(flat_bits)
-    
+
     # Convert to bytes object
     frame_bytes = packed_bytes.tobytes()
-    
-    # Extract header
+
+    # Need at least full header (17 bytes)
     if len(frame_bytes) < HEADER_SIZE:
         return None, None, None, None
-        
-    header = frame_bytes[:HEADER_SIZE]
+
+    # Parse pre-CRC header fields
     try:
-        # Unpack 3 integers: Index, Total Frames, Data Length
-        frame_index, total_frames, data_len = struct.unpack('>III', header)
+        magic, frame_type, frame_index, total_frames, data_len = struct.unpack(
+            SEQ_HEADER_FMT, frame_bytes[:SEQ_HEADER_PRE_CRC])
     except struct.error:
         return None, None, None, None
-    
+
+    # Magic number check
+    if magic != SEQ_MAGIC:
+        return None, None, None, None
+
+    # Extract stored CRC
+    stored_crc = struct.unpack('>I',
+        frame_bytes[SEQ_HEADER_PRE_CRC:HEADER_SIZE])[0]
+
     # Sanity check on data_len
     if data_len > BYTES_PER_FRAME or data_len == 0:
         return None, None, None, None
-        
-    data = frame_bytes[HEADER_SIZE : HEADER_SIZE + data_len]
-    
-    return frame_index, total_frames, data, data_len
+
+    # Extract payload
+    payload = frame_bytes[HEADER_SIZE:HEADER_SIZE + data_len]
+
+    # Verify CRC32 (over pre-CRC header + payload)
+    computed_crc = zlib.crc32(
+        frame_bytes[:SEQ_HEADER_PRE_CRC] + payload) & 0xFFFFFFFF
+    if computed_crc != stored_crc:
+        return None, None, None, None
+
+    return frame_index, total_frames, payload, data_len
 
 def main():
     parser = argparse.ArgumentParser(description="HDMI Exfiltration Receiver")
