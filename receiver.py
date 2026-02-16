@@ -134,6 +134,78 @@ def decode_frame_full(frame_grid):
     return frame_type, frame_index, total_frames, payload, data_len
 
 
+def route_frame(frame_bytes):
+    """Determine protocol from magic number and route to correct decoder.
+
+    Reads the first 2 bytes of the decoded frame data to identify the protocol.
+
+    Args:
+        frame_bytes: Raw decoded bytes from the frame (after bit unpacking).
+
+    Returns:
+        ('sequential', parsed_result) if magic is 0xDA7A
+        ('fountain', parsed_result) if magic is 0xF0C0
+        (None, None) if magic is unknown (noise/idle)
+
+    For sequential: parsed_result is (frame_type, frame_index, total_frames, payload, data_len)
+    For fountain: parsed_result is (seed, K, payload) or None
+    """
+    if len(frame_bytes) < 2:
+        return None, None
+
+    magic = struct.unpack('>H', frame_bytes[:2])[0]
+
+    if magic == SEQ_MAGIC:
+        # Full sequential decode (magic + type + CRC verification)
+        if len(frame_bytes) < HEADER_SIZE:
+            return None, None
+        try:
+            _, frame_type, frame_index, total_frames, data_len = struct.unpack(
+                SEQ_HEADER_FMT, frame_bytes[:SEQ_HEADER_PRE_CRC])
+        except struct.error:
+            return None, None
+
+        stored_crc = struct.unpack('>I',
+            frame_bytes[SEQ_HEADER_PRE_CRC:HEADER_SIZE])[0]
+
+        if data_len > BYTES_PER_FRAME or data_len == 0:
+            return None, None
+
+        payload = frame_bytes[HEADER_SIZE:HEADER_SIZE + data_len]
+        computed_crc = zlib.crc32(
+            frame_bytes[:SEQ_HEADER_PRE_CRC] + payload) & 0xFFFFFFFF
+        if computed_crc != stored_crc:
+            return None, None
+
+        return 'sequential', (frame_type, frame_index, total_frames, payload, data_len)
+
+    elif magic == FOUNTAIN_MAGIC:
+        # Import fountain constants locally to avoid circular imports
+        from receiver_fountain import (FOUNT_HEADER_FMT, FOUNT_HEADER_PRE_CRC,
+                                       FOUNT_HEADER_SIZE)
+        if len(frame_bytes) < FOUNT_HEADER_SIZE:
+            return None, None
+        try:
+            _, seed, K = struct.unpack(FOUNT_HEADER_FMT,
+                frame_bytes[:FOUNT_HEADER_PRE_CRC])
+        except struct.error:
+            return None, None
+
+        stored_crc = struct.unpack('>I',
+            frame_bytes[FOUNT_HEADER_PRE_CRC:FOUNT_HEADER_SIZE])[0]
+
+        payload = frame_bytes[FOUNT_HEADER_SIZE:]
+        computed_crc = zlib.crc32(
+            frame_bytes[:FOUNT_HEADER_PRE_CRC] + payload) & 0xFFFFFFFF
+        if computed_crc != stored_crc:
+            return None, None
+
+        return 'fountain', (seed, K, payload)
+
+    else:
+        return None, None  # Unknown protocol / noise
+
+
 def parse_start_metadata(payload):
     """Parse START frame payload. Returns (file_size, sha256_hash, filename)."""
     if len(payload) < 38:  # 4 + 32 + 2 minimum
