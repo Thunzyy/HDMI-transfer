@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 Phase: 3 of 6 (Architecture Refactor)
 Plan: 4 of 7 in current phase
 Status: In progress
-Last activity: 2026-02-16 -- Completed 03-04-PLAN.md (fountain protocol)
+Last activity: 2026-02-16 -- Completed 03-03-PLAN.md (sequential protocol)
 
 Progress: [████████████████░░░░░░░░░░░░░░░] 12/31 (39%)
 
@@ -32,7 +32,7 @@ Progress: [████████████████░░░░░░░
 | 03-architecture-refactor | 4/7 | 11min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 02-04 (4min), 02-05 (3min), 03-01 (2min), 03-02 (3min), 03-04 (3min)
+- Last 5 plans: 02-05 (3min), 03-01 (2min), 03-02 (3min), 03-03 (5min), 03-04 (3min)
 - Trend: Protocol implementations fast -- code already verified, just wrapping in ABC
 
 *Updated after each plan completion*
@@ -66,6 +66,9 @@ Recent decisions affecting current work:
 - [03-02]: cv2 import is lazy in sampler (only needed for resize path)
 - [03-04]: Fountain constants (FOUNT_HEADER_FMT, PAYLOAD_SIZE) in fountain.py, not config.py (protocol-specific)
 - [03-04]: cv2 lazy import in FountainProtocol.encode_frame (matches sampler pattern)
+- [03-03]: TransferState uses Enum with auto() instead of plain class with string constants (type safety)
+- [03-03]: decode_frame_legacy wraps decode_frame for backward-compat 4-tuple returns
+- [03-03]: encode_frame omits sys.stdout progress output (UI concern, belongs in CLI layer)
 - [03-04]: Protocol registry includes both sequential and fountain via PROTOCOLS dict + get_protocol() factory
 
 ### Pending Todos
@@ -78,6 +81,6 @@ All prior blockers resolved. No new concerns.
 
 ## Session Continuity
 
-Last session: 2026-02-16T14:01:13Z
-Stopped at: Completed 03-04-PLAN.md (fountain protocol)
+Last session: 2026-02-16T14:02:00Z
+Stopped at: Completed 03-03-PLAN.md (sequential protocol)
 Resume file: None
