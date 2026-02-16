@@ -48,14 +48,14 @@ Plans:
   3. Receiver detects and reports per-frame corruption via CRC32 mismatch (corrupted frames are flagged, not silently accepted)
   4. After reassembly, receiver computes SHA-256 of the received file and compares it against the hash embedded in the START frame metadata -- mismatch produces a clear error
   5. Receiver distinguishes sequential protocol frames (magic 0xDA7A) from fountain protocol frames (magic 0xF0C0) and routes to the correct decoder
-**Plans**: TBD
+**Plans:** 5 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
-- [ ] 02-03: TBD
-- [ ] 02-04: TBD
-- [ ] 02-05: TBD
+- [ ] 02-01-PLAN.md -- Sequential protocol header with magic 0xDA7A and CRC32 integrity (PROT-01, PROT-03)
+- [ ] 02-02-PLAN.md -- Fountain protocol header with magic 0xF0C0, CRC32, and chooseIndices bugfix (PROT-01, PROT-03)
+- [ ] 02-03-PLAN.md -- Transfer lifecycle START/DATA/END with SHA-256 verification (PROT-02, PROT-04, PROT-05)
+- [ ] 02-04-PLAN.md -- Fountain metadata extension with file_size and SHA-256 (PROT-04, PROT-05)
+- [ ] 02-05-PLAN.md -- Protocol routing by magic number and integration tests (PROT-06)
 
 ### Phase 3: Architecture Refactor
 **Goal**: Codebase is a proper Python package with clean module boundaries, protocol abstraction, shared constants, and cross-platform support
@@ -142,7 +142,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Test Foundation | 3/3 | Complete | 2026-02-16 |
-| 2. Protocol Foundation | 0/5 | Not started | - |
+| 2. Protocol Foundation | 0/5 | Planned | - |
 | 3. Architecture Refactor | 0/7 | Not started | - |
 | 4. Performance Optimization | 0/6 | Not started | - |
 | 5. Fountain Code Optimization | 0/5 | Not started | - |
@@ -150,4 +150,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 ---
 *Roadmap created: 2026-02-16*
-*Last updated: 2026-02-16 — Phase 1 complete*
+*Last updated: 2026-02-16 -- Phase 2 planned*
