@@ -5,6 +5,7 @@ import sys
 import struct
 import time
 import argparse
+import hashlib
 import zlib
 from common import *
 
@@ -127,6 +128,27 @@ class FountainDecoder:
             else:
                 out.extend(b'\x00' * self.payload_size)
         return out
+
+def parse_fountain_metadata(full_data):
+    """Parse fountain metadata prefix from reassembled data.
+
+    New format: [4B file_size][32B SHA-256][2B name_len][NB name][file_content]
+    Returns (file_size, sha256_hash, filename, content_offset) or (None, None, None, None).
+    """
+    if len(full_data) < 38:  # 4 + 32 + 2 minimum
+        return None, None, None, None
+    try:
+        file_size = struct.unpack('>I', full_data[0:4])[0]
+        sha256_hash = full_data[4:36]
+        name_len = struct.unpack('>H', full_data[36:38])[0]
+        if name_len > 1024 or 38 + name_len > len(full_data):
+            return None, None, None, None
+        filename = full_data[38:38 + name_len].decode('utf-8')
+        content_offset = 38 + name_len
+        return file_size, sha256_hash, filename, content_offset
+    except Exception:
+        return None, None, None, None
+
 
 def sample_frame(frame, offset_x=0, offset_y=0, scale_x=1.0, scale_y=1.0):
     """Samples the center pixel of each block with offset and scaling."""
@@ -299,34 +321,44 @@ def main():
                     print("\nDownload Complete!")
                     duration = time.time() - start_time
                     full_data = decoder.get_file_data()
-                    
-                    if not os.path.exists(args.output): 
+
+                    if not os.path.exists(args.output):
                         os.makedirs(args.output)
 
-                    # Tente de reconstituer le nom de fichier si metadata presente
-                    save_path = None
-                    file_bytes = full_data
-                    try:
-                        name_len = struct.unpack('>I', full_data[:4])[0]
-                        if 0 < name_len < 1024 and 4 + name_len <= len(full_data):
-                            name = full_data[4:4+name_len].decode('utf-8')
-                            payload_bytes = full_data[4+name_len:]
-                            safe_name = os.path.basename(name)
-                            save_path = os.path.join(args.output, safe_name)
-                            file_bytes = payload_bytes
-                            print(f"Detected filename: {safe_name}")
-                    except Exception as e:
-                        print(f"Metadata decode failed ({e}). Saving raw payload.")
+                    # Parse enhanced metadata
+                    file_size, expected_sha256, filename, content_offset = parse_fountain_metadata(full_data)
 
-                    if save_path is None:
+                    if file_size is not None and filename is not None:
+                        # Extract file content
+                        file_content = bytes(full_data[content_offset:content_offset + file_size])
+
+                        # SHA-256 verification
+                        actual_sha256 = hashlib.sha256(file_content).digest()
+                        if actual_sha256 != expected_sha256:
+                            print("ERROR: SHA-256 MISMATCH -- file corrupted!")
+                            print(f"  Expected: {expected_sha256.hex()}")
+                            print(f"  Actual:   {actual_sha256.hex()}")
+                        else:
+                            print(f"SHA-256 verified OK.")
+
+                        safe_name = os.path.basename(filename)
+                        save_path = os.path.join(args.output, safe_name)
+                        print(f"Detected filename: {safe_name} ({file_size} bytes)")
+                    else:
+                        # Fallback: metadata parsing failed
+                        print("Metadata decode failed. Saving raw payload.")
+                        file_content = bytes(full_data)
                         fname = f"received_{int(time.time())}.bin"
                         save_path = os.path.join(args.output, fname)
 
                     with open(save_path, 'wb') as f:
-                        f.write(file_bytes)
-                        
+                        f.write(file_content)
+
                     print(f"Saved to {save_path}")
                     print(f"Time: {duration:.2f}s")
+                    total_bytes = len(file_content)
+                    speed_mbps = (total_bytes * 8) / duration / 1_000_000 if duration > 0 else 0
+                    print(f"Speed: {speed_mbps:.2f} Mbps")
                     break
             else:
                 # Debug mismatch
