@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** Maximum throughput data transfer over HDMI without leaving any trace on the source machine.
-**Current focus:** Phase 4 Performance Optimization
+**Current focus:** Phase 4 Performance Optimization -- COMPLETE
 
 ## Current Position
 
 Phase: 4 of 6 (Performance Optimization)
-Plan: 4 of 5 in current phase
-Status: In progress
-Last activity: 2026-02-16 -- Completed 04-02-PLAN.md (Numba XOR acceleration)
+Plan: 5 of 5 in current phase
+Status: Phase complete
+Last activity: 2026-02-16 -- Completed 04-05-PLAN.md (CLI integration of performance components)
 
-Progress: [███████████████████████░░░░░░░░] 19/31 (61%)
+Progress: [████████████████████████░░░░░░░] 20/31 (64%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 19
+- Total plans completed: 20
 - Average duration: 5min
-- Total execution time: 96min
+- Total execution time: 100min
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [███████████████████████
 | 01-test-foundation | 3/3 | 45min | 15min |
 | 02-protocol-foundation | 5/5 | 19min | 4min |
 | 03-architecture-refactor | 7/7 | 24min | 3min |
-| 04-performance-optimization | 4/5 | 8min | 2min |
+| 04-performance-optimization | 5/5 | 12min | 2min |
 
 **Recent Trend:**
-- Last 5 plans: 03-07 (4min), 04-01 (est), 04-04 (2min), 04-03 (3min), 04-02 (3min)
+- Last 5 plans: 04-01 (3min), 04-04 (2min), 04-03 (3min), 04-02 (3min), 04-05 (4min)
 - Trend: Consistent fast execution
 
 *Updated after each plan completion*
@@ -96,6 +96,11 @@ Recent decisions affecting current work:
 - [04-02]: xor_into uses element-wise @njit loop (not numpy vectorized) for nogil GIL release during threaded capture
 - [04-02]: bytearray->np.ndarray conversion at add_droplet boundary; public API unchanged (accepts bytes|bytearray)
 - [04-02]: FountainDecoder.chunks now dict[int, np.ndarray] -- get_file_data uses .tobytes() for output
+- [04-05]: Pause/end screens use solid-color numpy frames (no cv2.putText) for renderer-agnostic operation
+- [04-05]: Fountain chunks stored as np.ndarray list for direct Numba xor_into compatibility
+- [04-05]: Receive loops sleep 1ms on empty buffer reads to avoid CPU spin with ThreadedCapture
+- [04-05]: FPS reporting at 2s intervals appended to progress lines during reception
+- [04-05]: _run_receiver helper extracts mode dispatch for clean threaded/direct paths
 
 ### Pending Todos
 
@@ -104,9 +109,10 @@ None.
 ### Blockers/Concerns
 
 All prior blockers resolved. No new concerns.
+Phase 4 is complete -- ready for Phase 5 (Fountain Code Optimization).
 
 ## Session Continuity
 
-Last session: 2026-02-16T22:48:35Z
-Stopped at: Completed 04-02-PLAN.md (Numba XOR acceleration)
+Last session: 2026-02-16T22:55:22Z
+Stopped at: Completed 04-05-PLAN.md (CLI integration) -- Phase 4 complete
 Resume file: None
