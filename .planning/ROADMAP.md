@@ -67,16 +67,16 @@ Plans:
   3. A single constants.json file is the source of truth for all encoding parameters -- Python reads it directly, and a build script generates sender.html with those values injected
   4. Receiver runs on Linux (V4L2), Windows (DirectShow), and macOS (AVFoundation) without code changes -- capture backend is auto-detected
   5. Source tree follows src-layout with separated modules: protocols/, capture/, display/, file_handling/ -- no circular imports, each module testable in isolation
-**Plans**: TBD
+**Plans:** 7 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
-- [ ] 03-03: TBD
-- [ ] 03-04: TBD
-- [ ] 03-05: TBD
-- [ ] 03-06: TBD
-- [ ] 03-07: TBD
+- [ ] 03-01-PLAN.md -- Package scaffold: pyproject.toml, constants.json, config.py, src-layout (ARCH-01, ARCH-05)
+- [ ] 03-02-PLAN.md -- Foundation modules: PRNG, EncodingProtocol ABC, sampler, metadata (ARCH-02, ARCH-08)
+- [ ] 03-03-PLAN.md -- Sequential protocol implementation + protocol registry (ARCH-03)
+- [ ] 03-04-PLAN.md -- Fountain protocol implementation + FountainDecoder migration (ARCH-04)
+- [ ] 03-05-PLAN.md -- I/O layer: cross-platform capture, display, monitors, file handling (ARCH-07, ARCH-08)
+- [ ] 03-06-PLAN.md -- CLI entry points + web sender build system (ARCH-05, ARCH-06, ARCH-09)
+- [ ] 03-07-PLAN.md -- Test migration: all imports to hdmi_exfil package, remove old hacks (ARCH-08)
 
 ### Phase 4: Performance Optimization
 **Goal**: Transfer throughput approaches hardware limits -- 240fps rendering, parallel capture, and JIT-accelerated encoding are operational
@@ -143,11 +143,11 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. Test Foundation | 3/3 | Complete | 2026-02-16 |
 | 2. Protocol Foundation | 5/5 | Complete | 2026-02-16 |
-| 3. Architecture Refactor | 0/7 | Not started | - |
+| 3. Architecture Refactor | 0/7 | Planned | - |
 | 4. Performance Optimization | 0/6 | Not started | - |
 | 5. Fountain Code Optimization | 0/5 | Not started | - |
 | 6. UX & Polish | 0/5 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-16*
-*Last updated: 2026-02-16 -- Phase 2 complete*
+*Last updated: 2026-02-16 -- Phase 3 planned (7 plans in 6 waves)*
