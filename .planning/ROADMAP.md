@@ -106,14 +106,13 @@ Plans:
   2. When belief propagation stalls (common for small K), Gaussian elimination fallback decoder kicks in and recovers the data
   3. User can specify redundancy parameter per transfer (e.g., `--redundancy 1.05` for 5% overhead target)
   4. Measured decoding overhead is under 10% for K=100-1000 range (down from ~30% with current ad-hoc distribution)
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
-- [ ] 05-03: TBD
-- [ ] 05-04: TBD
-- [ ] 05-05: TBD
+- [ ] 05-01-PLAN.md -- RSD degree distribution module + Python integration (FOUNT-01)
+- [ ] 05-02-PLAN.md -- Gaussian elimination fallback decoder (FOUNT-02)
+- [ ] 05-03-PLAN.md -- JS sender RSD port + Python sender update + --redundancy CLI (FOUNT-01, FOUNT-03)
+- [ ] 05-04-PLAN.md -- Overhead benchmarks + parameter tuning (FOUNT-04)
 
 ### Phase 6: UX & Polish
 **Goal**: Users can run transfers without understanding encoding internals -- named profiles, auto-calibration, benchmarking, and live progress make the tool accessible
@@ -144,7 +143,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. Protocol Foundation | 5/5 | Complete | 2026-02-16 |
 | 3. Architecture Refactor | 7/7 | Complete | 2026-02-16 |
 | 4. Performance Optimization | 5/5 | Complete | 2026-02-16 |
-| 5. Fountain Code Optimization | 0/5 | Not started | - |
+| 5. Fountain Code Optimization | 0/4 | Planned | - |
 | 6. UX & Polish | 0/5 | Not started | - |
 
 ---
