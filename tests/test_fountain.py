@@ -267,3 +267,107 @@ class TestFountainCRC32:
         """Python zlib.crc32 matches IEEE 802.3 test vector."""
         import zlib
         assert zlib.crc32(b'123456789') & 0xFFFFFFFF == 0xCBF43926
+
+
+import struct
+import hashlib
+
+from receiver_fountain import parse_fountain_metadata
+
+
+class TestFountainMetadata:
+    """Tests for the enhanced fountain metadata format."""
+
+    def test_metadata_roundtrip(self):
+        """Metadata (file_size, SHA-256, filename) packs and parses correctly."""
+        file_data = os.urandom(5000)
+        filename = "test_file.txt"
+        sha256_hash = hashlib.sha256(file_data).digest()
+        fname_bytes = filename.encode('utf-8')
+
+        # Build metadata in new format
+        metadata = struct.pack('>I', len(file_data))       # 4B file_size
+        metadata += sha256_hash                             # 32B SHA-256
+        metadata += struct.pack('>H', len(fname_bytes))     # 2B name_len
+        metadata += fname_bytes                             # NB filename
+        full = metadata + file_data                         # content follows
+
+        # Parse it back
+        size, sha, name, offset = parse_fountain_metadata(full)
+        assert size == len(file_data)
+        assert sha == sha256_hash
+        assert name == filename
+        assert full[offset:offset + size] == file_data
+
+    def test_metadata_sha256_verification(self):
+        """SHA-256 from metadata matches hash of extracted file content."""
+        file_data = os.urandom(10000)
+        sha256_hash = hashlib.sha256(file_data).digest()
+        fname = "verify.bin".encode()
+
+        full = struct.pack('>I', len(file_data)) + sha256_hash + \
+               struct.pack('>H', len(fname)) + fname + file_data
+
+        size, expected_sha, _, offset = parse_fountain_metadata(full)
+        actual_sha = hashlib.sha256(full[offset:offset + size]).digest()
+        assert actual_sha == expected_sha
+
+    def test_metadata_sha256_detects_corruption(self):
+        """Corrupted content produces SHA-256 mismatch."""
+        file_data = os.urandom(1000)
+        sha256_hash = hashlib.sha256(file_data).digest()
+        fname = "corrupt.bin".encode()
+
+        # Build valid metadata
+        full = bytearray(struct.pack('>I', len(file_data)) + sha256_hash +
+                         struct.pack('>H', len(fname)) + fname + file_data)
+
+        # Corrupt one byte of file content
+        content_offset = 4 + 32 + 2 + len(fname)
+        full[content_offset] ^= 0xFF
+
+        size, expected_sha, _, offset = parse_fountain_metadata(bytes(full))
+        actual_sha = hashlib.sha256(full[offset:offset + size]).digest()
+        assert actual_sha != expected_sha, "SHA-256 should detect corruption"
+
+    def test_metadata_with_fountain_roundtrip(self):
+        """Full fountain encode/decode with metadata prefix recovers file and verifies SHA-256."""
+        # Simulate wrapping: metadata + file content -> fountain encode -> decode -> unwrap
+        file_data = os.urandom(2000)
+        filename = "fountain_meta_test.bin"
+        sha256_hash = hashlib.sha256(file_data).digest()
+        fname_bytes = filename.encode('utf-8')
+
+        wrapped = struct.pack('>I', len(file_data)) + sha256_hash + \
+                  struct.pack('>H', len(fname_bytes)) + fname_bytes + file_data
+
+        # Fountain encode/decode the wrapped data
+        K, chunks = prepare_chunks(wrapped)
+        decoder = FountainDecoder(K, FOUNTAIN_PAYLOAD_SIZE)
+
+        seed = 1
+        max_droplets = K * 10
+        while not decoder.is_complete() and seed <= max_droplets:
+            payload = build_droplet(seed, K, chunks)
+            decoder.add_droplet(seed, payload)
+            seed += 1
+
+        assert decoder.is_complete()
+
+        # Reassemble and parse metadata
+        recovered = decoder.get_file_data()
+        size, expected_sha, name, offset = parse_fountain_metadata(recovered)
+
+        assert name == filename
+        assert size == len(file_data)
+
+        # Extract content and verify SHA-256
+        content = bytes(recovered[offset:offset + size])
+        actual_sha = hashlib.sha256(content).digest()
+        assert actual_sha == expected_sha
+        assert content == file_data
+
+    def test_metadata_parse_failure_on_garbage(self):
+        """parse_fountain_metadata returns None tuple on garbage input."""
+        size, sha, name, offset = parse_fountain_metadata(b'\x00' * 10)
+        assert size is None or name is None  # Too short
