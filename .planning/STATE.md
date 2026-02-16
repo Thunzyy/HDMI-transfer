@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** Maximum throughput data transfer over HDMI without leaving any trace on the source machine.
-**Current focus:** Phase 3 Architecture Refactor -- package scaffold installed
+**Current focus:** Phase 3 Architecture Refactor -- foundation modules created
 
 ## Current Position
 
 Phase: 3 of 6 (Architecture Refactor)
-Plan: 1 of 7 in current phase
+Plan: 2 of 7 in current phase
 Status: In progress
-Last activity: 2026-02-16 -- Completed 03-01-PLAN.md (package scaffold + constants.json)
+Last activity: 2026-02-16 -- Completed 03-02-PLAN.md (foundation modules)
 
-Progress: [█████████░░░░░░░░░░░░░░░░░░░░░░] 9/31 (29%)
+Progress: [██████████░░░░░░░░░░░░░░░░░░░░░] 10/31 (32%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
+- Total plans completed: 10
 - Average duration: 7min
-- Total execution time: 66min
+- Total execution time: 69min
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [█████████░░░░░░░░░░░░░░
 |-------|-------|-------|----------|
 | 01-test-foundation | 3/3 | 45min | 15min |
 | 02-protocol-foundation | 5/5 | 19min | 4min |
-| 03-architecture-refactor | 1/7 | 2min | 2min |
+| 03-architecture-refactor | 2/7 | 5min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 02-02 (4min), 02-03 (4min), 02-04 (4min), 02-05 (3min), 03-01 (2min)
-- Trend: Scaffold creation fast -- well-defined by research and plan
+- Last 5 plans: 02-03 (4min), 02-04 (4min), 02-05 (3min), 03-01 (2min), 03-02 (3min)
+- Trend: Foundation module extraction fast -- algorithms already verified in Phase 1-2
 
 *Updated after each plan completion*
 
@@ -60,6 +60,10 @@ Recent decisions affecting current work:
 - [03-01]: Build backend: setuptools.build_meta with src-layout packaging
 - [03-01]: constants.json stores magic numbers as decimal (55930, 61632) for cross-language compat
 - [03-01]: Frame types in config.py not constants.json (protocol-specific, not encoding params)
+- [03-02]: choose_indices returns frozenset (hashable for caching), not set
+- [03-02]: Leaf modules (prng, sampler, metadata) import only stdlib+numpy, never config
+- [03-02]: FrameResult is frozen+slots dataclass for immutability and memory efficiency
+- [03-02]: cv2 import is lazy in sampler (only needed for resize path)
 
 ### Pending Todos
 
@@ -71,6 +75,6 @@ All prior blockers resolved. No new concerns.
 
 ## Session Continuity
 
-Last session: 2026-02-16T13:48:56Z
-Stopped at: Completed 03-01-PLAN.md (package scaffold + constants.json)
+Last session: 2026-02-16T13:54:38Z
+Stopped at: Completed 03-02-PLAN.md (foundation modules)
 Resume file: None
