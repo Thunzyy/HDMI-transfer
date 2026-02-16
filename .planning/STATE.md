@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** Maximum throughput data transfer over HDMI without leaving any trace on the source machine.
-**Current focus:** Phase 3 Architecture Refactor -- CLI & web build complete
+**Current focus:** Phase 3 Architecture Refactor -- COMPLETE
 
 ## Current Position
 
 Phase: 3 of 6 (Architecture Refactor)
-Plan: 6 of 7 in current phase
-Status: In progress
-Last activity: 2026-02-16 -- Completed 03-06-PLAN.md (CLI & web build)
+Plan: 7 of 7 in current phase
+Status: Phase complete
+Last activity: 2026-02-16 -- Completed 03-07-PLAN.md (Test migration)
 
-Progress: [██████████████████░░░░░░░░░░░░░] 14/31 (45%)
+Progress: [███████████████████░░░░░░░░░░░░] 15/31 (48%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14
+- Total plans completed: 15
 - Average duration: 6min
-- Total execution time: 84min
+- Total execution time: 88min
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [██████████████████░░░░░
 |-------|-------|-------|----------|
 | 01-test-foundation | 3/3 | 45min | 15min |
 | 02-protocol-foundation | 5/5 | 19min | 4min |
-| 03-architecture-refactor | 6/7 | 20min | 3min |
+| 03-architecture-refactor | 7/7 | 24min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 03-02 (3min), 03-03 (5min), 03-04 (3min), 03-05 (3min), 03-06 (6min)
-- Trend: CLI wiring slightly longer due to two distinct send/receive workflows
+- Last 5 plans: 03-03 (5min), 03-04 (3min), 03-05 (3min), 03-06 (6min), 03-07 (4min)
+- Trend: Consistent fast execution across architecture refactor phase
 
 *Updated after each plan completion*
 
@@ -78,6 +78,9 @@ Recent decisions affecting current work:
 - [03-06]: Fountain magic rendered as hex literal (0xF0C0) in JS; decimal (61632) in JSON
 - [03-06]: Build script uses importlib.resources for package-relative constants.json access
 - [03-06]: Auto-detect mode tries sequential decode first (0xDA7A), falls back to fountain (0xF0C0)
+- [03-07]: route_frame re-implemented as test-local helper (not added to package -- test-only concern)
+- [03-07]: choose_indices frozenset->set wrapper in test helpers for mutable-set compatibility
+- [03-07]: All test imports use from hdmi_exfil.* exclusively; old flat modules no longer tested
 
 ### Pending Todos
 
@@ -85,10 +88,10 @@ None.
 
 ### Blockers/Concerns
 
-All prior blockers resolved. No new concerns.
+All prior blockers resolved. No new concerns. Phase 3 complete.
 
 ## Session Continuity
 
-Last session: 2026-02-16T14:16:17Z
-Stopped at: Completed 03-06-PLAN.md (CLI & web build)
+Last session: 2026-02-16T14:23:10Z
+Stopped at: Completed 03-07-PLAN.md (Test migration) -- Phase 3 complete
 Resume file: None
