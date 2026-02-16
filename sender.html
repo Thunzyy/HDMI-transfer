@@ -128,6 +128,11 @@
         return (crc ^ 0xFFFFFFFF) >>> 0;
       }
 
+      async function computeSHA256(uint8Array) {
+        const hashBuffer = await crypto.subtle.digest('SHA-256', uint8Array);
+        return new Uint8Array(hashBuffer);  // 32 bytes
+      }
+
       const BLACK = 0xff000000;
       const WHITE = 0xffffffff;
 
@@ -166,14 +171,24 @@
         statsEl.textContent = `Frames envoyes: ${state.frame} | Seed: ${state.seed} | K: ${state.K} | Chunk: ${PAYLOAD_SIZE} o`;
       }
 
-      function wrapWithMetadata(file, rawBytes) {
+      function wrapWithMetadata(file, rawBytes, sha256Hash) {
         const nameBytes = textEncoder.encode((file && file.name) || "payload.bin");
-        const total = 4 + nameBytes.length + rawBytes.length;
+        // New format: [4B file_size][32B SHA-256][2B name_len][NB name][file_content]
+        const total = 4 + 32 + 2 + nameBytes.length + rawBytes.length;
         const out = new Uint8Array(total);
         const view = new DataView(out.buffer);
-        view.setUint32(0, nameBytes.length, false);
-        out.set(nameBytes, 4);
-        out.set(rawBytes, 4 + nameBytes.length);
+
+        let offset = 0;
+        view.setUint32(offset, rawBytes.length, false);  // file_size (big-endian)
+        offset += 4;
+        out.set(sha256Hash, offset);                       // SHA-256 (32 bytes)
+        offset += 32;
+        view.setUint16(offset, nameBytes.length, false);   // name_len (big-endian, 2 bytes)
+        offset += 2;
+        out.set(nameBytes, offset);                        // filename
+        offset += nameBytes.length;
+        out.set(rawBytes, offset);                         // file content
+
         return out;
       }
 
@@ -316,9 +331,13 @@
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = () => {
+        reader.onload = async () => {
           const raw = new Uint8Array(reader.result);
-          const wrapped = wrapWithMetadata(file, raw);
+
+          // Compute SHA-256 of raw file content
+          const sha256Hash = await computeSHA256(raw);
+
+          const wrapped = wrapWithMetadata(file, raw, sha256Hash);
           const { K, chunks } = sliceIntoChunks(wrapped);
           state.chunks = chunks;
           state.K = K;
@@ -326,7 +345,7 @@
           state.frame = 0;
           startBtn.disabled = false;
           stopBtn.disabled = true;
-          setStatus(`Pret: ${file.name} (${raw.length} o). K=${K}, chunk=${PAYLOAD_SIZE} o.`);
+          setStatus(`Pret: ${file.name} (${raw.length} o). K=${K}, chunk=${PAYLOAD_SIZE} o. SHA-256: ${Array.from(sha256Hash.slice(0, 4)).map(b => b.toString(16).padStart(2, '0')).join('')}...`);
           updateStats();
         };
         reader.readAsArrayBuffer(file);
