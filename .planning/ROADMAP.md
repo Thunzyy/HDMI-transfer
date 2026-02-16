@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Test Foundation** - Establish test safety net around existing working prototype
 - [x] **Phase 2: Protocol Foundation** - Add frame synchronization, integrity verification, and transfer lifecycle
-- [ ] **Phase 3: Architecture Refactor** - Restructure into clean src-layout package with protocol abstraction
+- [x] **Phase 3: Architecture Refactor** - Restructure into clean src-layout package with protocol abstraction
 - [ ] **Phase 4: Performance Optimization** - Unlock maximum throughput with Numba JIT, pygame-ce, and threaded capture
 - [ ] **Phase 5: Fountain Code Optimization** - Tune fountain code math for minimal decoding overhead
 - [ ] **Phase 6: UX & Polish** - Resolution profiles, calibration mode, benchmarking, and progress reporting
@@ -70,13 +70,13 @@ Plans:
 **Plans:** 7 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- Package scaffold: pyproject.toml, constants.json, config.py, src-layout (ARCH-01, ARCH-05)
-- [ ] 03-02-PLAN.md -- Foundation modules: PRNG, EncodingProtocol ABC, sampler, metadata (ARCH-02, ARCH-08)
-- [ ] 03-03-PLAN.md -- Sequential protocol implementation + protocol registry (ARCH-03)
-- [ ] 03-04-PLAN.md -- Fountain protocol implementation + FountainDecoder migration (ARCH-04)
-- [ ] 03-05-PLAN.md -- I/O layer: cross-platform capture, display, monitors, file handling (ARCH-07, ARCH-08)
-- [ ] 03-06-PLAN.md -- CLI entry points + web sender build system (ARCH-05, ARCH-06, ARCH-09)
-- [ ] 03-07-PLAN.md -- Test migration: all imports to hdmi_exfil package, remove old hacks (ARCH-08)
+- [x] 03-01-PLAN.md -- Package scaffold: pyproject.toml, constants.json, config.py, src-layout (ARCH-01, ARCH-05)
+- [x] 03-02-PLAN.md -- Foundation modules: PRNG, EncodingProtocol ABC, sampler, metadata (ARCH-02, ARCH-08)
+- [x] 03-03-PLAN.md -- Sequential protocol implementation + protocol registry (ARCH-03)
+- [x] 03-04-PLAN.md -- Fountain protocol implementation + FountainDecoder migration (ARCH-04)
+- [x] 03-05-PLAN.md -- I/O layer: cross-platform capture, display, monitors, file handling (ARCH-07, ARCH-08)
+- [x] 03-06-PLAN.md -- CLI entry points + web sender build system (ARCH-05, ARCH-06, ARCH-09)
+- [x] 03-07-PLAN.md -- Test migration: all imports to hdmi_exfil package, remove old hacks (ARCH-08)
 
 ### Phase 4: Performance Optimization
 **Goal**: Transfer throughput approaches hardware limits -- 240fps rendering, parallel capture, and JIT-accelerated encoding are operational
@@ -143,11 +143,11 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. Test Foundation | 3/3 | Complete | 2026-02-16 |
 | 2. Protocol Foundation | 5/5 | Complete | 2026-02-16 |
-| 3. Architecture Refactor | 0/7 | Planned | - |
+| 3. Architecture Refactor | 7/7 | Complete | 2026-02-16 |
 | 4. Performance Optimization | 0/6 | Not started | - |
 | 5. Fountain Code Optimization | 0/5 | Not started | - |
 | 6. UX & Polish | 0/5 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-16*
-*Last updated: 2026-02-16 -- Phase 3 planned (7 plans in 6 waves)*
+*Last updated: 2026-02-16 -- Phase 3 complete (7 plans in 6 waves)*

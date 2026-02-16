@@ -25,15 +25,15 @@
 
 ### Architecture
 
-- [ ] **ARCH-01**: src-layout Python package with pyproject.toml and proper module hierarchy
-- [ ] **ARCH-02**: EncodingProtocol ABC with encode_frame/decode_frame interface (strategy pattern)
-- [ ] **ARCH-03**: Sequential protocol implementation inheriting from EncodingProtocol ABC
-- [ ] **ARCH-04**: Fountain protocol implementation inheriting from EncodingProtocol ABC
-- [ ] **ARCH-05**: constants.json as single source of truth shared between Python and JavaScript
-- [ ] **ARCH-06**: Build script to inject constants.json values into sender.html at generation time
-- [ ] **ARCH-07**: Cross-platform capture backend — auto-detect V4L2 (Linux), DirectShow (Windows), AVFoundation (macOS)
-- [ ] **ARCH-08**: Separated modules: capture/, display/, protocols/, file_handling/
-- [ ] **ARCH-09**: CLI entry points for sender and receiver via pyproject.toml scripts
+- [x] **ARCH-01**: src-layout Python package with pyproject.toml and proper module hierarchy
+- [x] **ARCH-02**: EncodingProtocol ABC with encode_frame/decode_frame interface (strategy pattern)
+- [x] **ARCH-03**: Sequential protocol implementation inheriting from EncodingProtocol ABC
+- [x] **ARCH-04**: Fountain protocol implementation inheriting from EncodingProtocol ABC
+- [x] **ARCH-05**: constants.json as single source of truth shared between Python and JavaScript
+- [x] **ARCH-06**: Build script to inject constants.json values into sender.html at generation time
+- [x] **ARCH-07**: Cross-platform capture backend — auto-detect V4L2 (Linux), DirectShow (Windows), AVFoundation (macOS)
+- [x] **ARCH-08**: Separated modules: capture/, display/, protocols/, file_handling/
+- [x] **ARCH-09**: CLI entry points for sender and receiver via pyproject.toml scripts
 
 ### Performance
 
@@ -99,15 +99,15 @@
 | PROT-04 | Phase 2 | Complete |
 | PROT-05 | Phase 2 | Complete |
 | PROT-06 | Phase 2 | Complete |
-| ARCH-01 | Phase 3 | Pending |
-| ARCH-02 | Phase 3 | Pending |
-| ARCH-03 | Phase 3 | Pending |
-| ARCH-04 | Phase 3 | Pending |
-| ARCH-05 | Phase 3 | Pending |
-| ARCH-06 | Phase 3 | Pending |
-| ARCH-07 | Phase 3 | Pending |
-| ARCH-08 | Phase 3 | Pending |
-| ARCH-09 | Phase 3 | Pending |
+| ARCH-01 | Phase 3 | Complete |
+| ARCH-02 | Phase 3 | Complete |
+| ARCH-03 | Phase 3 | Complete |
+| ARCH-04 | Phase 3 | Complete |
+| ARCH-05 | Phase 3 | Complete |
+| ARCH-06 | Phase 3 | Complete |
+| ARCH-07 | Phase 3 | Complete |
+| ARCH-08 | Phase 3 | Complete |
+| ARCH-09 | Phase 3 | Complete |
 | PERF-01 | Phase 4 | Pending |
 | PERF-02 | Phase 4 | Pending |
 | PERF-03 | Phase 4 | Pending |
@@ -130,4 +130,4 @@
 
 ---
 *Requirements defined: 2026-02-16*
-*Last updated: 2026-02-16 -- Phase 2 requirements complete*
+*Last updated: 2026-02-16 -- Phase 3 requirements complete*
