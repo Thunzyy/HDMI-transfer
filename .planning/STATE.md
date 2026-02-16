@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** Maximum throughput data transfer over HDMI without leaving any trace on the source machine.
-**Current focus:** Phase 3 Architecture Refactor -- foundation modules created
+**Current focus:** Phase 3 Architecture Refactor -- protocol implementations complete
 
 ## Current Position
 
 Phase: 3 of 6 (Architecture Refactor)
-Plan: 2 of 7 in current phase
+Plan: 4 of 7 in current phase
 Status: In progress
-Last activity: 2026-02-16 -- Completed 03-02-PLAN.md (foundation modules)
+Last activity: 2026-02-16 -- Completed 03-04-PLAN.md (fountain protocol)
 
-Progress: [██████████░░░░░░░░░░░░░░░░░░░░░] 10/31 (32%)
+Progress: [████████████████░░░░░░░░░░░░░░░] 12/31 (39%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
-- Average duration: 7min
-- Total execution time: 69min
+- Total plans completed: 12
+- Average duration: 6min
+- Total execution time: 75min
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [██████████░░░░░░░░░░░░░
 |-------|-------|-------|----------|
 | 01-test-foundation | 3/3 | 45min | 15min |
 | 02-protocol-foundation | 5/5 | 19min | 4min |
-| 03-architecture-refactor | 2/7 | 5min | 3min |
+| 03-architecture-refactor | 4/7 | 11min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 02-03 (4min), 02-04 (4min), 02-05 (3min), 03-01 (2min), 03-02 (3min)
-- Trend: Foundation module extraction fast -- algorithms already verified in Phase 1-2
+- Last 5 plans: 02-04 (4min), 02-05 (3min), 03-01 (2min), 03-02 (3min), 03-04 (3min)
+- Trend: Protocol implementations fast -- code already verified, just wrapping in ABC
 
 *Updated after each plan completion*
 
@@ -64,6 +64,9 @@ Recent decisions affecting current work:
 - [03-02]: Leaf modules (prng, sampler, metadata) import only stdlib+numpy, never config
 - [03-02]: FrameResult is frozen+slots dataclass for immutability and memory efficiency
 - [03-02]: cv2 import is lazy in sampler (only needed for resize path)
+- [03-04]: Fountain constants (FOUNT_HEADER_FMT, PAYLOAD_SIZE) in fountain.py, not config.py (protocol-specific)
+- [03-04]: cv2 lazy import in FountainProtocol.encode_frame (matches sampler pattern)
+- [03-04]: Protocol registry includes both sequential and fountain via PROTOCOLS dict + get_protocol() factory
 
 ### Pending Todos
 
@@ -75,6 +78,6 @@ All prior blockers resolved. No new concerns.
 
 ## Session Continuity
 
-Last session: 2026-02-16T13:54:38Z
-Stopped at: Completed 03-02-PLAN.md (foundation modules)
+Last session: 2026-02-16T14:01:13Z
+Stopped at: Completed 03-04-PLAN.md (fountain protocol)
 Resume file: None
