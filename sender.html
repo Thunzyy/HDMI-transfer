@@ -106,8 +106,27 @@
       const ROWS = HEIGHT / BLOCK_SIZE;
       const BITS_PER_FRAME = ROWS * COLS; // 32400
       const BYTES_PER_FRAME = BITS_PER_FRAME / 8; // 4050
-      const HEADER_LEN = 6; // seed (4) + K (2)
-      const PAYLOAD_SIZE = BYTES_PER_FRAME - HEADER_LEN; // 4044
+      const FOUNTAIN_MAGIC = 0xF0C0;
+      const HEADER_LEN = 12; // magic(2) + seed(4) + K(2) + crc32(4)
+      const PAYLOAD_SIZE = BYTES_PER_FRAME - HEADER_LEN; // 4038
+
+      // CRC32 lookup table (IEEE 802.3 polynomial 0xEDB88320)
+      const CRC32_TABLE = new Uint32Array(256);
+      for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let j = 0; j < 8; j++) {
+          c = (c & 1) ? ((c >>> 1) ^ 0xEDB88320) : (c >>> 1);
+        }
+        CRC32_TABLE[i] = c >>> 0;
+      }
+
+      function crc32(bytes) {
+        let crc = 0xFFFFFFFF;
+        for (let i = 0; i < bytes.length; i++) {
+          crc = CRC32_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+        }
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+      }
 
       const BLACK = 0xff000000;
       const WHITE = 0xffffffff;
@@ -193,6 +212,9 @@
         else if (degreeRand < 0.6) degree = 2;
         else degree = Math.floor((next() / 0x100000000) * Math.min(K, 20)) + 1;
 
+        // Cap degree to K to prevent infinite loop when degree > K
+        degree = Math.min(degree, K);
+
         const indices = new Set();
         while (indices.size < degree) {
           indices.add(next() % K);
@@ -257,17 +279,31 @@
 
         const seed = state.seed >>> 0;
         const payload = buildDroplet(seed);
+
+        // Build protocol frame: magic(2) + seed(4) + K(2) + crc(4) + payload
         const frameBytes = new Uint8Array(BYTES_PER_FRAME);
         const view = new DataView(frameBytes.buffer);
-        view.setUint32(0, seed, false);
-        view.setUint16(4, state.K, false);
+
+        // Header fields (big-endian)
+        view.setUint16(0, FOUNTAIN_MAGIC, false);  // magic
+        view.setUint32(2, seed, false);             // seed
+        view.setUint16(6, state.K, false);          // K
+
+        // Copy payload after header
         frameBytes.set(payload, HEADER_LEN);
+
+        // Compute CRC32 over header[0:8] + payload
+        const crcData = new Uint8Array(8 + payload.length);
+        crcData.set(frameBytes.subarray(0, 8));
+        crcData.set(payload, 8);
+        const crcValue = crc32(crcData);
+        view.setUint32(8, crcValue, false);  // CRC32 at offset 8
 
         bytesToBits(frameBytes);
         drawBits(state.bits);
 
         state.seed = (state.seed + 1) >>> 0;
-        if (state.seed === 0) state.seed = 1; // evite seed nul
+        if (state.seed === 0) state.seed = 1;
         state.frame += 1;
         if (state.frame % 30 === 0) updateStats();
 
