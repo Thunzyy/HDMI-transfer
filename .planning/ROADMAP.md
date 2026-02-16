@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Test Foundation** - Establish test safety net around existing working prototype
 - [x] **Phase 2: Protocol Foundation** - Add frame synchronization, integrity verification, and transfer lifecycle
 - [x] **Phase 3: Architecture Refactor** - Restructure into clean src-layout package with protocol abstraction
-- [ ] **Phase 4: Performance Optimization** - Unlock maximum throughput with Numba JIT, pygame-ce, and threaded capture
+- [x] **Phase 4: Performance Optimization** - Unlock maximum throughput with Numba JIT, pygame-ce, and threaded capture
 - [ ] **Phase 5: Fountain Code Optimization** - Tune fountain code math for minimal decoding overhead
 - [ ] **Phase 6: UX & Polish** - Resolution profiles, calibration mode, benchmarking, and progress reporting
 
@@ -91,11 +91,11 @@ Plans:
 **Plans:** 5 plans
 
 Plans:
-- [ ] 04-01-PLAN.md -- 3bpp fountain encoding upgrade (PERF-01)
-- [ ] 04-02-PLAN.md -- Numba @njit XOR acceleration for FountainDecoder (PERF-03)
+- [x] 04-01-PLAN.md -- 3bpp fountain encoding upgrade (PERF-01)
+- [x] 04-02-PLAN.md -- Numba @njit XOR acceleration for FountainDecoder (PERF-03)
 - [x] 04-03-PLAN.md -- pygame-ce SDL2 renderer + dependency update (PERF-04)
-- [ ] 04-04-PLAN.md -- Threaded capture with ring buffer + FPS reporting (PERF-05, PERF-06)
-- [ ] 04-05-PLAN.md -- Wire all components into CLI entry points (PERF-02)
+- [x] 04-04-PLAN.md -- Threaded capture with ring buffer + FPS reporting (PERF-05, PERF-06)
+- [x] 04-05-PLAN.md -- Wire all components into CLI entry points (PERF-02)
 
 ### Phase 5: Fountain Code Optimization
 **Goal**: Fountain decoding overhead drops from ~30% to ~5% for typical transfer sizes, making rateless coding practically free
@@ -143,10 +143,10 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 1. Test Foundation | 3/3 | Complete | 2026-02-16 |
 | 2. Protocol Foundation | 5/5 | Complete | 2026-02-16 |
 | 3. Architecture Refactor | 7/7 | Complete | 2026-02-16 |
-| 4. Performance Optimization | 3/5 | In progress | - |
+| 4. Performance Optimization | 5/5 | Complete | 2026-02-16 |
 | 5. Fountain Code Optimization | 0/5 | Not started | - |
 | 6. UX & Polish | 0/5 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-16*
-*Last updated: 2026-02-16 -- Phase 4 planned (5 plans in 3 waves)*
+*Last updated: 2026-02-16 -- Phase 4 complete (5/5 plans)*
