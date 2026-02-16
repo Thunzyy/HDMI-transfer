@@ -8,6 +8,7 @@ Usage::
 
     hdmi-send photo.png --mode sequential --fps 240 --screen 1
     hdmi-send secret.zip --mode fountain --fps 60
+    hdmi-send secret.zip --renderer cv2 --mode fountain
 """
 
 from __future__ import annotations
@@ -18,7 +19,6 @@ import math
 import sys
 import time
 
-import cv2
 import numpy as np
 
 from hdmi_exfil.config import (
@@ -28,11 +28,12 @@ from hdmi_exfil.config import (
     WIDTH,
 )
 from hdmi_exfil.display.monitors import get_monitors
-from hdmi_exfil.display.renderer import FrameRenderer
+from hdmi_exfil.display.renderer import FrameRenderer, PygameRenderer
 from hdmi_exfil.file_handling.metadata import build_start_metadata
 from hdmi_exfil.file_handling.reader import read_input
 from hdmi_exfil.protocols import get_protocol
 from hdmi_exfil.protocols.fountain import PAYLOAD_SIZE as FOUNTAIN_PAYLOAD_SIZE
+from hdmi_exfil.protocols.xor_ops import warmup as warmup_numba, xor_into
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -46,6 +47,12 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["sequential", "fountain"],
         default="sequential",
         help="Encoding protocol (default: sequential)",
+    )
+    parser.add_argument(
+        "--renderer",
+        choices=["pygame", "cv2"],
+        default="pygame",
+        help="Display backend: pygame (SDL2 vsync, recommended) or cv2 (legacy). Default: pygame",
     )
     parser.add_argument(
         "--fps",
@@ -72,21 +79,25 @@ def _build_parser() -> argparse.ArgumentParser:
 # Pause/resume UI helpers
 # ------------------------------------------------------------------
 
-def _show_pause_screen(renderer: FrameRenderer) -> str:
+_PAUSE_COLOR = (255, 165, 0)  # orange BGR
+_DONE_COLOR = (0, 255, 0)  # green BGR
+_INTERRUPTED_COLOR = (0, 0, 255)  # red BGR
+
+
+def _solid_frame(bgr: tuple[int, int, int]) -> np.ndarray:
+    """Create a solid-color (H, W, 3) uint8 frame."""
+    frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+    frame[:, :] = bgr
+    return frame
+
+
+def _show_pause_screen(renderer: FrameRenderer | PygameRenderer) -> str:
     """Display pause overlay and wait for user action.
 
     Returns ``'resume'``, ``'quit'``, or keeps looping until one of those.
     """
-    pause_img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
-    cv2.putText(
-        pause_img, "PAUSED", (WIDTH // 2 - 200, HEIGHT // 2),
-        cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 165, 255), 4,
-    )
-    cv2.putText(
-        pause_img, "Press 'r' to RESUME, 'q' or ESC to QUIT",
-        (WIDTH // 2 - 400, HEIGHT // 2 + 100),
-        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2,
-    )
+    pause_img = _solid_frame(_PAUSE_COLOR)
+    print("PAUSED -- Press 'r' to RESUME, 'q' or ESC to QUIT")
     while True:
         key = renderer.show(pause_img, delay_ms=100)
         if key == ord("r"):
@@ -95,25 +106,17 @@ def _show_pause_screen(renderer: FrameRenderer) -> str:
             return "quit"
 
 
-def _show_end_screen(renderer: FrameRenderer, interrupted: bool) -> None:
+def _show_end_screen(
+    renderer: FrameRenderer | PygameRenderer, interrupted: bool,
+) -> None:
     """Display completion or interruption screen."""
-    end_img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
     if interrupted:
-        cv2.putText(
-            end_img, "INTERRUPTED", (WIDTH // 2 - 400, HEIGHT // 2),
-            cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 0, 255), 4,
-        )
-        cv2.putText(
-            end_img, "Press any key to exit",
-            (WIDTH // 2 - 300, HEIGHT // 2 + 100),
-            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2,
-        )
+        end_img = _solid_frame(_INTERRUPTED_COLOR)
+        print("INTERRUPTED -- Press any key to exit")
         renderer.show(end_img, delay_ms=0)  # waitKey(0) = wait forever
     else:
-        cv2.putText(
-            end_img, "DONE", (WIDTH // 2 - 100, HEIGHT // 2),
-            cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 255, 0), 4,
-        )
+        end_img = _solid_frame(_DONE_COLOR)
+        print("DONE")
         renderer.show(end_img, delay_ms=5000)
 
 
@@ -125,7 +128,7 @@ def _send_sequential(
     protocol: object,
     filename: str,
     file_data: bytes,
-    renderer: FrameRenderer,
+    renderer: FrameRenderer | PygameRenderer,
     delay: int,
     redundancy: int,
 ) -> None:
@@ -196,7 +199,7 @@ def _send_fountain(
     protocol: object,
     filename: str,
     file_data: bytes,
-    renderer: FrameRenderer,
+    renderer: FrameRenderer | PygameRenderer,
     delay: int,
 ) -> None:
     """Run the fountain send loop (continuous droplets until user stops)."""
@@ -204,16 +207,16 @@ def _send_fountain(
     metadata = build_start_metadata(filename, file_data)
     wrapped = metadata + file_data
 
-    # Slice into chunks
+    # Slice into chunks as numpy arrays (Numba-compatible)
     K = math.ceil(len(wrapped) / FOUNTAIN_PAYLOAD_SIZE)
 
-    chunks: list[bytes] = []
+    chunks: list[np.ndarray] = []
     for i in range(K):
         start = i * FOUNTAIN_PAYLOAD_SIZE
         end = min(start + FOUNTAIN_PAYLOAD_SIZE, len(wrapped))
-        chunk = bytearray(FOUNTAIN_PAYLOAD_SIZE)
-        chunk[:end - start] = wrapped[start:end]
-        chunks.append(bytes(chunk))
+        chunk = np.zeros(FOUNTAIN_PAYLOAD_SIZE, dtype=np.uint8)
+        chunk[:end - start] = np.frombuffer(wrapped[start:end], dtype=np.uint8)
+        chunks.append(chunk)
 
     print(f"Fountain mode: K={K} chunks, payload_size={FOUNTAIN_PAYLOAD_SIZE}")
     print("Sending droplets continuously. Press ESC to stop.")
@@ -234,7 +237,7 @@ def _send_fountain(
             print("\nResuming transmission...")
             continue
 
-        # Build droplet payload by XOR-ing selected chunks
+        # Build droplet payload by XOR-ing selected chunks (Numba-accelerated)
         from hdmi_exfil.prng import PRNG  # noqa: C0415
 
         prng = PRNG(seed)
@@ -253,14 +256,12 @@ def _send_fountain(
             idx = prng.next() % K
             indices.add(idx)
 
-        payload = bytearray(FOUNTAIN_PAYLOAD_SIZE)
+        payload = np.zeros(FOUNTAIN_PAYLOAD_SIZE, dtype=np.uint8)
         for idx in indices:
-            chunk = chunks[idx]
-            for b in range(FOUNTAIN_PAYLOAD_SIZE):
-                payload[b] ^= chunk[b]
+            xor_into(payload, chunks[idx])
 
         frame = protocol.encode_frame(
-            bytes(payload), frame_count, K, seed=seed,
+            payload.tobytes(), frame_count, K, seed=seed,
         )
 
         key = renderer.show(frame, delay_ms=delay)
@@ -337,6 +338,7 @@ def main() -> None:
     print(f"SHA-256: {sha256_hex}")
     print(f"Resolution: {WIDTH}x{HEIGHT}, Block Size: {BLOCK_SIZE}")
     print(f"Mode: {args.mode}")
+    print(f"Renderer: {args.renderer}")
 
     # Detect monitors
     monitors = get_monitors()
@@ -361,19 +363,37 @@ def main() -> None:
     delay = max(1, int(1000 / args.fps))
     print(f"Target FPS: {args.fps} (delay: {delay}ms)")
 
+    # Choose renderer based on --renderer flag
+    if args.renderer == "pygame":
+        renderer_cls = PygameRenderer
+        renderer_kwargs: dict = {
+            "width": WIDTH,
+            "height": HEIGHT,
+            "x_offset": x_offset,
+            "y_offset": y_offset,
+        }
+    else:
+        renderer_cls = FrameRenderer
+        renderer_kwargs = {
+            "window_name": "HDMI Exfil Sender",
+            "x_offset": x_offset,
+            "y_offset": y_offset,
+        }
+
     # Create renderer and show calibration frame
-    with FrameRenderer(
-        window_name="HDMI Exfil Sender",
-        x_offset=x_offset,
-        y_offset=y_offset,
-    ) as renderer:
-        # Calibration frame: black, press any key to start
+    with renderer_cls(**renderer_kwargs) as renderer:
+        # Calibration frame: solid white border on black (works for both renderers)
         calibration = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
-        cv2.putText(
-            calibration, "Press any key to start",
-            (WIDTH // 2 - 350, HEIGHT // 2),
-            cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3,
-        )
+        calibration[0:5, :] = 255
+        calibration[-5:, :] = 255
+        calibration[:, 0:5] = 255
+        calibration[:, -5:] = 255
+        print("Press any key to start...")
+
+        # Warm up Numba JIT during calibration wait (before data transfer)
+        if args.mode == "fountain":
+            warmup_numba()
+
         renderer.show(calibration, delay_ms=0)
 
         # Dispatch to mode-specific send loop
