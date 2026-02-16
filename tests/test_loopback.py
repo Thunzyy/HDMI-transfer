@@ -1,70 +1,50 @@
 import os
-import random
-import string
-import cv2
+import pytest
 import numpy as np
 from sender import encode_frame
 from receiver import sample_frame, decode_frame
-from common import *
+from common import BYTES_PER_FRAME
 
-def generate_random_file(filename, size_kb):
-    size = size_kb * 1024
-    with open(filename, 'wb') as f:
-        f.write(os.urandom(size))
 
-def test_loopback():
-    test_file = "test_data.bin"
-    output_file = "test_output.bin"
-    
+@pytest.mark.hardware
+def test_loopback(tmp_path):
+    """Full encode/decode loopback test with a random binary file.
+
+    Requires Elgato capture card hardware. Skipped by default;
+    run with --hardware to enable.
+    """
+    test_file = tmp_path / "test_data.bin"
+
     # Generate 100KB random file
-    print("Generating test file...")
-    generate_random_file(test_file, 100)
-    
-    # Read file
-    with open(test_file, 'rb') as f:
-        file_data = f.read()
-        
+    file_data = os.urandom(100 * 1024)
+    test_file.write_bytes(file_data)
+
+    # Read file back (mirrors original pattern)
+    file_data = test_file.read_bytes()
     file_size = len(file_data)
     total_frames = (file_size + BYTES_PER_FRAME - 1) // BYTES_PER_FRAME
-    
-    print(f"Encoding {file_size} bytes into {total_frames} frames...")
-    
+
     decoded_data = bytearray()
-    
+
     for i in range(total_frames):
         start = i * BYTES_PER_FRAME
         end = min((i + 1) * BYTES_PER_FRAME, file_size)
         chunk = file_data[start:end]
-        
-        # Encode
-        frame_img = encode_frame(chunk, i)
-        
-        # Simulate transmission (perfect quality)
-        # In real life, we'd add noise or compression artifacts here to test robustness
-        received_frame = frame_img
-        
-        # Decode
-        sampled = sample_frame(received_frame)
-        idx, data, length = decode_frame(sampled)
-        
-        if idx != i:
-            print(f"ERROR: Frame index mismatch! Expected {i}, got {idx}")
-            return
-            
-        decoded_data.extend(data)
-        
-    # Verify
-    if decoded_data == file_data:
-        print("SUCCESS: Decoded data matches original file!")
-    else:
-        print("FAILURE: Decoded data does not match.")
-        print(f"Original len: {len(file_data)}, Decoded len: {len(decoded_data)}")
-        
-    # Clean up
-    if os.path.exists(test_file):
-        os.remove(test_file)
-    if os.path.exists(output_file):
-        os.remove(output_file)
 
-if __name__ == "__main__":
-    test_loopback()
+        # Encode (3 args: data_chunk, frame_index, total_frames)
+        frame_img = encode_frame(chunk, i, total_frames)
+
+        # Simulate transmission (perfect quality)
+        received_frame = frame_img
+
+        # Decode (4 return values: frame_index, total_frames, data, data_len)
+        sampled = sample_frame(received_frame)
+        idx, total, data, length = decode_frame(sampled)
+
+        assert idx == i, f"Frame index mismatch: expected {i}, got {idx}"
+        assert total == total_frames, f"Total frames mismatch: expected {total_frames}, got {total}"
+
+        decoded_data.extend(data[:length])
+
+    # Verify byte-for-byte match
+    assert decoded_data[:file_size] == file_data
