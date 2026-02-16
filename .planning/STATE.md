@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 4 of 6 (Performance Optimization)
-Plan: 3 of 5 in current phase
+Plan: 4 of 5 in current phase
 Status: In progress
-Last activity: 2026-02-16 -- Completed 04-03-PLAN.md (PygameRenderer SDL2 display)
+Last activity: 2026-02-16 -- Completed 04-02-PLAN.md (Numba XOR acceleration)
 
-Progress: [██████████████████████░░░░░░░░░] 18/31 (58%)
+Progress: [███████████████████████░░░░░░░░] 19/31 (61%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 18
+- Total plans completed: 19
 - Average duration: 5min
-- Total execution time: 93min
+- Total execution time: 96min
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [██████████████████████░
 | 01-test-foundation | 3/3 | 45min | 15min |
 | 02-protocol-foundation | 5/5 | 19min | 4min |
 | 03-architecture-refactor | 7/7 | 24min | 3min |
-| 04-performance-optimization | 3/5 | 5min | 2min |
+| 04-performance-optimization | 4/5 | 8min | 2min |
 
 **Recent Trend:**
-- Last 5 plans: 03-06 (6min), 03-07 (4min), 04-01 (est), 04-04 (2min), 04-03 (3min)
+- Last 5 plans: 03-07 (4min), 04-01 (est), 04-04 (2min), 04-03 (3min), 04-02 (3min)
 - Trend: Consistent fast execution
 
 *Updated after each plan completion*
@@ -93,6 +93,9 @@ Recent decisions affecting current work:
 - [04-03]: opencv-python replaced with opencv-python-headless to avoid SDL2 conflicts with pygame-ce
 - [04-03]: PygameRenderer returns 255 for no-key (matching FrameRenderer convention for drop-in replacement)
 - [04-03]: numba pre-installed alongside pygame-ce to avoid double-reinstall for plan 04-02
+- [04-02]: xor_into uses element-wise @njit loop (not numpy vectorized) for nogil GIL release during threaded capture
+- [04-02]: bytearray->np.ndarray conversion at add_droplet boundary; public API unchanged (accepts bytes|bytearray)
+- [04-02]: FountainDecoder.chunks now dict[int, np.ndarray] -- get_file_data uses .tobytes() for output
 
 ### Pending Todos
 
@@ -104,6 +107,6 @@ All prior blockers resolved. No new concerns.
 
 ## Session Continuity
 
-Last session: 2026-02-16T22:42:16Z
-Stopped at: Completed 04-03-PLAN.md (PygameRenderer SDL2 display)
+Last session: 2026-02-16T22:48:35Z
+Stopped at: Completed 04-02-PLAN.md (Numba XOR acceleration)
 Resume file: None
