@@ -7,12 +7,12 @@
 
 ### Test Foundation
 
-- [ ] **TEST-01**: Fix broken loopback test (test_loopback.py has wrong function signatures)
-- [ ] **TEST-02**: Unit tests for sequential encode/decode round-trips in memory (no hardware)
-- [ ] **TEST-03**: Unit tests for fountain encode/decode round-trips in memory (no hardware)
-- [ ] **TEST-04**: PRNG cross-language test vectors — verify Python and JS SplitMix32 produce identical output for 1000+ seeds
-- [ ] **TEST-05**: Loopback integration tests using Elgato capture card on same PC
-- [ ] **TEST-06**: Property-based tests (hypothesis) for encode/decode with arbitrary binary data
+- [x] **TEST-01**: Fix broken loopback test (test_loopback.py has wrong function signatures)
+- [x] **TEST-02**: Unit tests for sequential encode/decode round-trips in memory (no hardware)
+- [x] **TEST-03**: Unit tests for fountain encode/decode round-trips in memory (no hardware)
+- [x] **TEST-04**: PRNG cross-language test vectors — verify Python and JS SplitMix32 produce identical output for 1000+ seeds
+- [x] **TEST-05**: Loopback integration tests using Elgato capture card on same PC
+- [x] **TEST-06**: Property-based tests (hypothesis) for encode/decode with arbitrary binary data
 
 ### Protocol & Integrity
 
@@ -87,12 +87,12 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TEST-01 | Phase 1 | Pending |
-| TEST-02 | Phase 1 | Pending |
-| TEST-03 | Phase 1 | Pending |
-| TEST-04 | Phase 1 | Pending |
-| TEST-05 | Phase 1 | Pending |
-| TEST-06 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Complete |
+| TEST-02 | Phase 1 | Complete |
+| TEST-03 | Phase 1 | Complete |
+| TEST-04 | Phase 1 | Complete |
+| TEST-05 | Phase 1 | Complete |
+| TEST-06 | Phase 1 | Complete |
 | PROT-01 | Phase 2 | Pending |
 | PROT-02 | Phase 2 | Pending |
 | PROT-03 | Phase 2 | Pending |

@@ -12,7 +12,7 @@ Transform the working HDMI data exfiltration prototype into a robust, high-perfo
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Test Foundation** - Establish test safety net around existing working prototype
+- [x] **Phase 1: Test Foundation** - Establish test safety net around existing working prototype
 - [ ] **Phase 2: Protocol Foundation** - Add frame synchronization, integrity verification, and transfer lifecycle
 - [ ] **Phase 3: Architecture Refactor** - Restructure into clean src-layout package with protocol abstraction
 - [ ] **Phase 4: Performance Optimization** - Unlock maximum throughput with Numba JIT, pygame-ce, and threaded capture
@@ -34,9 +34,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Test infrastructure, fix broken loopback, sequential unit tests (TEST-01, TEST-02)
-- [ ] 01-02-PLAN.md -- PRNG cross-language vectors and fountain round-trip tests (TEST-03, TEST-04)
-- [ ] 01-03-PLAN.md -- Property-based tests and hardware loopback integration (TEST-05, TEST-06)
+- [x] 01-01-PLAN.md -- Test infrastructure, fix broken loopback, sequential unit tests (TEST-01, TEST-02)
+- [x] 01-02-PLAN.md -- PRNG cross-language vectors and fountain round-trip tests (TEST-03, TEST-04)
+- [x] 01-03-PLAN.md -- Property-based tests and hardware loopback integration (TEST-05, TEST-06)
 
 ### Phase 2: Protocol Foundation
 **Goal**: Every frame is self-describing and integrity-verified -- receiver can detect corruption, distinguish protocols, and verify complete file transfers
@@ -141,7 +141,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Test Foundation | 0/3 | Planned | - |
+| 1. Test Foundation | 3/3 | Complete | 2026-02-16 |
 | 2. Protocol Foundation | 0/5 | Not started | - |
 | 3. Architecture Refactor | 0/7 | Not started | - |
 | 4. Performance Optimization | 0/6 | Not started | - |
@@ -150,4 +150,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 ---
 *Roadmap created: 2026-02-16*
-*Last updated: 2026-02-16*
+*Last updated: 2026-02-16 — Phase 1 complete*
