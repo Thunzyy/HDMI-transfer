@@ -16,12 +16,12 @@
 
 ### Protocol & Integrity
 
-- [ ] **PROT-01**: Frame synchronization via magic number in frame header to distinguish data from noise/idle
-- [ ] **PROT-02**: Frame type system — IDLE, START, DATA, END frame types for transfer lifecycle
-- [ ] **PROT-03**: Per-frame CRC32 for immediate corruption detection
-- [ ] **PROT-04**: Extended metadata in START frame — filename, file size, SHA-256 hash
-- [ ] **PROT-05**: File-level SHA-256 integrity verification on receiver after reassembly
-- [ ] **PROT-06**: Magic number differentiation between sequential (0xDA7A) and fountain (0xF0C0) protocols
+- [x] **PROT-01**: Frame synchronization via magic number in frame header to distinguish data from noise/idle
+- [x] **PROT-02**: Frame type system — IDLE, START, DATA, END frame types for transfer lifecycle
+- [x] **PROT-03**: Per-frame CRC32 for immediate corruption detection
+- [x] **PROT-04**: Extended metadata in START frame — filename, file size, SHA-256 hash
+- [x] **PROT-05**: File-level SHA-256 integrity verification on receiver after reassembly
+- [x] **PROT-06**: Magic number differentiation between sequential (0xDA7A) and fountain (0xF0C0) protocols
 
 ### Architecture
 
@@ -93,12 +93,12 @@
 | TEST-04 | Phase 1 | Complete |
 | TEST-05 | Phase 1 | Complete |
 | TEST-06 | Phase 1 | Complete |
-| PROT-01 | Phase 2 | Pending |
-| PROT-02 | Phase 2 | Pending |
-| PROT-03 | Phase 2 | Pending |
-| PROT-04 | Phase 2 | Pending |
-| PROT-05 | Phase 2 | Pending |
-| PROT-06 | Phase 2 | Pending |
+| PROT-01 | Phase 2 | Complete |
+| PROT-02 | Phase 2 | Complete |
+| PROT-03 | Phase 2 | Complete |
+| PROT-04 | Phase 2 | Complete |
+| PROT-05 | Phase 2 | Complete |
+| PROT-06 | Phase 2 | Complete |
 | ARCH-01 | Phase 3 | Pending |
 | ARCH-02 | Phase 3 | Pending |
 | ARCH-03 | Phase 3 | Pending |
@@ -130,4 +130,4 @@
 
 ---
 *Requirements defined: 2026-02-16*
-*Last updated: 2026-02-16 after roadmap creation*
+*Last updated: 2026-02-16 -- Phase 2 requirements complete*
