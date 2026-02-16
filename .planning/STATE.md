@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 2 of 6 (Protocol Foundation)
-Plan: 1 of 5 in current phase
+Plan: 2 of 5 in current phase
 Status: In progress
-Last activity: 2026-02-16 -- Completed 02-01-PLAN.md (sequential frame protocol headers)
+Last activity: 2026-02-16 -- Completed 02-02-PLAN.md (fountain protocol headers + chooseIndices bugfix)
 
-Progress: [████░░░░░░░░░░░░░░░░░░░░░░░░░░░] 4/31 (13%)
+Progress: [█████░░░░░░░░░░░░░░░░░░░░░░░░░░] 5/31 (16%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 12min
-- Total execution time: 49min
+- Total plans completed: 5
+- Average duration: 11min
+- Total execution time: 53min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-test-foundation | 3/3 | 45min | 15min |
-| 02-protocol-foundation | 1/5 | 4min | 4min |
+| 02-protocol-foundation | 2/5 | 8min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (2min), 01-02 (14min), 01-03 (29min), 02-01 (4min)
-- Trend: 02-01 fast -- straightforward header format change with backward-compatible API
+- Last 5 plans: 01-02 (14min), 01-03 (29min), 02-01 (4min), 02-02 (4min)
+- Trend: Phase 2 plans executing fast -- protocol changes are well-defined by research
 
 *Updated after each plan completion*
 
@@ -57,6 +57,9 @@ Recent decisions affecting current work:
 - [02-01]: CRC32 computed over pre-CRC header + payload; frame_type defaults to FRAME_TYPE_DATA for backward compat
 - [02-01]: BYTES_PER_FRAME auto-recalculated from 12138 to 12133 (5 fewer payload bytes per frame)
 - [02-01]: decode_frame does not return frame_type yet -- not needed until Plan 03 lifecycle FSM
+- [02-02]: chooseIndices bugfix applied now (not deferred to Phase 5) -- both files already being modified
+- [02-02]: Fountain header: magic(2)+seed(4)+K(2)+crc32(4)=12 bytes, PAYLOAD_SIZE drops from 4044 to 4038
+- [02-02]: CRC32 scope matches sequential: header pre-CRC fields + payload (excludes CRC field itself)
 
 ### Pending Todos
 
@@ -66,10 +69,10 @@ None.
 
 - ~~Existing test_loopback.py has wrong function signatures (TEST-01) -- must fix before relying on tests~~ RESOLVED in 01-01
 - ~~Python PRNG may have bug (meaningless |0 operator copied from JS) -- verify with cross-language test vectors early (planned for 01-02)~~ RESOLVED in 01-02: confirmed identical output for 1028 seeds
-- **OPEN:** chooseIndices infinite-loop bug when degree > K (affects sender.html and receiver_fountain.py) -- must fix in Phase 2 or Phase 5
+- ~~chooseIndices infinite-loop bug when degree > K (affects sender.html and receiver_fountain.py)~~ RESOLVED in 02-02: degree capped to min(degree, K) in both JS and Python
 
 ## Session Continuity
 
-Last session: 2026-02-16T10:21:54Z
-Stopped at: Completed 02-01-PLAN.md (sequential frame protocol headers)
+Last session: 2026-02-16T10:21:55Z
+Stopped at: Completed 02-02-PLAN.md (fountain protocol headers + chooseIndices bugfix)
 Resume file: None
