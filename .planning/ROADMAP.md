@@ -13,7 +13,7 @@ Transform the working HDMI data exfiltration prototype into a robust, high-perfo
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Test Foundation** - Establish test safety net around existing working prototype
-- [ ] **Phase 2: Protocol Foundation** - Add frame synchronization, integrity verification, and transfer lifecycle
+- [x] **Phase 2: Protocol Foundation** - Add frame synchronization, integrity verification, and transfer lifecycle
 - [ ] **Phase 3: Architecture Refactor** - Restructure into clean src-layout package with protocol abstraction
 - [ ] **Phase 4: Performance Optimization** - Unlock maximum throughput with Numba JIT, pygame-ce, and threaded capture
 - [ ] **Phase 5: Fountain Code Optimization** - Tune fountain code math for minimal decoding overhead
@@ -51,11 +51,11 @@ Plans:
 **Plans:** 5 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Sequential protocol header with magic 0xDA7A and CRC32 integrity (PROT-01, PROT-03)
-- [ ] 02-02-PLAN.md -- Fountain protocol header with magic 0xF0C0, CRC32, and chooseIndices bugfix (PROT-01, PROT-03)
-- [ ] 02-03-PLAN.md -- Transfer lifecycle START/DATA/END with SHA-256 verification (PROT-02, PROT-04, PROT-05)
-- [ ] 02-04-PLAN.md -- Fountain metadata extension with file_size and SHA-256 (PROT-04, PROT-05)
-- [ ] 02-05-PLAN.md -- Protocol routing by magic number and integration tests (PROT-06)
+- [x] 02-01-PLAN.md -- Sequential protocol header with magic 0xDA7A and CRC32 integrity (PROT-01, PROT-03)
+- [x] 02-02-PLAN.md -- Fountain protocol header with magic 0xF0C0, CRC32, and chooseIndices bugfix (PROT-01, PROT-03)
+- [x] 02-03-PLAN.md -- Transfer lifecycle START/DATA/END with SHA-256 verification (PROT-02, PROT-04, PROT-05)
+- [x] 02-04-PLAN.md -- Fountain metadata extension with file_size and SHA-256 (PROT-04, PROT-05)
+- [x] 02-05-PLAN.md -- Protocol routing by magic number and integration tests (PROT-06)
 
 ### Phase 3: Architecture Refactor
 **Goal**: Codebase is a proper Python package with clean module boundaries, protocol abstraction, shared constants, and cross-platform support
@@ -142,7 +142,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Test Foundation | 3/3 | Complete | 2026-02-16 |
-| 2. Protocol Foundation | 0/5 | Planned | - |
+| 2. Protocol Foundation | 5/5 | Complete | 2026-02-16 |
 | 3. Architecture Refactor | 0/7 | Not started | - |
 | 4. Performance Optimization | 0/6 | Not started | - |
 | 5. Fountain Code Optimization | 0/5 | Not started | - |
@@ -150,4 +150,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 ---
 *Roadmap created: 2026-02-16*
-*Last updated: 2026-02-16 -- Phase 2 planned*
+*Last updated: 2026-02-16 -- Phase 2 complete*
