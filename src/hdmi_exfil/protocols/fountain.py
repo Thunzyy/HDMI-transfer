@@ -24,6 +24,7 @@ import numpy as np
 from hdmi_exfil import config
 from hdmi_exfil.prng import PRNG
 from hdmi_exfil.protocols.base import EncodingProtocol, FrameResult
+from hdmi_exfil.protocols.xor_ops import xor_into
 
 # ---------------------------------------------------------------------------
 # Fountain-specific constants (protocol-level, not in config.py)
@@ -54,7 +55,7 @@ class FountainDecoder:
     def __init__(self, total_chunks: int, payload_size: int) -> None:
         self.K: int = total_chunks
         self.payload_size: int = payload_size
-        self.chunks: dict[int, bytearray] = {}
+        self.chunks: dict[int, np.ndarray] = {}
         self.droplets: list[list] = []
         self.chunk_to_droplets: dict[int, list] = {
             i: [] for i in range(self.K)
@@ -86,13 +87,11 @@ class FountainDecoder:
 
         # On-the-fly peeling: XOR out already-known chunks
         new_indices: set[int] = set()
-        current_data = bytearray(data)
+        current_data = np.frombuffer(data, dtype=np.uint8).copy()
 
         for idx in indices:
             if idx in self.chunks:
-                chunk_data = self.chunks[idx]
-                for i in range(len(current_data)):
-                    current_data[i] ^= chunk_data[i]
+                xor_into(current_data, self.chunks[idx])
             else:
                 new_indices.add(idx)
 
@@ -108,7 +107,7 @@ class FountainDecoder:
             for idx in new_indices:
                 self.chunk_to_droplets[idx].append(droplet_entry)
 
-    def resolve_chunk(self, chunk_idx: int, chunk_data: bytearray) -> None:
+    def resolve_chunk(self, chunk_idx: int, chunk_data: np.ndarray) -> None:
         """Record a recovered chunk and propagate via peeling."""
         if chunk_idx in self.chunks:
             return
@@ -120,8 +119,7 @@ class FountainDecoder:
             indices, data = droplet
             if chunk_idx in indices:
                 indices.remove(chunk_idx)
-                for i in range(len(data)):
-                    data[i] ^= chunk_data[i]
+                xor_into(data, chunk_data)
                 if len(indices) == 1:
                     next_idx = indices.pop()
                     self.resolve_chunk(next_idx, data)
@@ -135,7 +133,7 @@ class FountainDecoder:
         out = bytearray()
         for i in range(self.K):
             if i in self.chunks:
-                out.extend(self.chunks[i])
+                out.extend(self.chunks[i].tobytes())
             else:
                 out.extend(b"\x00" * self.payload_size)
         return out
