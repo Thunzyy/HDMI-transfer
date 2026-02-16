@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hdmi-exfil"
+version = "0.1.0"
+description = "Maximum throughput data transfer over HDMI signal encoding"
+requires-python = ">= 3.11"
+dependencies = [
+    "opencv-python >= 4.0",
+    "numpy >= 1.24",
+    "screeninfo >= 0.8",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest >= 8.0",
+    "hypothesis >= 6.0",
+]
+
+[project.scripts]
+hdmi-send = "hdmi_exfil.cli.send:main"
+hdmi-recv = "hdmi_exfil.cli.receive:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+hdmi_exfil = ["constants.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers", "-v", "--import-mode=importlib"]
+markers = [
+    "hardware: marks tests requiring Elgato capture card (deselect with '-m \"not hardware\"')",
+]
