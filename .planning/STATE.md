@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 4 of 6 (Performance Optimization)
-Plan: 4 of 5 in current phase
+Plan: 3 of 5 in current phase
 Status: In progress
-Last activity: 2026-02-16 -- Completed 04-04-PLAN.md (Threaded capture with ring buffer + FPS reporting)
+Last activity: 2026-02-16 -- Completed 04-03-PLAN.md (PygameRenderer SDL2 display)
 
-Progress: [████████████████████░░░░░░░░░░░] 16/31 (52%)
+Progress: [██████████████████████░░░░░░░░░] 18/31 (58%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 16
-- Average duration: 6min
-- Total execution time: 90min
+- Total plans completed: 18
+- Average duration: 5min
+- Total execution time: 93min
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [████████████████████░░░
 | 01-test-foundation | 3/3 | 45min | 15min |
 | 02-protocol-foundation | 5/5 | 19min | 4min |
 | 03-architecture-refactor | 7/7 | 24min | 3min |
-| 04-performance-optimization | 1/5 | 2min | 2min |
+| 04-performance-optimization | 3/5 | 5min | 2min |
 
 **Recent Trend:**
-- Last 5 plans: 03-05 (3min), 03-06 (6min), 03-07 (4min), 04-04 (2min)
+- Last 5 plans: 03-06 (6min), 03-07 (4min), 04-01 (est), 04-04 (2min), 04-03 (3min)
 - Trend: Consistent fast execution
 
 *Updated after each plan completion*
@@ -82,10 +82,17 @@ Recent decisions affecting current work:
 - [03-07]: route_frame re-implemented as test-local helper (not added to package -- test-only concern)
 - [03-07]: choose_indices frozenset->set wrapper in test helpers for mutable-set compatibility
 - [03-07]: All test imports use from hdmi_exfil.* exclusively; old flat modules no longer tested
+- [04-01]: Fountain PAYLOAD_SIZE updated from 4038 to 12138 (3x via RGB binary encoding)
+- [04-01]: Fountain encode/decode now uses identical 3bpp pattern as SequentialProtocol
+- [04-01]: FountainDecoder unchanged -- operates on raw bytes, not pixels; 3bpp is transparent to it
 - [04-04]: ThreadedCapture uses duck typing (no CaptureSource import) -- wraps any read()->(bool, frame) object
 - [04-04]: Default buffer_size=16 (~96MB at 1080p) balances latency vs memory
 - [04-04]: FPSReporter uses perf_counter_ns for nanosecond-precision monotonic timing
 - [04-04]: actual_fps returns 0.0 when window is stale (>2s) to avoid misleading numbers
+- [04-03]: pygame lazy import inside PygameRenderer.__init__ so module importable in headless/CI
+- [04-03]: opencv-python replaced with opencv-python-headless to avoid SDL2 conflicts with pygame-ce
+- [04-03]: PygameRenderer returns 255 for no-key (matching FrameRenderer convention for drop-in replacement)
+- [04-03]: numba pre-installed alongside pygame-ce to avoid double-reinstall for plan 04-02
 
 ### Pending Todos
 
@@ -97,6 +104,6 @@ All prior blockers resolved. No new concerns.
 
 ## Session Continuity
 
-Last session: 2026-02-16T22:41:30Z
-Stopped at: Completed 04-04-PLAN.md (Threaded capture with ring buffer + FPS reporting)
+Last session: 2026-02-16T22:42:16Z
+Stopped at: Completed 04-03-PLAN.md (PygameRenderer SDL2 display)
 Resume file: None
