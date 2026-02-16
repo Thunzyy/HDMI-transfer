@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** Maximum throughput data transfer over HDMI without leaving any trace on the source machine.
-**Current focus:** Phase 3 Architecture Refactor -- COMPLETE
+**Current focus:** Phase 4 Performance Optimization
 
 ## Current Position
 
-Phase: 3 of 6 (Architecture Refactor)
-Plan: 7 of 7 in current phase
-Status: Phase complete
-Last activity: 2026-02-16 -- Completed 03-07-PLAN.md (Test migration)
+Phase: 4 of 6 (Performance Optimization)
+Plan: 4 of 5 in current phase
+Status: In progress
+Last activity: 2026-02-16 -- Completed 04-04-PLAN.md (Threaded capture with ring buffer + FPS reporting)
 
-Progress: [███████████████████░░░░░░░░░░░░] 15/31 (48%)
+Progress: [████████████████████░░░░░░░░░░░] 16/31 (52%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 15
+- Total plans completed: 16
 - Average duration: 6min
-- Total execution time: 88min
+- Total execution time: 90min
 
 **By Phase:**
 
@@ -30,10 +30,11 @@ Progress: [███████████████████░░░░
 | 01-test-foundation | 3/3 | 45min | 15min |
 | 02-protocol-foundation | 5/5 | 19min | 4min |
 | 03-architecture-refactor | 7/7 | 24min | 3min |
+| 04-performance-optimization | 1/5 | 2min | 2min |
 
 **Recent Trend:**
-- Last 5 plans: 03-03 (5min), 03-04 (3min), 03-05 (3min), 03-06 (6min), 03-07 (4min)
-- Trend: Consistent fast execution across architecture refactor phase
+- Last 5 plans: 03-05 (3min), 03-06 (6min), 03-07 (4min), 04-04 (2min)
+- Trend: Consistent fast execution
 
 *Updated after each plan completion*
 
@@ -81,6 +82,10 @@ Recent decisions affecting current work:
 - [03-07]: route_frame re-implemented as test-local helper (not added to package -- test-only concern)
 - [03-07]: choose_indices frozenset->set wrapper in test helpers for mutable-set compatibility
 - [03-07]: All test imports use from hdmi_exfil.* exclusively; old flat modules no longer tested
+- [04-04]: ThreadedCapture uses duck typing (no CaptureSource import) -- wraps any read()->(bool, frame) object
+- [04-04]: Default buffer_size=16 (~96MB at 1080p) balances latency vs memory
+- [04-04]: FPSReporter uses perf_counter_ns for nanosecond-precision monotonic timing
+- [04-04]: actual_fps returns 0.0 when window is stale (>2s) to avoid misleading numbers
 
 ### Pending Todos
 
@@ -88,10 +93,10 @@ None.
 
 ### Blockers/Concerns
 
-All prior blockers resolved. No new concerns. Phase 3 complete.
+All prior blockers resolved. No new concerns.
 
 ## Session Continuity
 
-Last session: 2026-02-16T14:23:10Z
-Stopped at: Completed 03-07-PLAN.md (Test migration) -- Phase 3 complete
+Last session: 2026-02-16T22:41:30Z
+Stopped at: Completed 04-04-PLAN.md (Threaded capture with ring buffer + FPS reporting)
 Resume file: None
