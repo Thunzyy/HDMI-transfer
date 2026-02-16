@@ -6,6 +6,7 @@ import struct
 import time
 import argparse
 import zlib
+import hashlib
 from common import *
 
 def sample_frame(frame):
@@ -92,6 +93,66 @@ def decode_frame(frame_grid):
 
     return frame_index, total_frames, payload, data_len
 
+
+def decode_frame_full(frame_grid):
+    """Decode frame returning all protocol fields including frame_type.
+
+    Returns (frame_type, frame_index, total_frames, data, data_len)
+    or (None, None, None, None, None) on failure.
+    """
+    flat_pixels = frame_grid.reshape(-1, 3)
+    bits = (flat_pixels > 128).astype(np.uint8)
+    flat_bits = bits.reshape(-1)
+    packed_bytes = np.packbits(flat_bits)
+    frame_bytes = packed_bytes.tobytes()
+
+    if len(frame_bytes) < HEADER_SIZE:
+        return None, None, None, None, None
+
+    try:
+        magic, frame_type, frame_index, total_frames, data_len = struct.unpack(
+            SEQ_HEADER_FMT, frame_bytes[:SEQ_HEADER_PRE_CRC])
+    except struct.error:
+        return None, None, None, None, None
+
+    if magic != SEQ_MAGIC:
+        return None, None, None, None, None
+
+    stored_crc = struct.unpack('>I',
+        frame_bytes[SEQ_HEADER_PRE_CRC:HEADER_SIZE])[0]
+
+    if data_len > BYTES_PER_FRAME or data_len == 0:
+        return None, None, None, None, None
+
+    payload = frame_bytes[HEADER_SIZE:HEADER_SIZE + data_len]
+
+    computed_crc = zlib.crc32(
+        frame_bytes[:SEQ_HEADER_PRE_CRC] + payload) & 0xFFFFFFFF
+    if computed_crc != stored_crc:
+        return None, None, None, None, None
+
+    return frame_type, frame_index, total_frames, payload, data_len
+
+
+def parse_start_metadata(payload):
+    """Parse START frame payload. Returns (file_size, sha256_hash, filename)."""
+    if len(payload) < 38:  # 4 + 32 + 2 minimum
+        return None, None, None
+    file_size = struct.unpack('>I', payload[0:4])[0]
+    sha256_hash = payload[4:36]
+    filename_len = struct.unpack('>H', payload[36:38])[0]
+    filename = payload[38:38 + filename_len].decode('utf-8')
+    return file_size, sha256_hash, filename
+
+
+class TransferState:
+    """Transfer lifecycle states."""
+    IDLE = 'idle'
+    RECEIVING = 'receiving'
+    COMPLETE = 'complete'
+    ERROR = 'error'
+
+
 def main():
     parser = argparse.ArgumentParser(description="HDMI Exfiltration Receiver")
     parser.add_argument("source", help="Video source (Camera index e.g. '0', '1' or file path)")
@@ -129,22 +190,25 @@ def main():
     print(f"Camera resolution: {actual_w}x{actual_h} @ {actual_fps} FPS")
         
     print(f"Listening for data on {source}...")
-    
+
+    # Transfer state
+    transfer_state = TransferState.IDLE
+    expected_sha256 = None
+    expected_file_size = None
+    expected_filename = None
     received_chunks = {}
-    max_frame_index = -1
     total_frames_expected = None
     start_time = None
-    
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-            
-        # Resize to expected resolution (handles scaling/stretching)
+
         if frame.shape[0] != HEIGHT or frame.shape[1] != WIDTH:
             frame = cv2.resize(frame, (WIDTH, HEIGHT))
-            
-        # VISUAL DEBUG: Draw the grid
+
+        # Visual debug (grid drawing)
         debug_frame = frame.copy()
         for r in range(0, ROWS, 5):
             y = r * BLOCK_SIZE
@@ -152,105 +216,87 @@ def main():
         for c in range(0, COLS, 5):
             x = c * BLOCK_SIZE
             cv2.line(debug_frame, (x, 0), (x, HEIGHT), (0, 255, 255), 1)
-            
+
         sampled = sample_frame(frame)
-        idx, total, data, length = decode_frame(sampled)
-        
-        if idx is not None:
-            # Valid frame found
-            if idx not in received_chunks:
-                if start_time is None:
-                    start_time = time.time()
-                    print("First frame received. Timer started.")
-                    
-                print(f"Received Frame {idx}/{total} ({length} bytes)")
-                received_chunks[idx] = data
-                if idx > max_frame_index:
-                    max_frame_index = idx
-                
-                # Update expected total
-                if total_frames_expected is None:
+        ftype, idx, total, data, length = decode_frame_full(sampled)
+
+        if ftype is not None:
+            if ftype == FRAME_TYPE_START and transfer_state == TransferState.IDLE:
+                # Parse START metadata
+                file_size, sha256_hash, filename = parse_start_metadata(data[:length])
+                if file_size is not None:
+                    expected_sha256 = sha256_hash
+                    expected_file_size = file_size
+                    expected_filename = filename
                     total_frames_expected = total
-                    print(f"Expecting {total_frames_expected} frames total.")
-            
-            # Visual feedback for success
-            cv2.rectangle(debug_frame, (0,0), (WIDTH, 20), (0, 255, 0), -1)
-            
-            # Check for completion
-            if total_frames_expected is not None:
-                if len(received_chunks) >= total_frames_expected:
-                    end_time = time.time()
-                    duration = end_time - start_time
-                    total_bytes = sum(len(chunk) for chunk in received_chunks.values())
-                    speed_mbps = (total_bytes * 8) / duration / 1_000_000 if duration > 0 else 0
-                    
-                    print("\n" + "="*40)
-                    print(f"TRANSFER COMPLETE")
-                    print(f"Total Time: {duration:.2f} seconds")
-                    print(f"Average Speed: {speed_mbps:.2f} Mbps")
-                    print("="*40 + "\n")
-                    print("All frames received! Stopping...")
-                    break
-            
+                    transfer_state = TransferState.RECEIVING
+                    start_time = time.time()
+                    print(f"START received: '{filename}' ({file_size} bytes)")
+                    print(f"Expected SHA-256: {sha256_hash.hex()}")
+                    print(f"Expecting {total_frames_expected} DATA frames.")
+
+            elif ftype == FRAME_TYPE_DATA and transfer_state == TransferState.RECEIVING:
+                if idx not in received_chunks:
+                    received_chunks[idx] = data[:length]
+                    progress = len(received_chunks) / total_frames_expected if total_frames_expected else 0
+                    sys.stdout.write(f"\rReceiving: {progress:.1%} ({len(received_chunks)}/{total_frames_expected})")
+                    sys.stdout.flush()
+
+                # Visual feedback
+                cv2.rectangle(debug_frame, (0,0), (WIDTH, 20), (0, 255, 0), -1)
+
+            elif ftype == FRAME_TYPE_END and transfer_state == TransferState.RECEIVING:
+                print("\nEND frame received. Reassembling...")
+
+                # Reassemble
+                full_data = bytearray()
+                missing = []
+                for i in range(total_frames_expected):
+                    if i in received_chunks:
+                        full_data.extend(received_chunks[i])
+                    else:
+                        missing.append(i)
+                        full_data.extend(b'\x00' * BYTES_PER_FRAME)
+
+                if missing:
+                    print(f"WARNING: Missing frames: {missing}")
+
+                # Trim to expected file size
+                file_content = bytes(full_data[:expected_file_size])
+
+                # SHA-256 verification
+                actual_sha256 = hashlib.sha256(file_content).digest()
+                if actual_sha256 != expected_sha256:
+                    print("ERROR: SHA-256 MISMATCH -- file corrupted!")
+                    print(f"  Expected: {expected_sha256.hex()}")
+                    print(f"  Actual:   {actual_sha256.hex()}")
+                    transfer_state = TransferState.ERROR
+                else:
+                    print("SHA-256 verified OK.")
+                    transfer_state = TransferState.COMPLETE
+
+                    # Save file
+                    if not os.path.isdir(output_path):
+                        os.makedirs(output_path)
+                    save_path = os.path.join(output_path, expected_filename)
+                    with open(save_path, 'wb') as f:
+                        f.write(file_content)
+                    print(f"Saved to {save_path}")
+
+                # Timing stats
+                end_time = time.time()
+                duration = end_time - start_time
+                total_bytes = len(file_content)
+                speed_mbps = (total_bytes * 8) / duration / 1_000_000 if duration > 0 else 0
+                print(f"Time: {duration:.2f}s, Speed: {speed_mbps:.2f} Mbps")
+                break
+
         cv2.imshow('Receiver View', debug_frame)
         if cv2.waitKey(1) & 0xFF == 27:
             break
-            
+
     cap.release()
     cv2.destroyAllWindows()
-    
-    # Reassemble
-    if not received_chunks:
-        print("No data received.")
-        return
-
-    print(f"Reassembling {len(received_chunks)} chunks...")
-    
-    # Check for missing frames
-    missing = []
-    for i in range(max_frame_index + 1):
-        if i not in received_chunks:
-            missing.append(i)
-            
-    if missing:
-        print(f"WARNING: Missing frames: {missing}")
-        print("File will be corrupted.")
-    
-    # Concatenate all data
-    full_data = bytearray()
-    for i in range(max_frame_index + 1):
-        if i in received_chunks:
-            full_data.extend(received_chunks[i])
-        else:
-            print(f"Filling missing frame {i} with zeros.")
-            full_data.extend(b'\x00' * BYTES_PER_FRAME)
-            
-    # Parse Metadata
-    # Format: [4 bytes name_len][name_bytes][file_content]
-    try:
-        name_len = struct.unpack('>I', full_data[:4])[0]
-        filename = full_data[4 : 4 + name_len].decode('utf-8')
-        file_content = full_data[4 + name_len:]
-        
-        print(f"Detected Filename: {filename}")
-        
-        if not os.path.isdir(output_path):
-            if output_path != '.':
-                 print(f"Warning: '{output_path}' is not a directory. Saving to current directory.")
-            save_path = filename
-        else:
-            save_path = os.path.join(output_path, filename)
-            
-        with open(save_path, 'wb') as f:
-            f.write(file_content)
-            
-        print(f"Saved to {save_path}")
-        
-    except Exception as e:
-        print(f"Error parsing metadata: {e}")
-        print("Saving raw data to 'dump.bin'...")
-        with open('dump.bin', 'wb') as f:
-            f.write(full_data)
 
 if __name__ == "__main__":
     main()
