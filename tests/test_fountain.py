@@ -2,50 +2,35 @@
 
 Tests the fountain coding pipeline (LT codes with SplitMix32 PRNG) without
 any hardware. Verifies single-chunk, multi-chunk, partial-chunk, and edge
-cases using in-memory encoding and FountainDecoder from receiver_fountain.py.
+cases using in-memory encoding and FountainDecoder from the hdmi_exfil package.
 
 IMPORTANT: Fountain mode uses different constants from sequential mode.
-All constants are defined locally here, NOT imported from common.py.
+All constants are imported from the hdmi_exfil.protocols.fountain module.
 """
 
 import os
+import struct
+import hashlib
 
-from receiver_fountain import PRNG, FountainDecoder
+from hdmi_exfil.prng import PRNG, choose_indices
+from hdmi_exfil.protocols.fountain import (
+    FountainDecoder, FOUNTAIN_BYTES_PER_FRAME, PAYLOAD_SIZE,
+)
+from hdmi_exfil.file_handling.metadata import parse_fountain_metadata
 
-# Fountain-specific constants (updated for new protocol header)
-FOUNTAIN_BYTES_PER_FRAME = 4050
-FOUNTAIN_HEADER_LEN = 12  # was 6: magic(2) + seed(4) + K(2) + crc(4)
-FOUNTAIN_PAYLOAD_SIZE = FOUNTAIN_BYTES_PER_FRAME - FOUNTAIN_HEADER_LEN  # 4038
+# Fountain-specific constants (from package)
+FOUNTAIN_HEADER_LEN = 12  # magic(2) + seed(4) + K(2) + crc(4)
+FOUNTAIN_PAYLOAD_SIZE = PAYLOAD_SIZE  # 4038
 
 
-def choose_indices(seed, K):
-    """Mirror the chooseIndices logic from sender.html / receiver_fountain.py.
-
-    NOTE: Includes degree cap to min(degree, K) to avoid infinite loop when
-    degree > K (known bug in production code, to be fixed in later phase).
-    """
-    prng = PRNG(seed)
-    degree = 1
-    r = prng.next_float()
-    if r < 0.1:
-        degree = 1
-    elif r < 0.6:
-        degree = 2
-    else:
-        degree = int(prng.next_float() * min(K, 20)) + 1
-
-    # Cap degree to K to prevent infinite loop
-    degree = min(degree, K)
-
-    indices = set()
-    while len(indices) < degree:
-        indices.add(prng.next() % K)
-    return indices
+def _choose_indices_set(seed, K):
+    """Wrapper that returns a set (not frozenset) for compatibility with tests."""
+    return set(choose_indices(seed, K))
 
 
 def build_droplet(seed, K, chunks):
     """Build a fountain-encoded droplet by XOR-ing selected chunks."""
-    indices = choose_indices(seed, K)
+    indices = _choose_indices_set(seed, K)
     payload = bytearray(FOUNTAIN_PAYLOAD_SIZE)
     for idx in indices:
         for i in range(FOUNTAIN_PAYLOAD_SIZE):
@@ -251,8 +236,7 @@ class TestChooseIndicesBugfix:
 
     def test_k1_decoder_direct(self):
         """FountainDecoder.add_droplet with K=1 completes without hanging."""
-        from receiver_fountain import FountainDecoder as ProdDecoder
-        decoder = ProdDecoder(1, FOUNTAIN_PAYLOAD_SIZE)
+        decoder = FountainDecoder(1, FOUNTAIN_PAYLOAD_SIZE)
         # Seed 1 with K=1: degree will be capped to 1
         payload = os.urandom(FOUNTAIN_PAYLOAD_SIZE)
         decoder.add_droplet(1, bytearray(payload))
@@ -267,12 +251,6 @@ class TestFountainCRC32:
         """Python zlib.crc32 matches IEEE 802.3 test vector."""
         import zlib
         assert zlib.crc32(b'123456789') & 0xFFFFFFFF == 0xCBF43926
-
-
-import struct
-import hashlib
-
-from receiver_fountain import parse_fountain_metadata
 
 
 class TestFountainMetadata:

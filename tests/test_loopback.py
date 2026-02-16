@@ -19,9 +19,12 @@ import cv2
 import numpy as np
 import pytest
 
-from sender import encode_frame
-from receiver import sample_frame, decode_frame
-from common import BYTES_PER_FRAME
+from hdmi_exfil.protocols.sequential import SequentialProtocol
+from hdmi_exfil.capture.sampler import sample_frame
+from hdmi_exfil.config import BYTES_PER_FRAME, ROWS, COLS, BLOCK_SIZE
+
+# Module-level protocol instance
+_proto = SequentialProtocol()
 
 
 # ---------------------------------------------------------------------------
@@ -53,14 +56,14 @@ def test_loopback(tmp_path):
         chunk = file_data[start:end]
 
         # Encode (3 args: data_chunk, frame_index, total_frames)
-        frame_img = encode_frame(chunk, i, total_frames)
+        frame_img = _proto.encode_frame(chunk, i, total_frames)
 
         # Simulate transmission (perfect quality)
         received_frame = frame_img
 
         # Decode (4 return values: frame_index, total_frames, data, data_len)
-        sampled = sample_frame(received_frame)
-        idx, total, data, length = decode_frame(sampled)
+        sampled = sample_frame(received_frame, ROWS, COLS, BLOCK_SIZE)
+        idx, total, data, length = _proto.decode_frame_legacy(sampled)
 
         assert idx == i, f"Frame index mismatch: expected {i}, got {idx}"
         assert total == total_frames, (
@@ -190,7 +193,7 @@ def test_hardware_loopback_sequential(tmp_path):
             chunk = file_data[start:end]
 
             # Encode frame
-            frame_img = encode_frame(chunk, i, total_frames)
+            frame_img = _proto.encode_frame(chunk, i, total_frames)
 
             # Display frame
             cv2.imshow(window_name, frame_img)
@@ -214,8 +217,8 @@ def test_hardware_loopback_sequential(tmp_path):
                 captured = cv2.resize(captured, (1920, 1080))
 
             # Decode captured frame
-            sampled = sample_frame(captured)
-            idx, total, data, length = decode_frame(sampled)
+            sampled = sample_frame(captured, ROWS, COLS, BLOCK_SIZE)
+            idx, total, data, length = _proto.decode_frame_legacy(sampled)
 
             if idx is not None and length is not None:
                 decoded_frames[idx] = data[:length]

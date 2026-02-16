@@ -11,10 +11,14 @@ import numpy as np
 from hypothesis import given, settings, assume
 from hypothesis.strategies import binary, integers
 
-from sender import encode_frame
-from receiver import sample_frame, decode_frame
-from common import BYTES_PER_FRAME
-from receiver_fountain import PRNG, FountainDecoder
+from hdmi_exfil.protocols.sequential import SequentialProtocol
+from hdmi_exfil.capture.sampler import sample_frame
+from hdmi_exfil.config import BYTES_PER_FRAME, ROWS, COLS, BLOCK_SIZE
+from hdmi_exfil.prng import PRNG, choose_indices
+from hdmi_exfil.protocols.fountain import FountainDecoder
+
+# Module-level protocol instance
+_proto = SequentialProtocol()
 
 # Fountain payload size for property tests. Smaller than the protocol constant
 # (4044) to keep hypothesis runtimes manageable -- the FountainDecoder does
@@ -29,40 +33,14 @@ FOUNTAIN_PAYLOAD_SIZE = 256
 # keep each test file independently runnable)
 # ---------------------------------------------------------------------------
 
-def choose_indices(seed, K):
-    """Reproduce the JS/Python degree+index selection for a given seed.
-
-    NOTE: The production code (receiver_fountain.FountainDecoder.add_droplet)
-    has a latent infinite-loop bug: when K=1, degree can be 2, and the
-    ``while len(indices) < degree`` loop spins forever because
-    ``prng.next() % 1`` always returns 0.  We cap degree at K here to avoid
-    the same issue in test helpers.  The production bug is documented but not
-    fixed in this plan (it only triggers for single-chunk files, which don't
-    occur in real usage at FOUNTAIN_PAYLOAD_SIZE=4044).
-    """
-    prng = PRNG(seed)
-    degree = 1
-    r = prng.next_float()
-    if r < 0.1:
-        degree = 1
-    elif r < 0.6:
-        degree = 2
-    else:
-        degree = int(prng.next_float() * min(K, 20)) + 1
-
-    # Cap degree at K to prevent infinite loop when K < degree
-    degree = min(degree, K)
-
-    indices = set()
-    while len(indices) < degree:
-        idx = prng.next() % K
-        indices.add(idx)
-    return indices
+def _choose_indices_set(seed, K):
+    """Wrapper returning set for compatibility with test helpers."""
+    return set(choose_indices(seed, K))
 
 
 def build_droplet(seed, K, chunks):
     """XOR the chunks selected by *seed* into a single droplet payload."""
-    indices = choose_indices(seed, K)
+    indices = _choose_indices_set(seed, K)
     size = len(chunks[0])
     payload = np.zeros(size, dtype=np.uint8)
     for idx in indices:
@@ -92,9 +70,9 @@ def prepare_chunks(data):
 @settings(max_examples=200, deadline=None)
 def test_sequential_roundtrip_any_data(data):
     """Arbitrary binary data of varying sizes survives encode/decode."""
-    frame = encode_frame(data, 0, 1)
-    sampled = sample_frame(frame)
-    idx, total, decoded, length = decode_frame(sampled)
+    frame = _proto.encode_frame(data, 0, 1)
+    sampled = sample_frame(frame, ROWS, COLS, BLOCK_SIZE)
+    idx, total, decoded, length = _proto.decode_frame_legacy(sampled)
     assert idx == 0
     assert total == 1
     assert length == len(data)
@@ -110,9 +88,9 @@ def test_sequential_roundtrip_any_data(data):
 def test_sequential_roundtrip_varying_index(data, frame_index, total_frames):
     """Random frame indices and totals survive encode/decode."""
     assume(frame_index < total_frames)
-    frame = encode_frame(data, frame_index, total_frames)
-    sampled = sample_frame(frame)
-    idx, total, decoded, length = decode_frame(sampled)
+    frame = _proto.encode_frame(data, frame_index, total_frames)
+    sampled = sample_frame(frame, ROWS, COLS, BLOCK_SIZE)
+    idx, total, decoded, length = _proto.decode_frame_legacy(sampled)
     assert idx == frame_index
     assert total == total_frames
     assert length == len(data)
@@ -124,9 +102,9 @@ def test_sequential_roundtrip_varying_index(data, frame_index, total_frames):
 def test_sequential_single_byte_values(byte_val):
     """Every single byte value (0x00-0xFF) survives encode/decode."""
     data = bytes([byte_val])
-    frame = encode_frame(data, 0, 1)
-    sampled = sample_frame(frame)
-    idx, total, decoded, length = decode_frame(sampled)
+    frame = _proto.encode_frame(data, 0, 1)
+    sampled = sample_frame(frame, ROWS, COLS, BLOCK_SIZE)
+    idx, total, decoded, length = _proto.decode_frame_legacy(sampled)
     assert length == 1
     assert decoded[0] == byte_val
 

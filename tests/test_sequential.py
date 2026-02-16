@@ -14,20 +14,28 @@ import numpy as np
 import hashlib
 import math
 
-from sender import encode_frame, encode_start_frame, encode_end_frame, build_start_metadata
-from receiver import (sample_frame, decode_frame, decode_frame_full,
-                      parse_start_metadata, TransferState, route_frame)
-from common import (BYTES_PER_FRAME, BLOCKS_PER_FRAME, ROWS, COLS,
-                    SEQ_MAGIC, SEQ_HEADER_FMT, SEQ_HEADER_PRE_CRC,
-                    HEADER_SIZE, FRAME_TYPE_DATA, FRAME_TYPE_START,
-                    FRAME_TYPE_END, FOUNTAIN_MAGIC)
+from hdmi_exfil.protocols.sequential import SequentialProtocol, TransferState
+from hdmi_exfil.capture.sampler import sample_frame
+from hdmi_exfil.file_handling.metadata import build_start_metadata, parse_start_metadata
+from hdmi_exfil.config import (
+    BYTES_PER_FRAME, BLOCKS_PER_FRAME, ROWS, COLS, BLOCK_SIZE,
+    SEQ_MAGIC, SEQ_HEADER_FMT, SEQ_HEADER_PRE_CRC,
+    HEADER_SIZE, FRAME_TYPE_DATA, FRAME_TYPE_START,
+    FRAME_TYPE_END, FOUNTAIN_MAGIC,
+)
+from hdmi_exfil.protocols.fountain import (
+    FOUNT_HEADER_FMT, FOUNT_HEADER_PRE_CRC, FOUNT_HEADER_SIZE,
+)
+
+# Module-level protocol instance for encode/decode
+_proto = SequentialProtocol()
 
 
 def _encode_decode(data, frame_index, total_frames):
     """Helper: encode data into a frame, sample it, and decode it."""
-    frame = encode_frame(data, frame_index, total_frames)
-    sampled = sample_frame(frame)
-    return decode_frame(sampled)
+    frame = _proto.encode_frame(data, frame_index, total_frames)
+    sampled = sample_frame(frame, ROWS, COLS, BLOCK_SIZE)
+    return _proto.decode_frame_legacy(sampled)
 
 
 class TestSingleFrameRoundtrip:
@@ -172,7 +180,7 @@ class TestMagicNumberRejection:
         # Create a random grid that won't have the magic number
         rng = np.random.default_rng(42)
         noise_grid = rng.integers(0, 256, (ROWS, COLS, 3), dtype=np.uint8)
-        idx, total, data, length = decode_frame(noise_grid)
+        idx, total, data, length = _proto.decode_frame_legacy(noise_grid)
         assert idx is None
         assert total is None
 
@@ -184,18 +192,17 @@ class TestMagicNumberRejection:
         crc = zlib.crc32(header + payload) & 0xFFFFFFFF
         frame_bytes = header + struct.pack('>I', crc) + payload
         grid = _bytes_to_grid(frame_bytes)
-        idx, total, data, length = decode_frame(grid)
+        idx, total, data, length = _proto.decode_frame_legacy(grid)
         assert idx is None, "Frame with wrong magic should be rejected"
 
     def test_fountain_magic_rejected_by_sequential_decoder(self):
         """Frame with fountain magic (0xF0C0) is rejected by sequential decode."""
-        from common import FOUNTAIN_MAGIC
         header = struct.pack(SEQ_HEADER_FMT, FOUNTAIN_MAGIC, FRAME_TYPE_DATA, 0, 1, 50)
         payload = b'\x42' * 50
         crc = zlib.crc32(header + payload) & 0xFFFFFFFF
         frame_bytes = header + struct.pack('>I', crc) + payload
         grid = _bytes_to_grid(frame_bytes)
-        idx, total, data, length = decode_frame(grid)
+        idx, total, data, length = _proto.decode_frame_legacy(grid)
         assert idx is None, "Fountain magic should be rejected by sequential decoder"
 
 
@@ -223,7 +230,7 @@ class TestCRC32Integrity:
         corrupted = bytes(corrupted)
 
         grid = _bytes_to_grid(corrupted)
-        idx, total, data, length = decode_frame(grid)
+        idx, total, data, length = _proto.decode_frame_legacy(grid)
         assert idx is None, "Corrupted payload should fail CRC check"
 
     def test_corrupted_header_detected(self):
@@ -239,7 +246,7 @@ class TestCRC32Integrity:
         corrupted = bytes(corrupted)
 
         grid = _bytes_to_grid(corrupted)
-        idx, total, data, length = decode_frame(grid)
+        idx, total, data, length = _proto.decode_frame_legacy(grid)
         assert idx is None, "Corrupted header should fail CRC check"
 
     def test_crc32_known_vector(self):
@@ -254,9 +261,9 @@ class TestCRC32Integrity:
         yet), but it must not break the CRC or header parsing.
         """
         data = b'\x42' * 100
-        frame = encode_frame(data, 0, 1, frame_type=FRAME_TYPE_START)
-        sampled = sample_frame(frame)
-        idx, total, decoded, length = decode_frame(sampled)
+        frame = _proto.encode_frame(data, 0, 1, frame_type=FRAME_TYPE_START)
+        sampled = sample_frame(frame, ROWS, COLS, BLOCK_SIZE)
+        idx, total, decoded, length = _proto.decode_frame_legacy(sampled)
         assert idx == 0
         assert total == 1
         assert length == 100
@@ -277,39 +284,39 @@ class TestStartEndFrames:
         filename = "test_file.bin"
         total_data_frames = 1
 
-        start_frame = encode_start_frame(filename, file_data, total_data_frames)
-        sampled = sample_frame(start_frame)
-        ftype, idx, total, payload, length = decode_frame_full(sampled)
+        start_frame = _proto.encode_start_frame(filename, file_data, total_data_frames)
+        sampled = sample_frame(start_frame, ROWS, COLS, BLOCK_SIZE)
+        result = _proto.decode_frame(sampled)
 
-        assert ftype == FRAME_TYPE_START
-        assert total == total_data_frames
+        assert result.frame_type == FRAME_TYPE_START
+        assert result.total_frames == total_data_frames
 
         # Parse metadata from payload
-        file_size, sha256_hash, decoded_name = parse_start_metadata(payload[:length])
+        file_size, sha256_hash, decoded_name = parse_start_metadata(result.data)
         assert file_size == len(file_data)
         assert sha256_hash == hashlib.sha256(file_data).digest()
         assert decoded_name == filename
 
     def test_end_frame_decoded(self):
         """END frame is decoded with correct frame_type."""
-        end_frame = encode_end_frame(5)
-        sampled = sample_frame(end_frame)
-        ftype, idx, total, payload, length = decode_frame_full(sampled)
+        end_frame = _proto.encode_end_frame(5)
+        sampled = sample_frame(end_frame, ROWS, COLS, BLOCK_SIZE)
+        result = _proto.decode_frame(sampled)
 
-        assert ftype == FRAME_TYPE_END
-        assert total == 5
+        assert result.frame_type == FRAME_TYPE_END
+        assert result.total_frames == 5
 
     def test_data_frame_type_preserved(self):
         """Regular DATA frame has correct frame_type via decode_frame_full."""
         data = b'\x42' * 100
-        frame = encode_frame(data, 0, 1)  # defaults to FRAME_TYPE_DATA
-        sampled = sample_frame(frame)
-        ftype, idx, total, payload, length = decode_frame_full(sampled)
+        frame = _proto.encode_frame(data, 0, 1)  # defaults to FRAME_TYPE_DATA
+        sampled = sample_frame(frame, ROWS, COLS, BLOCK_SIZE)
+        result = _proto.decode_frame(sampled)
 
-        assert ftype == FRAME_TYPE_DATA
-        assert idx == 0
-        assert total == 1
-        assert length == 100
+        assert result.frame_type == FRAME_TYPE_DATA
+        assert result.frame_index == 0
+        assert result.total_frames == 1
+        assert len(result.data) == 100
 
 
 class TestTransferLifecycle:
@@ -322,11 +329,11 @@ class TestTransferLifecycle:
         total_data_frames = math.ceil(len(file_data) / BYTES_PER_FRAME)
 
         # Encode START
-        start_img = encode_start_frame(filename, file_data, total_data_frames)
-        sampled = sample_frame(start_img)
-        ftype, _, total, payload, length = decode_frame_full(sampled)
-        assert ftype == FRAME_TYPE_START
-        file_size, expected_sha, decoded_name = parse_start_metadata(payload[:length])
+        start_img = _proto.encode_start_frame(filename, file_data, total_data_frames)
+        sampled = sample_frame(start_img, ROWS, COLS, BLOCK_SIZE)
+        result = _proto.decode_frame(sampled)
+        assert result.frame_type == FRAME_TYPE_START
+        file_size, expected_sha, decoded_name = parse_start_metadata(result.data)
         assert decoded_name == filename
         assert file_size == len(file_data)
 
@@ -337,18 +344,18 @@ class TestTransferLifecycle:
             end_byte = min((i + 1) * BYTES_PER_FRAME, len(file_data))
             chunk = file_data[start_byte:end_byte]
 
-            frame_img = encode_frame(chunk, i, total_data_frames)
-            sampled = sample_frame(frame_img)
-            ftype, idx, total, data, dlen = decode_frame_full(sampled)
-            assert ftype == FRAME_TYPE_DATA
-            assert idx == i
-            received_chunks[idx] = data[:dlen]
+            frame_img = _proto.encode_frame(chunk, i, total_data_frames)
+            sampled = sample_frame(frame_img, ROWS, COLS, BLOCK_SIZE)
+            result = _proto.decode_frame(sampled)
+            assert result.frame_type == FRAME_TYPE_DATA
+            assert result.frame_index == i
+            received_chunks[result.frame_index] = result.data
 
         # Encode END
-        end_img = encode_end_frame(total_data_frames)
-        sampled = sample_frame(end_img)
-        ftype, _, _, _, _ = decode_frame_full(sampled)
-        assert ftype == FRAME_TYPE_END
+        end_img = _proto.encode_end_frame(total_data_frames)
+        sampled = sample_frame(end_img, ROWS, COLS, BLOCK_SIZE)
+        result = _proto.decode_frame(sampled)
+        assert result.frame_type == FRAME_TYPE_END
 
         # Reassemble and verify SHA-256
         reassembled = bytearray()
@@ -388,14 +395,76 @@ class TestSHA256Verification:
 # ---------------------------------------------------------------------------
 
 
+def _route_frame(frame_bytes):
+    """Route raw frame bytes to the correct protocol decoder.
+
+    Re-implements the old receiver.route_frame() using new package modules.
+
+    Returns:
+        ('sequential', (ftype, idx, total, payload, dlen)) for sequential frames
+        ('fountain', (seed, K, payload)) for fountain frames
+        (None, None) for unrecognized/invalid frames
+    """
+    if len(frame_bytes) < 2:
+        return None, None
+
+    magic = struct.unpack('>H', frame_bytes[:2])[0]
+
+    if magic == SEQ_MAGIC:
+        if len(frame_bytes) < HEADER_SIZE:
+            return None, None
+        try:
+            _, frame_type, frame_index, total_frames, data_len = struct.unpack(
+                SEQ_HEADER_FMT, frame_bytes[:SEQ_HEADER_PRE_CRC])
+        except struct.error:
+            return None, None
+
+        stored_crc = struct.unpack('>I',
+            frame_bytes[SEQ_HEADER_PRE_CRC:HEADER_SIZE])[0]
+
+        if data_len > BYTES_PER_FRAME or data_len == 0:
+            return None, None
+
+        payload = frame_bytes[HEADER_SIZE:HEADER_SIZE + data_len]
+        computed_crc = zlib.crc32(
+            frame_bytes[:SEQ_HEADER_PRE_CRC] + payload) & 0xFFFFFFFF
+        if computed_crc != stored_crc:
+            return None, None
+
+        return 'sequential', (frame_type, frame_index, total_frames, payload, data_len)
+
+    elif magic == FOUNTAIN_MAGIC:
+        if len(frame_bytes) < FOUNT_HEADER_SIZE:
+            return None, None
+        try:
+            _, seed, K = struct.unpack(FOUNT_HEADER_FMT,
+                frame_bytes[:FOUNT_HEADER_PRE_CRC])
+        except struct.error:
+            return None, None
+
+        stored_crc = struct.unpack('>I',
+            frame_bytes[FOUNT_HEADER_PRE_CRC:FOUNT_HEADER_SIZE])[0]
+
+        payload = frame_bytes[FOUNT_HEADER_SIZE:]
+        computed_crc = zlib.crc32(
+            frame_bytes[:FOUNT_HEADER_PRE_CRC] + payload) & 0xFFFFFFFF
+        if computed_crc != stored_crc:
+            return None, None
+
+        return 'fountain', (seed, K, payload)
+
+    else:
+        return None, None
+
+
 class TestProtocolRouting:
     """Tests for magic-number-based protocol routing."""
 
     def test_sequential_frame_routes_to_sequential(self):
         """A valid sequential frame is routed to the sequential decoder."""
         data = b'\x42' * 100
-        frame = encode_frame(data, 0, 1)
-        sampled = sample_frame(frame)
+        frame = _proto.encode_frame(data, 0, 1)
+        sampled = sample_frame(frame, ROWS, COLS, BLOCK_SIZE)
 
         # Get raw bytes (replicate decode pipeline to get bytes before parsing)
         flat_pixels = sampled.reshape(-1, 3)
@@ -404,7 +473,7 @@ class TestProtocolRouting:
         packed = np.packbits(flat_bits)
         raw_bytes = packed.tobytes()
 
-        protocol, result = route_frame(raw_bytes)
+        protocol, result = _route_frame(raw_bytes)
         assert protocol == 'sequential'
         ftype, idx, total, payload, dlen = result
         assert idx == 0
@@ -413,15 +482,13 @@ class TestProtocolRouting:
 
     def test_fountain_frame_routes_to_fountain(self):
         """A frame with fountain magic routes to the fountain decoder."""
-        from receiver_fountain import (FOUNT_HEADER_FMT,
-                                        FOUNT_HEADER_PRE_CRC, FOUNT_HEADER_SIZE)
         # Build fountain frame raw bytes
         header = struct.pack(FOUNT_HEADER_FMT, FOUNTAIN_MAGIC, 1, 5)
         payload = b'\xBB' * 100
         crc_val = zlib.crc32(header + payload) & 0xFFFFFFFF
         raw_bytes = header + struct.pack('>I', crc_val) + payload
 
-        protocol, result = route_frame(raw_bytes)
+        protocol, result = _route_frame(raw_bytes)
         assert protocol == 'fountain'
         seed, K, data = result
         assert seed == 1
@@ -432,7 +499,7 @@ class TestProtocolRouting:
         """Random bytes with no valid magic return (None, None)."""
         import os as _os
         noise = _os.urandom(200)
-        protocol, result = route_frame(noise)
+        protocol, result = _route_frame(noise)
         # It's possible (unlikely) that random bytes start with 0xDA7A or 0xF0C0
         # and pass CRC -- that's astronomically unlikely. Accept None or valid.
         if protocol is not None:
@@ -442,9 +509,9 @@ class TestProtocolRouting:
 
     def test_empty_bytes_routes_to_none(self):
         """Empty or too-short bytes return (None, None)."""
-        protocol, result = route_frame(b'')
+        protocol, result = _route_frame(b'')
         assert protocol is None
-        protocol, result = route_frame(b'\x00')
+        protocol, result = _route_frame(b'\x00')
         assert protocol is None
 
     def test_corrupted_crc_routes_to_none(self):
@@ -455,7 +522,7 @@ class TestProtocolRouting:
         bad_crc = struct.pack('>I', 0xDEADBEEF)  # wrong CRC
         raw_bytes = header + bad_crc + payload + b'\x00' * 100
 
-        protocol, result = route_frame(raw_bytes)
+        protocol, result = _route_frame(raw_bytes)
         assert protocol is None, "Corrupted CRC should cause rejection"
 
 
@@ -473,14 +540,14 @@ class TestEndToEndProtocol:
             end = min((i + 1) * BYTES_PER_FRAME, len(test_data))
             chunk = test_data[start:end]
 
-            frame = encode_frame(chunk, i, total_frames)
-            sampled = sample_frame(frame)
+            frame = _proto.encode_frame(chunk, i, total_frames)
+            sampled = sample_frame(frame, ROWS, COLS, BLOCK_SIZE)
 
-            # Use decode_frame_full to verify frame_type
-            ftype, idx, total, data, dlen = decode_frame_full(sampled)
-            assert ftype == FRAME_TYPE_DATA
-            assert idx == i
-            reassembled.extend(data[:dlen])
+            # Use decode_frame to verify frame_type
+            result = _proto.decode_frame(sampled)
+            assert result.frame_type == FRAME_TYPE_DATA
+            assert result.frame_index == i
+            reassembled.extend(result.data)
 
         assert reassembled[:len(test_data)] == bytearray(test_data)
 
