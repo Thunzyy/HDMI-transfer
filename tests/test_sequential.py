@@ -11,8 +11,12 @@ import zlib
 
 import numpy as np
 
-from sender import encode_frame
-from receiver import sample_frame, decode_frame
+import hashlib
+import math
+
+from sender import encode_frame, encode_start_frame, encode_end_frame, build_start_metadata
+from receiver import (sample_frame, decode_frame, decode_frame_full,
+                      parse_start_metadata, TransferState)
 from common import (BYTES_PER_FRAME, BLOCKS_PER_FRAME, ROWS, COLS,
                     SEQ_MAGIC, SEQ_HEADER_FMT, SEQ_HEADER_PRE_CRC,
                     HEADER_SIZE, FRAME_TYPE_DATA, FRAME_TYPE_START,
@@ -257,3 +261,123 @@ class TestCRC32Integrity:
         assert total == 1
         assert length == 100
         assert decoded[:length] == data
+
+
+# ---------------------------------------------------------------------------
+# Transfer lifecycle tests (Phase 2 - Plan 03)
+# ---------------------------------------------------------------------------
+
+
+class TestStartEndFrames:
+    """Tests for START and END frame encoding/decoding."""
+
+    def test_start_frame_metadata_roundtrip(self):
+        """START frame metadata (filename, size, SHA-256) survives encode/decode."""
+        file_data = os.urandom(5000)
+        filename = "test_file.bin"
+        total_data_frames = 1
+
+        start_frame = encode_start_frame(filename, file_data, total_data_frames)
+        sampled = sample_frame(start_frame)
+        ftype, idx, total, payload, length = decode_frame_full(sampled)
+
+        assert ftype == FRAME_TYPE_START
+        assert total == total_data_frames
+
+        # Parse metadata from payload
+        file_size, sha256_hash, decoded_name = parse_start_metadata(payload[:length])
+        assert file_size == len(file_data)
+        assert sha256_hash == hashlib.sha256(file_data).digest()
+        assert decoded_name == filename
+
+    def test_end_frame_decoded(self):
+        """END frame is decoded with correct frame_type."""
+        end_frame = encode_end_frame(5)
+        sampled = sample_frame(end_frame)
+        ftype, idx, total, payload, length = decode_frame_full(sampled)
+
+        assert ftype == FRAME_TYPE_END
+        assert total == 5
+
+    def test_data_frame_type_preserved(self):
+        """Regular DATA frame has correct frame_type via decode_frame_full."""
+        data = b'\x42' * 100
+        frame = encode_frame(data, 0, 1)  # defaults to FRAME_TYPE_DATA
+        sampled = sample_frame(frame)
+        ftype, idx, total, payload, length = decode_frame_full(sampled)
+
+        assert ftype == FRAME_TYPE_DATA
+        assert idx == 0
+        assert total == 1
+        assert length == 100
+
+
+class TestTransferLifecycle:
+    """Tests for the full START -> DATA -> END transfer lifecycle."""
+
+    def test_full_lifecycle_in_memory(self):
+        """Full lifecycle: START with metadata, DATA frames, END with SHA-256 check."""
+        file_data = os.urandom(BYTES_PER_FRAME * 2 + 500)
+        filename = "lifecycle_test.bin"
+        total_data_frames = math.ceil(len(file_data) / BYTES_PER_FRAME)
+
+        # Encode START
+        start_img = encode_start_frame(filename, file_data, total_data_frames)
+        sampled = sample_frame(start_img)
+        ftype, _, total, payload, length = decode_frame_full(sampled)
+        assert ftype == FRAME_TYPE_START
+        file_size, expected_sha, decoded_name = parse_start_metadata(payload[:length])
+        assert decoded_name == filename
+        assert file_size == len(file_data)
+
+        # Encode DATA frames
+        received_chunks = {}
+        for i in range(total_data_frames):
+            start_byte = i * BYTES_PER_FRAME
+            end_byte = min((i + 1) * BYTES_PER_FRAME, len(file_data))
+            chunk = file_data[start_byte:end_byte]
+
+            frame_img = encode_frame(chunk, i, total_data_frames)
+            sampled = sample_frame(frame_img)
+            ftype, idx, total, data, dlen = decode_frame_full(sampled)
+            assert ftype == FRAME_TYPE_DATA
+            assert idx == i
+            received_chunks[idx] = data[:dlen]
+
+        # Encode END
+        end_img = encode_end_frame(total_data_frames)
+        sampled = sample_frame(end_img)
+        ftype, _, _, _, _ = decode_frame_full(sampled)
+        assert ftype == FRAME_TYPE_END
+
+        # Reassemble and verify SHA-256
+        reassembled = bytearray()
+        for i in range(total_data_frames):
+            reassembled.extend(received_chunks[i])
+        file_content = bytes(reassembled[:file_size])
+
+        actual_sha = hashlib.sha256(file_content).digest()
+        assert actual_sha == expected_sha, "SHA-256 mismatch after reassembly"
+        assert file_content == file_data
+
+
+class TestSHA256Verification:
+    """Tests for SHA-256 file integrity checking."""
+
+    def test_sha256_matches_on_valid_transfer(self):
+        """SHA-256 of reassembled data matches START frame hash."""
+        data = os.urandom(1000)
+        metadata = build_start_metadata("test.bin", data)
+        file_size, sha_hash, _ = parse_start_metadata(metadata)
+        assert hashlib.sha256(data).digest() == sha_hash
+
+    def test_sha256_detects_corruption(self):
+        """Corrupted data produces different SHA-256 than START frame hash."""
+        data = os.urandom(1000)
+        metadata = build_start_metadata("test.bin", data)
+        _, expected_sha, _ = parse_start_metadata(metadata)
+
+        corrupted = bytearray(data)
+        corrupted[0] ^= 0xFF  # flip one byte
+        actual_sha = hashlib.sha256(bytes(corrupted)).digest()
+        assert actual_sha != expected_sha, "SHA-256 should detect single byte corruption"
