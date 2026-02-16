@@ -1,10 +1,4 @@
-import sys
-import os
 import pytest
-
-# Add project root to path so imports of sender, receiver, common, etc. work
-# regardless of where pytest is invoked from.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def pytest_addoption(parser):
