@@ -31,14 +31,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. PRNG test vectors confirm Python SplitMix32 and JavaScript SplitMix32 produce identical output for 1000+ seeds
   4. Loopback test (Elgato on same PC) successfully transfers a file through the full pipeline and verifies byte-for-byte match
   5. Property-based tests (hypothesis) pass for encode/decode with randomized binary data of varying sizes
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
-- [ ] 01-04: TBD
-- [ ] 01-05: TBD
+- [ ] 01-01-PLAN.md -- Test infrastructure, fix broken loopback, sequential unit tests (TEST-01, TEST-02)
+- [ ] 01-02-PLAN.md -- PRNG cross-language vectors and fountain round-trip tests (TEST-03, TEST-04)
+- [ ] 01-03-PLAN.md -- Property-based tests and hardware loopback integration (TEST-05, TEST-06)
 
 ### Phase 2: Protocol Foundation
 **Goal**: Every frame is self-describing and integrity-verified -- receiver can detect corruption, distinguish protocols, and verify complete file transfers
@@ -143,7 +141,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Test Foundation | 0/5 | Not started | - |
+| 1. Test Foundation | 0/3 | Planned | - |
 | 2. Protocol Foundation | 0/5 | Not started | - |
 | 3. Architecture Refactor | 0/7 | Not started | - |
 | 4. Performance Optimization | 0/6 | Not started | - |
