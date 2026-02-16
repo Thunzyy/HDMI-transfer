@@ -88,15 +88,14 @@ Plans:
   3. Fountain XOR loops run via Numba @njit -- measurable speedup over pure Python (target 100x+ on encode/decode hot path)
   4. Sender renders frames via pygame-ce SDL2 at the monitor's native refresh rate (measured >120fps on 240Hz display, replacing cv2.imshow ceiling of ~80fps)
   5. Capture pipeline runs in a dedicated thread with ring buffer -- actual captured FPS is measured and reported, no frames dropped due to blocking .read() calls
-**Plans**: TBD
+**Plans:** 5 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
-- [ ] 04-03: TBD
-- [ ] 04-04: TBD
-- [ ] 04-05: TBD
-- [ ] 04-06: TBD
+- [ ] 04-01-PLAN.md -- 3bpp fountain encoding upgrade (PERF-01)
+- [ ] 04-02-PLAN.md -- Numba @njit XOR acceleration for FountainDecoder (PERF-03)
+- [ ] 04-03-PLAN.md -- pygame-ce SDL2 renderer + dependency update (PERF-04)
+- [ ] 04-04-PLAN.md -- Threaded capture with ring buffer + FPS reporting (PERF-05, PERF-06)
+- [ ] 04-05-PLAN.md -- Wire all components into CLI entry points (PERF-02)
 
 ### Phase 5: Fountain Code Optimization
 **Goal**: Fountain decoding overhead drops from ~30% to ~5% for typical transfer sizes, making rateless coding practically free
@@ -144,10 +143,10 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 1. Test Foundation | 3/3 | Complete | 2026-02-16 |
 | 2. Protocol Foundation | 5/5 | Complete | 2026-02-16 |
 | 3. Architecture Refactor | 7/7 | Complete | 2026-02-16 |
-| 4. Performance Optimization | 0/6 | Not started | - |
+| 4. Performance Optimization | 0/5 | Not started | - |
 | 5. Fountain Code Optimization | 0/5 | Not started | - |
 | 6. UX & Polish | 0/5 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-16*
-*Last updated: 2026-02-16 -- Phase 3 complete (7 plans in 6 waves)*
+*Last updated: 2026-02-16 -- Phase 4 planned (5 plans in 3 waves)*
