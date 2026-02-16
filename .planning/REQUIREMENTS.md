@@ -124,10 +124,10 @@
 | UX-04 | Phase 6 | Pending |
 
 **Coverage:**
-- v1 requirements: 34 total
-- Mapped to phases: 34
+- v1 requirements: 35 total
+- Mapped to phases: 35
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-16*
-*Last updated: 2026-02-16 after initial definition*
+*Last updated: 2026-02-16 after roadmap creation*
