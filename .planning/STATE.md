@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** Maximum throughput data transfer over HDMI without leaving any trace on the source machine.
-**Current focus:** Phase 2 complete -- ready for Phase 3 Architecture Refactor
+**Current focus:** Phase 3 Architecture Refactor -- package scaffold installed
 
 ## Current Position
 
-Phase: 2 of 6 (Protocol Foundation)
-Plan: 5 of 5 in current phase
-Status: Phase complete
-Last activity: 2026-02-16 -- Completed 02-05-PLAN.md (protocol routing + integration tests)
+Phase: 3 of 6 (Architecture Refactor)
+Plan: 1 of 7 in current phase
+Status: In progress
+Last activity: 2026-02-16 -- Completed 03-01-PLAN.md (package scaffold + constants.json)
 
-Progress: [████████░░░░░░░░░░░░░░░░░░░░░░░] 8/31 (26%)
+Progress: [█████████░░░░░░░░░░░░░░░░░░░░░░] 9/31 (29%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
-- Average duration: 8min
-- Total execution time: 64min
+- Total plans completed: 9
+- Average duration: 7min
+- Total execution time: 66min
 
 **By Phase:**
 
@@ -29,10 +29,11 @@ Progress: [████████░░░░░░░░░░░░░░░
 |-------|-------|-------|----------|
 | 01-test-foundation | 3/3 | 45min | 15min |
 | 02-protocol-foundation | 5/5 | 19min | 4min |
+| 03-architecture-refactor | 1/7 | 2min | 2min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (4min), 02-02 (4min), 02-03 (4min), 02-04 (4min), 02-05 (3min)
-- Trend: Phase 2 consistently fast -- protocol changes well-defined by research
+- Last 5 plans: 02-02 (4min), 02-03 (4min), 02-04 (4min), 02-05 (3min), 03-01 (2min)
+- Trend: Scaffold creation fast -- well-defined by research and plan
 
 *Updated after each plan completion*
 
@@ -56,6 +57,9 @@ Recent decisions affecting current work:
 - [02-03]: START payload: [4B file_size][32B SHA-256][2B name_len][NB name]
 - [02-04]: Fountain metadata format matches sequential START: [4B file_size][32B SHA-256][2B name_len][NB name][content]
 - [02-05]: route_frame uses lazy import of receiver_fountain constants to avoid circular imports
+- [03-01]: Build backend: setuptools.build_meta with src-layout packaging
+- [03-01]: constants.json stores magic numbers as decimal (55930, 61632) for cross-language compat
+- [03-01]: Frame types in config.py not constants.json (protocol-specific, not encoding params)
 
 ### Pending Todos
 
@@ -67,6 +71,6 @@ All prior blockers resolved. No new concerns.
 
 ## Session Continuity
 
-Last session: 2026-02-16T13:10:49Z
-Stopped at: Completed 02-05-PLAN.md (protocol routing + integration tests) -- Phase 2 complete
+Last session: 2026-02-16T13:48:56Z
+Stopped at: Completed 03-01-PLAN.md (package scaffold + constants.json)
 Resume file: None
