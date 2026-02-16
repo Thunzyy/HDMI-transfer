@@ -12,10 +12,10 @@ import os
 
 from receiver_fountain import PRNG, FountainDecoder
 
-# Fountain-specific constants (from sender.html, NOT from common.py)
+# Fountain-specific constants (updated for new protocol header)
 FOUNTAIN_BYTES_PER_FRAME = 4050
-FOUNTAIN_HEADER_LEN = 6
-FOUNTAIN_PAYLOAD_SIZE = FOUNTAIN_BYTES_PER_FRAME - FOUNTAIN_HEADER_LEN  # 4044
+FOUNTAIN_HEADER_LEN = 12  # was 6: magic(2) + seed(4) + K(2) + crc(4)
+FOUNTAIN_PAYLOAD_SIZE = FOUNTAIN_BYTES_PER_FRAME - FOUNTAIN_HEADER_LEN  # 4038
 
 
 def choose_indices(seed, K):
@@ -96,9 +96,8 @@ def _would_hang(seed, K):
 def _fountain_roundtrip(data, max_overhead=10):
     """Helper: encode data as fountain droplets, decode, return recovered data.
 
-    Skips seeds that would trigger the known infinite-loop bug in
-    FountainDecoder.add_droplet (degree > K). Both encoder (build_droplet)
-    and decoder agree on indices for non-hanging seeds.
+    Now that chooseIndices bug is fixed (degree capped to K), we no longer
+    need to skip seeds that would have caused infinite loops.
 
     Args:
         data: Original bytes to encode.
@@ -111,21 +110,18 @@ def _fountain_roundtrip(data, max_overhead=10):
     decoder = FountainDecoder(K, FOUNTAIN_PAYLOAD_SIZE)
 
     seed = 1
-    max_seeds = max(K * max_overhead * 3, 200)  # search budget
-    droplets_used = 0
     max_droplets = K * max_overhead
+    droplets_used = 0
 
-    while not decoder.is_complete() and seed <= max_seeds and droplets_used < max_droplets:
-        if not _would_hang(seed, K):
-            payload = build_droplet(seed, K, chunks)
-            decoder.add_droplet(seed, payload)
-            droplets_used += 1
+    while not decoder.is_complete() and droplets_used < max_droplets:
+        payload = build_droplet(seed, K, chunks)
+        decoder.add_droplet(seed, payload)
+        droplets_used += 1
         seed += 1
 
     assert decoder.is_complete(), (
         f"Decoder did not complete after {droplets_used} droplets "
-        f"(K={K}, recovered {len(decoder.chunks)}/{K} chunks, "
-        f"searched {seed - 1} seeds)"
+        f"(K={K}, recovered {len(decoder.chunks)}/{K} chunks)"
     )
 
     recovered = decoder.get_file_data()[:len(data)]
@@ -202,18 +198,16 @@ class TestFountainEdgeCases:
         decoder = FountainDecoder(K, FOUNTAIN_PAYLOAD_SIZE)
 
         seed = 1
-        max_seeds = K * 30
         droplets_sent = 0
         max_droplets = K * 10
 
-        while not decoder.is_complete() and seed <= max_seeds and droplets_sent < max_droplets:
-            if not _would_hang(seed, K):
-                payload = build_droplet(seed, K, chunks)
-                decoder.add_droplet(seed, payload)
-                # Feed the same droplet again (duplicate)
-                payload_dup = build_droplet(seed, K, chunks)
-                decoder.add_droplet(seed, payload_dup)
-                droplets_sent += 1
+        while not decoder.is_complete() and droplets_sent < max_droplets:
+            payload = build_droplet(seed, K, chunks)
+            decoder.add_droplet(seed, payload)
+            # Feed the same droplet again (duplicate)
+            payload_dup = build_droplet(seed, K, chunks)
+            decoder.add_droplet(seed, payload_dup)
+            droplets_sent += 1
             seed += 1
 
         assert decoder.is_complete(), (
@@ -243,3 +237,33 @@ class TestFountainOverhead:
             f"Average overhead {avg_overhead:.2f}x exceeds 5x threshold "
             f"(total droplets: {total_droplets} over {runs} runs with K=10)"
         )
+
+
+class TestChooseIndicesBugfix:
+    """Tests that the chooseIndices infinite-loop bug is fixed."""
+
+    def test_k1_no_hang(self):
+        """K=1 fountain round-trip works (previously could hang)."""
+        data = os.urandom(FOUNTAIN_PAYLOAD_SIZE)
+        recovered, droplets, K = _fountain_roundtrip(data, max_overhead=5)
+        assert K == 1
+        assert recovered == data
+
+    def test_k1_decoder_direct(self):
+        """FountainDecoder.add_droplet with K=1 completes without hanging."""
+        from receiver_fountain import FountainDecoder as ProdDecoder
+        decoder = ProdDecoder(1, FOUNTAIN_PAYLOAD_SIZE)
+        # Seed 1 with K=1: degree will be capped to 1
+        payload = os.urandom(FOUNTAIN_PAYLOAD_SIZE)
+        decoder.add_droplet(1, bytearray(payload))
+        assert decoder.is_complete()
+        assert bytes(decoder.chunks[0]) == payload
+
+
+class TestFountainCRC32:
+    """Tests for CRC32 integrity in fountain protocol."""
+
+    def test_crc32_known_vector(self):
+        """Python zlib.crc32 matches IEEE 802.3 test vector."""
+        import zlib
+        assert zlib.crc32(b'123456789') & 0xFFFFFFFF == 0xCBF43926
