@@ -8,6 +8,7 @@ Usage::
 
     hdmi-recv 0 --mode auto --output received_files
     hdmi-recv recording.mp4 --mode fountain
+    hdmi-recv 0 --no-threaded --mode sequential
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import numpy as np
 
 from hdmi_exfil.capture.sampler import sample_frame
 from hdmi_exfil.capture.source import CaptureSource
+from hdmi_exfil.capture.threaded import FPSReporter, ThreadedCapture
 from hdmi_exfil.config import (
     BLOCK_SIZE,
     BYTES_PER_FRAME,
@@ -62,6 +64,24 @@ def _build_parser() -> argparse.ArgumentParser:
         default="auto",
         help="Decoding protocol (default: auto-detect from magic number)",
     )
+    parser.add_argument(
+        "--threaded",
+        action="store_true",
+        default=True,
+        help="Use threaded capture with ring buffer (default: enabled)",
+    )
+    parser.add_argument(
+        "--no-threaded",
+        action="store_false",
+        dest="threaded",
+        help="Disable threaded capture (use blocking reads)",
+    )
+    parser.add_argument(
+        "--buffer-size",
+        type=int,
+        default=16,
+        help="Ring buffer size for threaded capture (default: 16 frames)",
+    )
     return parser
 
 
@@ -71,7 +91,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _receive_sequential(
     seq_protocol: object,
-    cap: CaptureSource,
+    cap: object,
     output_dir: str,
 ) -> None:
     """Run the sequential receive loop (START -> DATA -> END)."""
@@ -82,14 +102,20 @@ def _receive_sequential(
     received_chunks: dict[int, bytes] = {}
     total_frames_expected: int | None = None
     start_time: float | None = None
+    fps_reporter = FPSReporter(report_interval_s=2.0)
+    capture_fps_str = ""
 
     print("Sequential mode: waiting for START frame...")
 
     while True:
         ret, frame = cap.read()
         if not ret:
-            print("Failed to grab frame.")
-            break
+            time.sleep(0.001)  # avoid CPU spin when buffer is empty
+            continue
+
+        fps = fps_reporter.tick()
+        if fps is not None:
+            capture_fps_str = f" | Capture: {fps:.1f} FPS"
 
         if frame.shape[0] != HEIGHT or frame.shape[1] != WIDTH:
             frame = cv2.resize(frame, (WIDTH, HEIGHT))
@@ -127,6 +153,7 @@ def _receive_sequential(
                     sys.stdout.write(
                         f"\rReceiving: {progress:.1%} "
                         f"({len(received_chunks)}/{total_frames_expected})"
+                        f"{capture_fps_str}"
                     )
                     sys.stdout.flush()
 
@@ -137,6 +164,7 @@ def _receive_sequential(
                     expected_file_size, expected_sha256,
                     expected_filename, output_dir, start_time,
                 )
+                _print_capture_stats(cap)
                 break
 
         # Debug window
@@ -196,20 +224,26 @@ def _finalize_sequential(
 
 def _receive_fountain(
     fount_protocol: object,
-    cap: CaptureSource,
+    cap: object,
     output_dir: str,
 ) -> None:
     """Run the fountain receive loop (continuous droplets until complete)."""
     decoder: FountainDecoder | None = None
     start_time: float | None = None
+    fps_reporter = FPSReporter(report_interval_s=2.0)
+    capture_fps_str = ""
 
     print("Fountain mode: waiting for first valid droplet...")
 
     while True:
         ret, frame = cap.read()
         if not ret:
-            print("Failed to grab frame.")
-            break
+            time.sleep(0.001)  # avoid CPU spin when buffer is empty
+            continue
+
+        fps = fps_reporter.tick()
+        if fps is not None:
+            capture_fps_str = f" | Capture: {fps:.1f} FPS"
 
         if frame.shape[0] != HEIGHT or frame.shape[1] != WIDTH:
             frame = cv2.resize(frame, (WIDTH, HEIGHT))
@@ -236,12 +270,14 @@ def _receive_fountain(
                 progress = len(decoder.chunks) / K
                 sys.stdout.write(
                     f"\rProgress: {progress:.1%} ({len(decoder.chunks)}/{K})"
+                    f"{capture_fps_str}"
                 )
                 sys.stdout.flush()
 
                 if decoder.is_complete():
                     print("\nDownload complete!")
                     _finalize_fountain(decoder, output_dir, start_time)
+                    _print_capture_stats(cap)
                     break
 
         # Debug window
@@ -292,7 +328,7 @@ def _finalize_fountain(
 # ------------------------------------------------------------------
 
 def _receive_auto(
-    cap: CaptureSource,
+    cap: object,
     output_dir: str,
 ) -> None:
     """Auto-detect protocol from magic number and delegate."""
@@ -304,8 +340,8 @@ def _receive_auto(
     while True:
         ret, frame = cap.read()
         if not ret:
-            print("Failed to grab frame.")
-            return
+            time.sleep(0.001)  # avoid CPU spin when buffer is empty
+            continue
 
         if frame.shape[0] != HEIGHT or frame.shape[1] != WIDTH:
             frame = cv2.resize(frame, (WIDTH, HEIGHT))
@@ -316,13 +352,10 @@ def _receive_auto(
         seq_result = seq.decode_frame(sampled)
         if seq_result.is_valid:
             print("Detected SEQUENTIAL protocol.")
-            # We already consumed one frame; re-enter sequential loop
-            # which handles the full lifecycle. The captured frame was
-            # processed but the loop will continue reading.
             _receive_sequential(seq, cap, output_dir)
             return
 
-        # Try fountain (1-bit encoding)
+        # Try fountain (3-bit encoding)
         fount_result = fount.decode_frame(sampled)
         if fount_result.is_valid:
             print("Detected FOUNTAIN protocol.")
@@ -362,6 +395,25 @@ def _print_receive_stats(total_bytes: int, start_time: float) -> None:
     print(f"Time: {duration:.2f}s, Speed: {speed:.2f} Mbps")
 
 
+def _print_capture_stats(cap: object) -> None:
+    """Print capture thread statistics if available."""
+    if hasattr(cap, "capture_fps_reporter"):
+        reporter = cap.capture_fps_reporter
+        print(f"Capture: {reporter.total_frames} frames captured")
+
+
+def _run_receiver(source: object, args: argparse.Namespace) -> None:
+    """Dispatch to the appropriate receive mode."""
+    if args.mode == "auto":
+        _receive_auto(source, args.output)
+    elif args.mode == "sequential":
+        seq = get_protocol("sequential")
+        _receive_sequential(seq, source, args.output)
+    else:
+        fount = get_protocol("fountain")
+        _receive_fountain(fount, source, args.output)
+
+
 # ------------------------------------------------------------------
 # main
 # ------------------------------------------------------------------
@@ -390,14 +442,15 @@ def main() -> None:
     )
 
     with cap:
-        if args.mode == "auto":
-            _receive_auto(cap, args.output)
-        elif args.mode == "sequential":
-            seq = get_protocol("sequential")
-            _receive_sequential(seq, cap, args.output)
+        if args.threaded:
+            tcap = ThreadedCapture(cap, buffer_size=args.buffer_size)
+            with tcap:
+                print(
+                    f"Threaded capture: buffer_size={args.buffer_size} frames"
+                )
+                _run_receiver(tcap, args)
         else:
-            fount = get_protocol("fountain")
-            _receive_fountain(fount, cap, args.output)
+            _run_receiver(cap, args)
 
 
 if __name__ == "__main__":
