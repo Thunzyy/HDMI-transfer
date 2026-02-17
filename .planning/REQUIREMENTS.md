@@ -53,10 +53,10 @@
 
 ### UX & Polish
 
-- [ ] **UX-01**: Resolution profiles — named presets (1080p@240fps "speed", 1080p@60fps "balanced", 4K@30fps "quality")
-- [ ] **UX-02**: Calibration mode — sender displays known pattern, receiver analyzes alignment, SNR, optimal block size
-- [ ] **UX-03**: Benchmarking mode — automated throughput measurement with JSON output
-- [ ] **UX-04**: Progress reporting — real-time frames received, decode %, speed (bytes/sec), ETA
+- [x] **UX-01**: Resolution profiles — named presets (1080p@240fps "speed", 1080p@60fps "balanced", 4K@30fps "quality")
+- [x] **UX-02**: Calibration mode — sender displays known pattern, receiver analyzes alignment, SNR, optimal block size
+- [x] **UX-03**: Benchmarking mode — automated throughput measurement with JSON output
+- [x] **UX-04**: Progress reporting — real-time frames received, decode %, speed (bytes/sec), ETA
 
 ## v2 Requirements
 
@@ -118,10 +118,10 @@
 | FOUNT-02 | Phase 5 | Complete |
 | FOUNT-03 | Phase 5 | Complete |
 | FOUNT-04 | Phase 5 | Complete |
-| UX-01 | Phase 6 | Pending |
-| UX-02 | Phase 6 | Pending |
-| UX-03 | Phase 6 | Pending |
-| UX-04 | Phase 6 | Pending |
+| UX-01 | Phase 6 | Complete |
+| UX-02 | Phase 6 | Complete |
+| UX-03 | Phase 6 | Complete |
+| UX-04 | Phase 6 | Complete |
 
 **Coverage:**
 - v1 requirements: 35 total
@@ -130,4 +130,4 @@
 
 ---
 *Requirements defined: 2026-02-16*
-*Last updated: 2026-02-17 -- Phase 5 requirements complete*
+*Last updated: 2026-02-17 -- All v1 requirements complete*

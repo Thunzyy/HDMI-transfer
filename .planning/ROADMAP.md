@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Architecture Refactor** - Restructure into clean src-layout package with protocol abstraction
 - [x] **Phase 4: Performance Optimization** - Unlock maximum throughput with Numba JIT, pygame-ce, and threaded capture
 - [x] **Phase 5: Fountain Code Optimization** - Tune fountain code math for minimal decoding overhead
-- [ ] **Phase 6: UX & Polish** - Resolution profiles, calibration mode, benchmarking, and progress reporting
+- [x] **Phase 6: UX & Polish** - Resolution profiles, calibration mode, benchmarking, and progress reporting
 
 ## Phase Details
 
@@ -126,10 +126,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 06-01-PLAN.md -- ResolutionProfile dataclass + protocol constructor injection (UX-01 core)
-- [ ] 06-02-PLAN.md -- JS sender 3bpp encoding upgrade (deferred blocker)
-- [ ] 06-03-PLAN.md -- CLI --profile flag + ProgressTracker + progress reporting (UX-01 CLI, UX-04)
-- [ ] 06-04-PLAN.md -- Calibration + benchmarking CLI modes (UX-02, UX-03)
+- [x] 06-01-PLAN.md -- ResolutionProfile dataclass + protocol constructor injection (UX-01 core)
+- [x] 06-02-PLAN.md -- JS sender 3bpp encoding upgrade (deferred blocker)
+- [x] 06-03-PLAN.md -- CLI --profile flag + ProgressTracker + progress reporting (UX-01 CLI, UX-04)
+- [x] 06-04-PLAN.md -- Calibration + benchmarking CLI modes (UX-02, UX-03)
 
 ## Progress
 
@@ -143,8 +143,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. Architecture Refactor | 7/7 | Complete | 2026-02-16 |
 | 4. Performance Optimization | 5/5 | Complete | 2026-02-16 |
 | 5. Fountain Code Optimization | 4/4 | Complete | 2026-02-17 |
-| 6. UX & Polish | 0/4 | Not started | - |
+| 6. UX & Polish | 4/4 | Complete | 2026-02-17 |
 
 ---
 *Roadmap created: 2026-02-16*
-*Last updated: 2026-02-17 -- Phase 6 planned (4 plans in 2 waves)*
+*Last updated: 2026-02-17 -- Phase 6 complete (all phases done)*
