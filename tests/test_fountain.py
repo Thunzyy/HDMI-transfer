@@ -198,10 +198,15 @@ class TestFountainEdgeCases:
 
 
 class TestFountainOverhead:
-    """Sanity check that fountain overhead is reasonable."""
+    """Sanity check that fountain overhead is reasonable.
+
+    With RSD + GE (Phase 5), K=10 typically achieves ~1.2x overhead.
+    Threshold tightened from 5.0x to 2.0x (still generous for small K).
+    For comprehensive overhead benchmarks, see test_fountain_overhead.py.
+    """
 
     def test_fountain_overhead_reasonable(self):
-        """For K=10, average overhead across 5 runs is under 5x."""
+        """For K=10, average overhead across 5 runs is under 2x."""
         total_droplets = 0
         runs = 5
 
@@ -212,8 +217,8 @@ class TestFountainOverhead:
             total_droplets += droplets
 
         avg_overhead = total_droplets / (runs * 10)
-        assert avg_overhead < 5.0, (
-            f"Average overhead {avg_overhead:.2f}x exceeds 5x threshold "
+        assert avg_overhead < 2.0, (
+            f"Average overhead {avg_overhead:.2f}x exceeds 2.0x threshold "
             f"(total droplets: {total_droplets} over {runs} runs with K=10)"
         )
 
