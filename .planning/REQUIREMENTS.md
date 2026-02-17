@@ -46,10 +46,10 @@
 
 ### Fountain Optimization
 
-- [ ] **FOUNT-01**: Robust Soliton Distribution replacing ad-hoc degree distribution
-- [ ] **FOUNT-02**: Gaussian elimination fallback decoder for small K when belief propagation stalls
-- [ ] **FOUNT-03**: Configurable redundancy parameter per transfer
-- [ ] **FOUNT-04**: Overhead reduction from ~30% to ~5% for typical K values (1-1000)
+- [x] **FOUNT-01**: Robust Soliton Distribution replacing ad-hoc degree distribution
+- [x] **FOUNT-02**: Gaussian elimination fallback decoder for small K when belief propagation stalls
+- [x] **FOUNT-03**: Configurable redundancy parameter per transfer
+- [x] **FOUNT-04**: Overhead reduction from ~30% to ~5% for typical K values (1-1000)
 
 ### UX & Polish
 
@@ -114,10 +114,10 @@
 | PERF-04 | Phase 4 | Complete |
 | PERF-05 | Phase 4 | Complete |
 | PERF-06 | Phase 4 | Complete |
-| FOUNT-01 | Phase 5 | Pending |
-| FOUNT-02 | Phase 5 | Pending |
-| FOUNT-03 | Phase 5 | Pending |
-| FOUNT-04 | Phase 5 | Pending |
+| FOUNT-01 | Phase 5 | Complete |
+| FOUNT-02 | Phase 5 | Complete |
+| FOUNT-03 | Phase 5 | Complete |
+| FOUNT-04 | Phase 5 | Complete |
 | UX-01 | Phase 6 | Pending |
 | UX-02 | Phase 6 | Pending |
 | UX-03 | Phase 6 | Pending |
@@ -130,4 +130,4 @@
 
 ---
 *Requirements defined: 2026-02-16*
-*Last updated: 2026-02-16 -- Phase 4 requirements complete*
+*Last updated: 2026-02-17 -- Phase 5 requirements complete*

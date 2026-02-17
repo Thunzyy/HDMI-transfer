@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Protocol Foundation** - Add frame synchronization, integrity verification, and transfer lifecycle
 - [x] **Phase 3: Architecture Refactor** - Restructure into clean src-layout package with protocol abstraction
 - [x] **Phase 4: Performance Optimization** - Unlock maximum throughput with Numba JIT, pygame-ce, and threaded capture
-- [ ] **Phase 5: Fountain Code Optimization** - Tune fountain code math for minimal decoding overhead
+- [x] **Phase 5: Fountain Code Optimization** - Tune fountain code math for minimal decoding overhead
 - [ ] **Phase 6: UX & Polish** - Resolution profiles, calibration mode, benchmarking, and progress reporting
 
 ## Phase Details
@@ -109,10 +109,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 05-01-PLAN.md -- RSD degree distribution module + Python integration (FOUNT-01)
-- [ ] 05-02-PLAN.md -- Gaussian elimination fallback decoder (FOUNT-02)
-- [ ] 05-03-PLAN.md -- JS sender RSD port + Python sender update + --redundancy CLI (FOUNT-01, FOUNT-03)
-- [ ] 05-04-PLAN.md -- Overhead benchmarks + parameter tuning (FOUNT-04)
+- [x] 05-01-PLAN.md -- RSD degree distribution module + Python integration (FOUNT-01)
+- [x] 05-02-PLAN.md -- Gaussian elimination fallback decoder (FOUNT-02)
+- [x] 05-03-PLAN.md -- JS sender RSD port + Python sender update + --redundancy CLI (FOUNT-01, FOUNT-03)
+- [x] 05-04-PLAN.md -- Overhead benchmarks + parameter tuning (FOUNT-04)
 
 ### Phase 6: UX & Polish
 **Goal**: Users can run transfers without understanding encoding internals -- named profiles, auto-calibration, benchmarking, and live progress make the tool accessible
@@ -143,9 +143,9 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. Protocol Foundation | 5/5 | Complete | 2026-02-16 |
 | 3. Architecture Refactor | 7/7 | Complete | 2026-02-16 |
 | 4. Performance Optimization | 5/5 | Complete | 2026-02-16 |
-| 5. Fountain Code Optimization | 0/4 | Planned | - |
+| 5. Fountain Code Optimization | 4/4 | Complete | 2026-02-17 |
 | 6. UX & Polish | 0/5 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-16*
-*Last updated: 2026-02-16 -- Phase 4 complete (5/5 plans)*
+*Last updated: 2026-02-17 -- Phase 5 complete (4/4 plans)*
