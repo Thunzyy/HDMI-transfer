@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 5 of 6 (Fountain Code Optimization)
-Plan: 1 of 4 in current phase
+Plan: 2 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-17 -- Completed 05-01-PLAN.md (Robust Soliton Distribution)
+Last activity: 2026-02-17 -- Completed 05-02-PLAN.md (Gaussian Elimination Fallback Decoder)
 
-Progress: [█████████████████████████░░░░░░] 21/31 (67%)
+Progress: [██████████████████████████░░░░░] 22/31 (71%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 21
+- Total plans completed: 22
 - Average duration: 5min
-- Total execution time: 108min
+- Total execution time: 117min
 
 **By Phase:**
 
@@ -31,11 +31,11 @@ Progress: [███████████████████████
 | 02-protocol-foundation | 5/5 | 19min | 4min |
 | 03-architecture-refactor | 7/7 | 24min | 3min |
 | 04-performance-optimization | 5/5 | 12min | 2min |
-| 05-fountain-code-optimization | 1/4 | 8min | 8min |
+| 05-fountain-code-optimization | 2/4 | 17min | 9min |
 
 **Recent Trend:**
-- Last 5 plans: 04-04 (2min), 04-03 (3min), 04-02 (3min), 04-05 (4min), 05-01 (8min)
-- Trend: Slightly longer for TDD math module
+- Last 5 plans: 04-03 (3min), 04-02 (3min), 04-05 (4min), 05-01 (8min), 05-02 (9min)
+- Trend: TDD math/algorithm plans take longer due to correctness verification
 
 *Updated after each plan completion*
 
@@ -106,6 +106,11 @@ Recent decisions affecting current work:
 - [05-01]: bisect.bisect_left for O(log K) CDF sampling in sample_degree
 - [05-01]: CDF[-1] forced to exactly 1.0 to prevent floating-point drift
 - [05-01]: JS cross-language choose_indices vectors deferred to plan 05-03 when JS is updated to RSD
+- [05-02]: GE uses dense numpy uint8 matrix with XOR row operations (fast for K < 1000)
+- [05-02]: Full RREF in one pass (forward elimination eliminates ALL rows, not just below pivot)
+- [05-02]: Auto-trigger GE after each add_droplet with lightweight n_unresolved >= n_unknown guard
+- [05-02]: GE copies unresolved droplet data to avoid mutating decoder state on failure
+- [05-02]: resolve_chunk() as shared entry point for both BP and GE recovered chunks
 
 ### Pending Todos
 
@@ -117,6 +122,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-17T00:01:50Z
-Stopped at: Completed 05-01-PLAN.md (Robust Soliton Distribution)
+Last session: 2026-02-17T00:13:35Z
+Stopped at: Completed 05-02-PLAN.md (Gaussian Elimination Fallback Decoder)
 Resume file: None
