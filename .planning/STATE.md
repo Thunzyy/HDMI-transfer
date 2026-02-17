@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** Maximum throughput data transfer over HDMI without leaving any trace on the source machine.
-**Current focus:** Phase 5 Fountain Code Optimization -- Complete
+**Current focus:** Phase 6 UX and Polish
 
 ## Current Position
 
-Phase: 5 of 6 (Fountain Code Optimization)
-Plan: 4 of 4 in current phase
-Status: Phase complete
-Last activity: 2026-02-17 -- Completed 05-04-PLAN.md (Overhead Benchmarks + Parameter Tuning)
+Phase: 6 of 6 (UX and Polish)
+Plan: 2 of 4 in current phase
+Status: In progress
+Last activity: 2026-02-17 -- Completed 06-02-PLAN.md (3bpp RGB Encoding for JS Sender)
 
-Progress: [███████████████████████████░░░░] 24/31 (77%)
+Progress: [████████████████████████████░░░] 25/28 (89%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 24
-- Average duration: 6min
-- Total execution time: 135min
+- Total plans completed: 25
+- Average duration: 5min
+- Total execution time: 137min
 
 **By Phase:**
 
@@ -32,10 +32,11 @@ Progress: [███████████████████████
 | 03-architecture-refactor | 7/7 | 24min | 3min |
 | 04-performance-optimization | 5/5 | 12min | 2min |
 | 05-fountain-code-optimization | 4/4 | 35min | 9min |
+| 06-ux-polish | 1/4 | 2min | 2min |
 
 **Recent Trend:**
-- Last 5 plans: 04-05 (4min), 05-01 (8min), 05-02 (9min), 05-03 (8min), 05-04 (10min)
-- Trend: Phase 5 consistently ~9min per plan (benchmarking + cross-language work)
+- Last 5 plans: 05-01 (8min), 05-02 (9min), 05-03 (8min), 05-04 (10min), 06-02 (2min)
+- Trend: Focused single-file changes execute faster
 
 *Updated after each plan completion*
 
@@ -119,6 +120,8 @@ Recent decisions affecting current work:
 - [05-04]: Overhead benchmarks use 100-byte payload (overhead is payload-size-independent)
 - [05-04]: Statistical averaging (20 runs/K) with seeded numpy PRNG for reproducibility
 - [05-04]: @pytest.mark.slow registered in pyproject.toml for K>=500 benchmarks
+- [06-02]: JS drawBits uses ABGR uint32 packing (0xFF000000 | B<<16 | G<<8 | R) for 3bpp RGB encoding
+- [06-02]: JS bit order R,G,B per block matches Python np.unpackbits MSB-first + reshape((blocks,3))
 
 ### Pending Todos
 
@@ -126,11 +129,10 @@ None.
 
 ### Blockers/Concerns
 
-- JS sender still uses 1bpp encoding while Python uses 3bpp; deferred to UX/Polish phase.
 - Pre-existing test failure in test_xor_ops.py::test_fountain_decoder_with_numba (not introduced by Phase 5).
 
 ## Session Continuity
 
-Last session: 2026-02-17T00:27:32Z
-Stopped at: Completed 05-04-PLAN.md (Overhead Benchmarks + Parameter Tuning) -- Phase 5 complete
+Last session: 2026-02-17T08:51:30Z
+Stopped at: Completed 06-02-PLAN.md (3bpp RGB Encoding for JS Sender)
 Resume file: None
