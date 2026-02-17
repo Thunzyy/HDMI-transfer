@@ -110,32 +110,18 @@ def test_3bpp_fountain_full_roundtrip():
     # Create FountainDecoder
     decoder = FountainDecoder(total_chunks=K, payload_size=PAYLOAD_SIZE)
 
-    # Send K + 5 droplets (extra to handle degree > 1 droplets)
+    # Send K + 15 droplets (extra to handle degree > 1 droplets)
     max_droplets = K + 15
     seed = 1
 
-    from hdmi_exfil.prng import PRNG
+    from hdmi_exfil.prng import choose_indices
 
     for _ in range(max_droplets):
         if decoder.is_complete():
             break
 
-        # Build droplet payload by XOR-ing selected chunks
-        prng = PRNG(seed)
-        degree = 1
-        r = prng.next_float()
-        if r < 0.1:
-            degree = 1
-        elif r < 0.6:
-            degree = 2
-        else:
-            degree = int(prng.next_float() * min(K, 20)) + 1
-        degree = min(degree, K)
-
-        indices = set()
-        while len(indices) < degree:
-            idx = prng.next() % K
-            indices.add(idx)
+        # Build droplet payload by XOR-ing selected chunks (RSD via choose_indices)
+        indices = choose_indices(seed, K)
 
         droplet_data = bytearray(PAYLOAD_SIZE)
         for idx in indices:
