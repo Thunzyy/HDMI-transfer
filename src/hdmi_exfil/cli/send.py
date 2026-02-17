@@ -10,6 +10,7 @@ Usage::
     hdmi-send secret.zip --mode fountain --fps 60
     hdmi-send secret.zip --renderer cv2 --mode fountain
     hdmi-send secret.zip --mode fountain --fountain-redundancy 1.05
+    hdmi-send photo.png --profile quality --mode sequential
 """
 
 from __future__ import annotations
@@ -23,10 +24,9 @@ import time
 import numpy as np
 
 from hdmi_exfil.config import (
-    BLOCK_SIZE,
-    BYTES_PER_FRAME,
-    HEIGHT,
-    WIDTH,
+    DEFAULT_PROFILE,
+    PROFILES,
+    ResolutionProfile,
 )
 from hdmi_exfil.display.monitors import get_monitors
 from hdmi_exfil.display.renderer import FrameRenderer, PygameRenderer
@@ -34,7 +34,6 @@ from hdmi_exfil.file_handling.metadata import build_start_metadata
 from hdmi_exfil.file_handling.reader import read_input
 from hdmi_exfil.prng import choose_indices
 from hdmi_exfil.protocols import get_protocol
-from hdmi_exfil.protocols.fountain import PAYLOAD_SIZE as FOUNTAIN_PAYLOAD_SIZE
 from hdmi_exfil.protocols.xor_ops import warmup as warmup_numba, xor_into
 
 
@@ -57,10 +56,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Display backend: pygame (SDL2 vsync, recommended) or cv2 (legacy). Default: pygame",
     )
     parser.add_argument(
+        "--profile",
+        choices=list(PROFILES.keys()),
+        default=None,
+        help="Resolution profile: speed (1080p@240fps), balanced (1080p@60fps), quality (4K@30fps)",
+    )
+    parser.add_argument(
         "--fps",
         type=int,
-        default=240,
-        help="Target frames per second (default: 240)",
+        default=None,
+        help="Target frames per second (overrides profile fps when both specified)",
     )
     parser.add_argument(
         "--redundancy",
@@ -95,19 +100,25 @@ _DONE_COLOR = (0, 255, 0)  # green BGR
 _INTERRUPTED_COLOR = (0, 0, 255)  # red BGR
 
 
-def _solid_frame(bgr: tuple[int, int, int]) -> np.ndarray:
-    """Create a solid-color (H, W, 3) uint8 frame."""
-    frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+def _solid_frame(
+    bgr: tuple[int, int, int],
+    profile: ResolutionProfile,
+) -> np.ndarray:
+    """Create a solid-color (H, W, 3) uint8 frame at *profile* resolution."""
+    frame = np.zeros((profile.height, profile.width, 3), dtype=np.uint8)
     frame[:, :] = bgr
     return frame
 
 
-def _show_pause_screen(renderer: FrameRenderer | PygameRenderer) -> str:
+def _show_pause_screen(
+    renderer: FrameRenderer | PygameRenderer,
+    profile: ResolutionProfile,
+) -> str:
     """Display pause overlay and wait for user action.
 
     Returns ``'resume'``, ``'quit'``, or keeps looping until one of those.
     """
-    pause_img = _solid_frame(_PAUSE_COLOR)
+    pause_img = _solid_frame(_PAUSE_COLOR, profile)
     print("PAUSED -- Press 'r' to RESUME, 'q' or ESC to QUIT")
     while True:
         key = renderer.show(pause_img, delay_ms=100)
@@ -118,15 +129,17 @@ def _show_pause_screen(renderer: FrameRenderer | PygameRenderer) -> str:
 
 
 def _show_end_screen(
-    renderer: FrameRenderer | PygameRenderer, interrupted: bool,
+    renderer: FrameRenderer | PygameRenderer,
+    interrupted: bool,
+    profile: ResolutionProfile,
 ) -> None:
     """Display completion or interruption screen."""
     if interrupted:
-        end_img = _solid_frame(_INTERRUPTED_COLOR)
+        end_img = _solid_frame(_INTERRUPTED_COLOR, profile)
         print("INTERRUPTED -- Press any key to exit")
         renderer.show(end_img, delay_ms=0)  # waitKey(0) = wait forever
     else:
-        end_img = _solid_frame(_DONE_COLOR)
+        end_img = _solid_frame(_DONE_COLOR, profile)
         print("DONE")
         renderer.show(end_img, delay_ms=5000)
 
@@ -142,9 +155,11 @@ def _send_sequential(
     renderer: FrameRenderer | PygameRenderer,
     delay: int,
     redundancy: int,
+    profile: ResolutionProfile,
 ) -> None:
     """Run the sequential send loop (START -> DATA -> END)."""
-    total_frames = math.ceil(len(file_data) / BYTES_PER_FRAME)
+    bytes_per_frame = profile.seq_bytes_per_frame
+    total_frames = math.ceil(len(file_data) / bytes_per_frame)
     print(f"Total DATA frames needed: {total_frames}")
 
     start_time = time.time()
@@ -163,7 +178,7 @@ def _send_sequential(
     i = 0
     while i < total_frames:
         if paused:
-            action = _show_pause_screen(renderer)
+            action = _show_pause_screen(renderer, profile)
             if action == "quit":
                 interrupted = True
                 break
@@ -171,8 +186,8 @@ def _send_sequential(
             print("\nResuming transmission...")
             continue
 
-        start_byte = i * BYTES_PER_FRAME
-        end_byte = min((i + 1) * BYTES_PER_FRAME, len(file_data))
+        start_byte = i * bytes_per_frame
+        end_byte = min((i + 1) * bytes_per_frame, len(file_data))
         chunk = file_data[start_byte:end_byte]
 
         frame = protocol.encode_frame(chunk, i, total_frames)
@@ -199,7 +214,7 @@ def _send_sequential(
             renderer.show(end_frame, delay_ms=delay)
 
     _print_stats(len(file_data), start_time, interrupted, i, total_frames)
-    _show_end_screen(renderer, interrupted)
+    _show_end_screen(renderer, interrupted, profile)
 
 
 # ------------------------------------------------------------------
@@ -213,6 +228,7 @@ def _send_fountain(
     renderer: FrameRenderer | PygameRenderer,
     delay: int,
     fountain_redundancy: float | None = None,
+    profile: ResolutionProfile = DEFAULT_PROFILE,
 ) -> None:
     """Run the fountain send loop (continuous droplets until user stops).
 
@@ -223,18 +239,20 @@ def _send_fountain(
         For example 1.05 sends 5% more droplets than chunks.
         If ``None``, loop forever (backward-compatible).
     """
+    payload_size = profile.fount_bytes_per_frame
+
     # Wrap metadata + content (same format as sender.html)
     metadata = build_start_metadata(filename, file_data)
     wrapped = metadata + file_data
 
     # Slice into chunks as numpy arrays (Numba-compatible)
-    K = math.ceil(len(wrapped) / FOUNTAIN_PAYLOAD_SIZE)
+    K = math.ceil(len(wrapped) / payload_size)
 
     chunks: list[np.ndarray] = []
     for i in range(K):
-        start = i * FOUNTAIN_PAYLOAD_SIZE
-        end = min(start + FOUNTAIN_PAYLOAD_SIZE, len(wrapped))
-        chunk = np.zeros(FOUNTAIN_PAYLOAD_SIZE, dtype=np.uint8)
+        start = i * payload_size
+        end = min(start + payload_size, len(wrapped))
+        chunk = np.zeros(payload_size, dtype=np.uint8)
         chunk[:end - start] = np.frombuffer(wrapped[start:end], dtype=np.uint8)
         chunks.append(chunk)
 
@@ -243,7 +261,7 @@ def _send_fountain(
     if fountain_redundancy is not None:
         max_droplets = int(math.ceil(K * fountain_redundancy))
 
-    print(f"Fountain mode: K={K} chunks, payload_size={FOUNTAIN_PAYLOAD_SIZE}")
+    print(f"Fountain mode: K={K} chunks, payload_size={payload_size}")
     if max_droplets is not None:
         print(f"Redundancy: {fountain_redundancy}x -> {max_droplets} droplets")
     else:
@@ -261,7 +279,7 @@ def _send_fountain(
             break
 
         if paused:
-            action = _show_pause_screen(renderer)
+            action = _show_pause_screen(renderer, profile)
             if action == "quit":
                 interrupted = True
                 break
@@ -272,7 +290,7 @@ def _send_fountain(
         # Build droplet payload by XOR-ing selected chunks (RSD via choose_indices)
         indices = choose_indices(seed, K)
 
-        payload = np.zeros(FOUNTAIN_PAYLOAD_SIZE, dtype=np.uint8)
+        payload = np.zeros(payload_size, dtype=np.uint8)
         for idx in indices:
             xor_into(payload, chunks[idx])
 
@@ -300,7 +318,7 @@ def _send_fountain(
             sys.stdout.flush()
 
     _print_stats(len(file_data), start_time, interrupted, frame_count, None)
-    _show_end_screen(renderer, interrupted)
+    _show_end_screen(renderer, interrupted, profile)
 
 
 # ------------------------------------------------------------------
@@ -340,6 +358,15 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
+    # Resolve profile
+    if args.profile:
+        profile = PROFILES[args.profile]
+    else:
+        profile = DEFAULT_PROFILE
+
+    # Individual overrides: --fps beats profile target_fps
+    target_fps = args.fps if args.fps is not None else profile.target_fps
+
     # Read input file / directory
     try:
         filename, file_data = read_input(args.input_path)
@@ -352,7 +379,8 @@ def main() -> None:
 
     print(f"Sending '{filename}' ({file_size} bytes)")
     print(f"SHA-256: {sha256_hex}")
-    print(f"Resolution: {WIDTH}x{HEIGHT}, Block Size: {BLOCK_SIZE}")
+    print(f"Resolution: {profile.width}x{profile.height}, Block Size: {profile.block_size}")
+    print(f"Profile: {profile.name}")
     print(f"Mode: {args.mode}")
     print(f"Renderer: {args.renderer}")
 
@@ -373,18 +401,18 @@ def main() -> None:
 
     print(f"Targeting screen {args.screen} at ({x_offset}, {y_offset})")
 
-    # Instantiate protocol
-    protocol = get_protocol(args.mode)
+    # Instantiate protocol with profile
+    protocol = get_protocol(args.mode, profile=profile)
 
-    delay = max(1, int(1000 / args.fps))
-    print(f"Target FPS: {args.fps} (delay: {delay}ms)")
+    delay = max(1, int(1000 / target_fps))
+    print(f"Target FPS: {target_fps} (delay: {delay}ms)")
 
     # Choose renderer based on --renderer flag
     if args.renderer == "pygame":
         renderer_cls = PygameRenderer
         renderer_kwargs: dict = {
-            "width": WIDTH,
-            "height": HEIGHT,
+            "width": profile.width,
+            "height": profile.height,
             "x_offset": x_offset,
             "y_offset": y_offset,
         }
@@ -399,7 +427,7 @@ def main() -> None:
     # Create renderer and show calibration frame
     with renderer_cls(**renderer_kwargs) as renderer:
         # Calibration frame: solid white border on black (works for both renderers)
-        calibration = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+        calibration = np.zeros((profile.height, profile.width, 3), dtype=np.uint8)
         calibration[0:5, :] = 255
         calibration[-5:, :] = 255
         calibration[:, 0:5] = 255
@@ -417,12 +445,13 @@ def main() -> None:
             print(f"Redundancy: {args.redundancy}x")
             _send_sequential(
                 protocol, filename, file_data, renderer,
-                delay, args.redundancy,
+                delay, args.redundancy, profile,
             )
         else:
             _send_fountain(
                 protocol, filename, file_data, renderer, delay,
                 fountain_redundancy=args.fountain_redundancy,
+                profile=profile,
             )
 
 
