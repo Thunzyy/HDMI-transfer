@@ -2,10 +2,17 @@
 
 All encoding parameters are defined in constants.json (single source of truth).
 Derived values (COLS, ROWS, BYTES_PER_FRAME, etc.) are computed here.
+
+Also provides ``ResolutionProfile`` -- a frozen dataclass capturing resolution,
+block-size, and target-fps for a named preset -- and a ``PROFILES`` registry
+of three built-in presets (speed, balanced, quality).
 """
+
+from __future__ import annotations
 
 import json
 import struct
+from dataclasses import dataclass
 from importlib.resources import files
 
 
@@ -41,6 +48,77 @@ SEQ_CRC_SIZE: int = 4
 
 # Header size in bytes (pre-CRC header + CRC32)
 HEADER_SIZE: int = SEQ_HEADER_PRE_CRC + SEQ_CRC_SIZE  # 17
+
+# ---------------------------------------------------------------------------
+# Resolution profiles
+# ---------------------------------------------------------------------------
+
+# Fountain header size duplicated here to avoid circular import with
+# fountain.py.  Value: magic(2) + seed(4) + K(2) + crc32(4) = 12 bytes.
+_FOUNT_HEADER_SIZE: int = 12
+
+
+@dataclass(frozen=True)
+class ResolutionProfile:
+    """Immutable bundle of resolution / encoding parameters for a named preset.
+
+    Spatial dimensions (cols, rows, blocks, bits, bytes-per-frame) are derived
+    from *width*, *height*, and *block_size*.  ``target_fps`` is advisory --
+    the display layer uses it to pace frame output.
+    """
+
+    name: str
+    width: int
+    height: int
+    block_size: int
+    target_fps: int
+
+    # -- derived properties --------------------------------------------------
+
+    @property
+    def cols(self) -> int:
+        """Number of block columns in the encoding grid."""
+        return self.width // self.block_size
+
+    @property
+    def rows(self) -> int:
+        """Number of block rows in the encoding grid."""
+        return self.height // self.block_size
+
+    @property
+    def blocks_per_frame(self) -> int:
+        """Total blocks in one frame (cols * rows)."""
+        return self.cols * self.rows
+
+    @property
+    def bits_per_frame(self) -> int:
+        """Total encoded bits per frame (3 bits per block, RGB binary)."""
+        return self.blocks_per_frame * 3
+
+    @property
+    def seq_bytes_per_frame(self) -> int:
+        """Payload capacity for the sequential protocol (after header)."""
+        return (self.bits_per_frame // 8) - HEADER_SIZE
+
+    @property
+    def fount_header_size(self) -> int:
+        """Fountain header size in bytes (duplicated to avoid circular import)."""
+        return _FOUNT_HEADER_SIZE
+
+    @property
+    def fount_bytes_per_frame(self) -> int:
+        """Payload capacity for the fountain protocol (after header)."""
+        return (self.bits_per_frame // 8) - self.fount_header_size
+
+
+PROFILES: dict[str, ResolutionProfile] = {
+    "speed": ResolutionProfile("speed", 1920, 1080, 8, 240),
+    "balanced": ResolutionProfile("balanced", 1920, 1080, 8, 60),
+    "quality": ResolutionProfile("quality", 3840, 2160, 8, 30),
+}
+
+DEFAULT_PROFILE: ResolutionProfile = PROFILES["speed"]
+
 
 # ---------------------------------------------------------------------------
 # Derived capacity values
