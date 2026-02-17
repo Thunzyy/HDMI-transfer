@@ -36,4 +36,5 @@ testpaths = ["tests"]
 addopts = ["--strict-markers", "-v", "--import-mode=importlib"]
 markers = [
     "hardware: marks tests requiring Elgato capture card (deselect with '-m \"not hardware\"')",
+    "slow: marks tests that take >10s (deselect with '-k \"not slow\"')",
 ]
