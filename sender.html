@@ -104,11 +104,11 @@
       const BLOCK_SIZE = 8;
       const COLS = WIDTH / BLOCK_SIZE;
       const ROWS = HEIGHT / BLOCK_SIZE;
-      const BITS_PER_FRAME = ROWS * COLS; // 32400
-      const BYTES_PER_FRAME = BITS_PER_FRAME / 8; // 4050
+      const BITS_PER_FRAME = ROWS * COLS * 3; // 97200
+      const BYTES_PER_FRAME = BITS_PER_FRAME / 8; // 12150
       const FOUNTAIN_MAGIC = 0xF0C0;
       const HEADER_LEN = 12; // magic(2) + seed(4) + K(2) + crc32(4)
-      const PAYLOAD_SIZE = BYTES_PER_FRAME - HEADER_LEN; // 4038
+      const PAYLOAD_SIZE = BYTES_PER_FRAME - HEADER_LEN; // 12138
 
       // CRC32 lookup table (IEEE 802.3 polynomial 0xEDB88320)
       const CRC32_TABLE = new Uint32Array(256);
