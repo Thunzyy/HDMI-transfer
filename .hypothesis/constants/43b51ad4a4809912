@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/errors.py
+# hypothesis_version: 6.151.6
+
+['\n Use "{}" instead.', '%s', '%s\n%s\n', '.', '0.0.0', 'During: {1}', '_', '__version__', 'always', 'blue_bg', 'code', 'constant_inference', 'dark_bg', 'errmsg', 'filename', 'highlight', 'indicate', 'interpreter', 'jupyter_nb', 'light_bg', 'loc', 'no_color', 'pymod', 'reportable', 'reset', 'typing', 'unsupported_error', 'utf-8', '{0}\n']

@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/stencils/stencilparfor.py
+# hypothesis_version: 6.151.6
+
+['$border_ind', '$cval_const', '$none_var', '$np_attr_attr', '$np_g_var', '$parfor_exit_value', '$parfor_index_var', '$py_g_var', '$slice', '$slice_func_var', '$slice_inst', '$zero_index_var', 'After replace_vars', '_compute_last_ind', '_mk_stencil_parfor', 'arg_to_arr_dict', 'before-inference', 'binop', 'bool', 'bool_', 'call', 'cast', 'compute_last_ind_var', 'cval', 'empty', 'end_lengths:', 'f', 'getitem', 'in_arr_shape', 'index_offsets', 'input_dict', 'last_ind', 'name', 'np', 'numba', 'offset_stencil_index', 'offset_var', 'old_index_var', 'out', 'setitem', 'shape', 'slice', 'standard_indexing', 'start_lengths:', 'static_getitem', 'static_setitem', 'stencil', 'stencil_const_var', 'stencil_output', 'stencilparfor_dummy', 'unary', 'zero_val', '{}{}', '{}{}{}']

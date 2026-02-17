@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/typing/collections.py
+# hypothesis_version: 6.151.6
+
+["In '%s': %s"]

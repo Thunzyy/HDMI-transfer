@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/intrinsics.py
+# hypothesis_version: 6.151.6
+
+['ceil', 'ceilf', 'cos', 'cosf', 'exp', 'expf', 'fabs', 'fabsf', 'floor', 'floorf', 'llvm.ceil.f32', 'llvm.ceil.f64', 'llvm.cos.f32', 'llvm.cos.f64', 'llvm.exp.f32', 'llvm.exp.f64', 'llvm.fabs.f32', 'llvm.fabs.f64', 'llvm.floor.f32', 'llvm.floor.f64', 'llvm.log.f32', 'llvm.log.f64', 'llvm.log10.f32', 'llvm.log10.f64', 'llvm.pow.f32', 'llvm.pow.f64', 'llvm.sin.f32', 'llvm.sin.f64', 'llvm.sqrt.f32', 'llvm.sqrt.f64', 'llvm.trunc.f32', 'llvm.trunc.f64', 'log', 'log10', 'log10f', 'logf', 'numba_{op}', 'pow', 'powf', 'sdiv', 'sin', 'sinf', 'sqrt', 'sqrtf', 'srem', 'trunc', 'truncf', 'udiv', 'urem']

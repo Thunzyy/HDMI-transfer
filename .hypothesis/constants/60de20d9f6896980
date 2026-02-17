@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/np/ufunc/gufunc.py
+# hypothesis_version: 6.151.6
+
+['A', 'GUFuncTyping_', 'Input', 'Output', '__array_ufunc__', '__call__', '__dask_graph__', 'out']

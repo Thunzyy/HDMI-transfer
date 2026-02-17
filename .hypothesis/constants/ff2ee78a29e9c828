@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/entrypoints.py
+# hypothesis_version: 6.151.6
+
+['init', 'numba_extensions', 'select']

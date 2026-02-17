@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/np/random/generator_methods.py
+# hypothesis_version: 6.151.6
+
+[0.0, 1.0, ' expected type(s): ', 'a', 'axis', 'b', 'beta', 'binomial', 'chisquare', 'df', 'df <= 0', 'dfden', 'dfden <= 0', 'dfnum', 'dfnum <= 0', 'endpoint', 'exponential', 'f', 'gamma', 'geometric', 'high', 'integers', 'inv', 'lam', 'laplace', 'left', 'loc', 'logistic', 'lognormal', 'logseries', 'low', 'mean', 'method', 'mode', 'n', 'negative_binomial', 'nonc', 'nonc < 0', 'noncentral_chisquare', 'noncentral_f', 'normal', 'p', 'pareto', 'permutation', 'poisson', 'power', 'random', 'rayleigh', 'right', 'scale', 'shape', 'shuffle', 'sigma', 'standard_cauchy', 'standard_exponential', 'standard_gamma', 'standard_normal', 'standard_t', 'the given', 'triangular', 'uniform', 'wald', 'weibull', 'x', 'zig', 'zipf']

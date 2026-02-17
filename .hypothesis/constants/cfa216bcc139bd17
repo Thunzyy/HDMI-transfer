@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/anyio/abc/_eventloop.py
+# hypothesis_version: 6.151.6
+
+['PathLike[bytes]', 'PathLike[str]', 'PosArgsT', 'T_Retval']

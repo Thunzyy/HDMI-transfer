@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/stencils/stencil.py
+# hypothesis_version: 6.151.6
+
+['    return {}\n', '    {} = {}.shape\n', ')\n', ',', ', neighborhood=None', ', out=None', ', {}=None', '-', '-np.inf', '-{}:', ':', ':-{}', 'StencilFuncTyping_', '_', '__call__', '__sentinel__', '_stencil_wrapper', 'const_index', 'constant', 'cval', 'def {}({}{}):\n', 'full_shape', 'get_return_type', 'getitem', 'ind_stencil_index', 'index', 'name', 'name_var_table', 'neighborhood', 'np.inf', 'np.nan', 'out', 'setitem', 'slice_addition', 'standard_indexing', 'static_getitem', 'static_setitem', 'stencil_index', '{} = 0\n', '{}[:] = {}\n', '{}[{}] = {}\n', '{}[{}][0]', '{}[{}][1]']

@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/object_mode_passes.py
+# hypothesis_version: 6.151.6
+
+['Lifting loop', 'object_mode_back_end']

@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numpy/_typing/_add_docstring.py
+# hypothesis_version: 6.151.6
+
+['ArrayLike', 'DTypeLike', 'Examples', 'NDArray', '^(\\s+)[-=]+\\s*$', 'typing.Union[...]']

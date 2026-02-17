@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/environment.py
+# hypothesis_version: 6.151.6
+
+['__name__', '__weakref__', 'env_name']

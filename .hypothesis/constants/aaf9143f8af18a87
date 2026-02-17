@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/cpython/unicode.py
+# hypothesis_version: 6.151.6
+
+[128, 256, 931, 962, 963, 65536, 1114111, "'", '+', '-', '0', '<', 'False', 'True', '__repr__', '__str__', '_data', '_hash', '_is_ascii', '_kind', '_length', 'capitalize', 'casefold', 'center', 'count', 'data', 'empty separator', 'end', 'endswith', 'expandtabs', 'extract_unicode', 'find', 'getiter', 'hash', 'index', 'is_ascii', 'isalnum', 'isalpha', 'isascii', 'isdecimal', 'isdigit', 'isidentifier', 'islower', 'isnumeric', 'isprintable', 'isspace', 'istitle', 'isupper', 'iternext', 'join', 'keepends', 'kind', 'length', 'ljust', 'lower', 'lstrip', 'maxsplit', 'meminfo', 'parent', 'partition', 'replace', 'rfind', 'rindex', 'rjust', 'rpartition', 'rsplit', 'rstrip', 'sep', 'split', 'splitlines', 'start', 'startswith', 'strip', 'sub', 'substr', 'substring not found', 'swapcase', 'title', 'upper', 'value', 'zfill']

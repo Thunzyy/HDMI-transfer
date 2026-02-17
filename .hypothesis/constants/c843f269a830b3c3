@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/analysis.py
+# hypothesis_version: 6.151.6
+
+['*', '-', 'Pruning %s', 'after', 'before', 'binop', 'call', 'dead_maps_result', 'getattr', 'literal_type', 'ndim', 'none', 'nullified', 'op', 'phi', 'typed_getitem', 'unreachable', 'use_defs_result', 'usemap,defmap', 'value']

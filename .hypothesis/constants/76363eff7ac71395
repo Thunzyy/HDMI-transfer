@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/scipy/version.py
+# hypothesis_version: 6.151.6
+
+['+', '.dev', '1.16.3', 'dev']

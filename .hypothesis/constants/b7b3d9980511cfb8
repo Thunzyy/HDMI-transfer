@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/scipy/_lib/_sparse.py
+# hypothesis_version: 6.151.6
+
+['SparseABC', 'issparse']

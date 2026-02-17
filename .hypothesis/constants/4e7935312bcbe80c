@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/_pytest/compat.py
+# hypothesis_version: 6.151.6
+
+[127, 128, 'DEFAULT', '\\n', '\\r', '\\t', '__wrapped__', '_is_coroutine', 'ascii', 'backslashreplace', 'emscripten', 'mock', 'patchings', 'unicode_escape', 'unittest.mock', 'win32']

@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/scipy/sparse/coo.py
+# hypothesis_version: 6.151.6
+
+['_coo', 'coo', 'coo_matrix', 'isspmatrix_coo', 'sparse', 'spmatrix']

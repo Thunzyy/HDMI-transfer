@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/scipy/_lib/array_api_compat/numpy/fft.py
+# hypothesis_version: 6.151.6
+
+['fft2', 'ifft2', 'irfft2', 'rfft2']

@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/typed/__init__.py
+# hypothesis_version: 6.151.6
+
+['.typeddict', '.typedlist', 'Dict', 'List']

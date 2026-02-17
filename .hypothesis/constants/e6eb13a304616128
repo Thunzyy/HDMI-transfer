@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/compiler_machinery.py
+# hypothesis_version: 6.151.6
+
+[120, '%s.%s: %s: %s %s', '%s: %s', '%s_%s', ',', '-', '-- %s', 'AFTER', 'BEFORE', 'Legacy pass in use', 'all', 'func_ir is None', 'init run finalize', 'none', 'numba:run_pass', 'pass_info', 'pass_timings', 'required: %s\n', '{desc}\n{exc}']

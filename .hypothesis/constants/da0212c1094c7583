@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/typed/dictobject.py
+# hypothesis_version: 6.151.6
+
+['!=', '==', '>', '__hash__', '__setitem__', '_numba_dict_dtor', '_parent', 'clear', 'copy', 'data', 'dict_iter_sizeof', 'dict_key', 'dict_value', 'dummy', 'expected a {}', 'get', 'getiter', 'items', 'iternext', 'keys', 'linkonce_odr', 'meminfo', 'numba_dict_delitem', 'numba_dict_dump', 'numba_dict_free', 'numba_dict_insert', 'numba_dict_iter', 'numba_dict_iter_next', 'numba_dict_length', 'numba_dict_lookup', 'numba_dict_new_sized', 'numba_dict_popitem', 'parent', 'pop', 'popitem', 'setdefault', 'state', 'static_getitem', 'unknown type: {}', 'update', 'values']

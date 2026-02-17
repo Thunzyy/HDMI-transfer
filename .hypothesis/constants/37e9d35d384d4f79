@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/llvmlite/utils.py
+# hypothesis_version: 6.151.6
+
+['darwin', 'libllvmlite.dylib', 'libllvmlite.so', 'llvmlite.dll', 'msvcp120.dll', 'msvcr120.dll', 'nt', 'posix']

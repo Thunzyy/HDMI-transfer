@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/anyio/_core/_tempfile.py
+# hypothesis_version: 6.151.6
+
+['b', 'buffering', 'delete', 'delete_on_close', 'dir', 'encoding', 'errors', 'mode', 'newline', 'prefix', 'suffix', 'w+b']

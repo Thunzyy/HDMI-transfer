@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/llvmlite/ir/builder.py
+# hypothesis_version: 6.151.6
+
+['!=', '..', '.else', '.endif', '.if', '<', '<=', '==', '={%s}', '>', '>=', 'add', 'addrspacecast', 'and', 'ashr', 'bitcast', 'br', 'dbg', 'eq', 'fadd', 'fdiv', 'fmul', 'fneg', 'fpext', 'fptosi', 'fptoui', 'fptrunc', 'frem', 'fsub', 'ge', 'gt', 'indirectbr', 'inttoptr', 'le', 'llvm.assume', 'llvm.bitreverse', 'llvm.bswap', 'llvm.convert.to.fp16', 'llvm.ctlz', 'llvm.ctpop', 'llvm.cttz', 'llvm.fma', 'lshr', 'lt', 'mul', 'ne', 'o', 'or', 'ptrtoint', 'resume', 'ret', 'ret void', 's', 'sadd', 'sdiv', 'sext', 'shl', 'sitofp', 'smul', 'srem', 'ssub', 'sub', 'switch', 'trunc', 'u', 'uadd', 'udiv', 'uitofp', 'umul', 'urem', 'usub', 'xor', 'zext', '{%s}']

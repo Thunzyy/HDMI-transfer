@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/tracing.py
+# hypothesis_version: 6.151.6
+
+[320, ' -> ', '%s=%r', '(', '()', ')', ', ', '.', '...', '<< ', '== ', '>> ', '__main__', '__module__', '__name__', '__self__', 'cls', 'recursive', 'self', 'trace']

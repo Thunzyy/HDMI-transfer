@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/pylowering.py
+# hypothesis_version: 6.151.6
+
+['!=', '<', '<=', '<undefined>', '==', '>', '>=', 'PHI not stripped', '__builtins__', 'binop', 'build_list', 'build_map', 'build_set', 'build_tuple', 'call', 'cast', 'exhaust_iter', 'getattr', 'getitem', 'getiter', 'getslice', 'in', 'inplace_binop', 'is', 'is not', 'iternext', 'null', 'number_add', 'number_and', 'number_floordivide', 'number_lshift', 'number_multiply', 'number_or', 'number_power', 'number_remainder', 'number_rshift', 'number_subtract', 'number_truedivide', 'number_xor', 'pair_first', 'pair_second', 'phi', 'slice', 'static_getitem', 'unary', 'undef', 'value']

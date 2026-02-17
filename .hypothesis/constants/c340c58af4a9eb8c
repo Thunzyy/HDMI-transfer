@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/np/ufunc/decorators.py
+# hypothesis_version: 6.151.6
+
+['cache', 'cpu', 'identity', 'is_dynamic', 'parallel', 'target', 'writable_args']

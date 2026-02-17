@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/scipy/linalg/_procrustes.py
+# hypothesis_version: 6.151.6
+
+['A', 'B']

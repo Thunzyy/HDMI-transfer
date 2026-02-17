@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/typeinfer.py
+# hypothesis_version: 6.151.6
+
+[' %s', '$', '%s := %s', '%s=%s', ', ', '-', '<undecided>', 'Call types', 'Return type', 'Undecided type {}', 'Variable types', 'arg.%s', 'binop', 'build_list', 'build_map', 'build_set', 'build_tuple', 'call', 'captured error', 'cast', 'exhaust_iter', 'failed to unpack {}', 'getattr', 'getitem', 'getiter', 'inplace_binop', 'iternext', 'len', 'list', 'loc', 'make_function', 'name', 'non-precise type {}', 'none', 'op', 'pair_first', 'pair_second', 'phi', 'propagate', 'range', 'slice', 'static_getitem', 'typed_getitem', 'typing of {0} at {1}', 'unary', 'undef', 'unknown operation', 'value']

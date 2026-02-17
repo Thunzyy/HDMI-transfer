@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/experimental/jitclass/overloads.py
+# hypothesis_version: 6.151.6
+
+['__bool__', '__complex__', '__contains__', '__float__', '__index__', '__int__', '__len__', '__ne__', '__str__', 'abs', 'add', 'and', 'eq', 'floordiv', 'func', 'ge', 'gt', 'hash', 'iadd', 'iand', 'ifloordiv', 'ilshift', 'imod', 'imul', 'ior', 'ipow', 'irshift', 'isub', 'itruediv', 'ixor', 'le', 'len', 'lshift', 'lt', 'mod', 'mul', 'neg', 'or', 'pos', 'pow', 'rshift', 'sub', 'truediv', 'xor', 'xy']

@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/typed/typeddict.py
+# hypothesis_version: 6.151.6
+
+[', ', '==', 'PyExc_TypeError', '_from_meminfo_ptr', '_opaque', 'dictionary is empty', 'empty', '{prefix}({body})', '{{{0}}}', '{}: {}']

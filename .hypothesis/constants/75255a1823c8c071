@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/controlflow.py
+# hypothesis_version: 6.151.6
+
+['BEFORE_WITH', 'CFG adjacency lists:', 'CFG back edges:', 'CFG backbone:', 'CFG dominators:', 'CFG loops:', 'CFG node-to-loops:', 'CFG post-dominators:', 'FOR_ITER', 'Loop', 'POP_TOP', 'SETUP_FINALLY', 'SETUP_LOOP', 'SETUP_WITH', '_edge_data', '_entry_point', '_nodes', '_preds', '_succs', 'body', 'entries', 'exits', 'header', 'iteration_count', 'numba_cfg.dot', 'op_%s']

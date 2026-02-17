@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/types/old_scalars.py
+# hypothesis_version: 6.151.6
+
+['%s<%s>(%s)', '%s[%s]', 'Enum', 'Enum class', 'IntEnum', 'IntEnum class', 'Literal[bool]({})', 'Literal[int]({})', 'complex', 'datetime64', 'float', 'int', 'int%d', 'timedelta64', 'uint', 'uint%d']

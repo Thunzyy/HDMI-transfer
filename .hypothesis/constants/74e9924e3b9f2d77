@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/misc/inspection.py
+# hypothesis_version: 6.151.6
+
+['%s', '-2', '-e asm.dwarf=true', '-e io.cache=true', '-e scr.color=1', '-e scr.utf8=true', 'No command given', 'UTF-8', 'aaaaaa', 'agf', 'agfd', 'e bin.demangle=false', 'e bin.demangle=true', 'fontname="Courier",', 'radare2 in PATH', 'svg']

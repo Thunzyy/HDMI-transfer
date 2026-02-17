@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/cffi/__init__.py
+# hypothesis_version: 6.151.6
+
+['0.8.6', '2.0.0', 'CDefError', 'FFI', 'FFIError', 'VerificationError', 'VerificationMissing']

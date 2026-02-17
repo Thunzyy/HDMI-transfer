@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numpy/f2py/diagnose.py
+# hypothesis_version: 6.151.6
+
+['(ignore it)', '------', 'CPU information:', '_', '__main__', 'error:', 'ok', 'sys.prefix:', 'sys.version:']

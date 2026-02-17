@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/np/npdatetime_helpers.py
+# hypothesis_version: 6.151.6
+
+[365, 400, 1000, 'D', 'M', 'W', 'Y', 'as', 'fs', 'h', 'm', 'ms', 'nat', 'ns', 'ps', 's', 'us']

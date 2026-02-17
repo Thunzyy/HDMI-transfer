@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/parfors/parfor_lowering_utils.py
+# hypothesis_version: 6.151.6
+
+['BoundFunc', 'func', 'pf_assign', 'pf_const', 'pf_tuple', 'sig']

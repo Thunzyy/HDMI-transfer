@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/typing/bufproto.py
+# hypothesis_version: 6.151.6
+
+['=', 'A', 'C', 'F', 'Zd', 'Zf', 'bBhHiIlLqQnN', 'd', 'f', 'int%d', 'u']

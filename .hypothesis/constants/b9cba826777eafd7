@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/rewrites/static_getitem.py
+# hypothesis_version: 6.151.6
+
+['after-inference', 'before-inference', 'getitem']

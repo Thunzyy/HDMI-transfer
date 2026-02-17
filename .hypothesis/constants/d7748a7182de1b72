@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/np/npyfuncs.py
+# hypothesis_version: 6.151.6
+
+[-1.0, 0.0, 0.4342944819032518, 0.6931471805599453, 1.0, 1.4426950408889634, 3.0, 32768, 2147483648, 9223372036854775808, '!=', '<', '<=', '==', '>', '>=', 'generic', 'llvm.ceil', 'llvm.copysign', 'llvm.exp2', 'llvm.fabs', 'llvm.floor', 'llvm.log2', 'llvm.rint', 'llvm.trunc', 'mismatched types', 'nan', 'nextafter', 'numba_nextafter', 'numba_nextafterf', 'ord', 'uno']

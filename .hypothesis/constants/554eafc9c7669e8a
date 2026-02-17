@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/types/misc.py
+# hypothesis_version: 6.151.6
+
+['%s', '%s(...)', '%s*', '%s_%s*', '*%s', '*%s[%d]', ',', 'ContextManager({})', 'Literal[slice]({})', 'Module(%s)', 'Object(%s)', 'OptionalType(%s)', '__unliteral__', 'data.{0}', 'instance', 'iter_unicode', 'jitclass', 'literal_type', 'memory-managed *%s', 'omitted(default=%r)', '{0}#{1}', '{0}.{1}', '{0}.{1}#{2:x}<{3}>', '{0}:{1}']

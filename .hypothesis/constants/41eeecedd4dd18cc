@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/scipy/sparse/_dia.py
+# hypothesis_version: 6.151.6
+
+['array', 'constant', 'dia', 'dia_array', 'dia_matrix', 'inconsistent shapes', 'isspmatrix_dia', 'matrix', 'restructuredtext en']

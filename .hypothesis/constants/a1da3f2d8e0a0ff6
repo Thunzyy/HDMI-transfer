@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/cloudpickle/__init__.py
+# hypothesis_version: 6.151.6
+
+['3.0.0', 'CloudPickler', 'Pickler', '__version__', 'dump', 'dumps', 'load', 'loads']

@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/cpython/charseq.py
+# hypothesis_version: 6.151.6
+
+[b' ', 127, 255, 65535, '!=', '<', '==', 'C', 'S1', 'U1', '__hash__', '__str__', '_get_kind', '_to_bytes', '_to_str', 'center', 'endswith', 'find', 'index out of range', 'isascii', 'isupper', 'join', 'ljust', 'lstrip', 'rfind', 'rjust', 'rstrip', 'split', 'startswith', 'strip', 'upper', 'zfill']

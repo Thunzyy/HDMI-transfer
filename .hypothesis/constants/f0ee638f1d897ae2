@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/typed_passes.py
+# hypothesis_version: 6.151.6
+
+['%s due to: %s', '-', '<string>', '=', 'ANNOTATION', 'Diagnostics failed.', 'OUT', '_TypingResults', '_inline', 'after-inference', 'annotate_types', 'call', 'calltypes', 'cast', 'cr', 'flags', 'folded_args', 'get_call_type', 'getattr', 'iinfo', 'inline_overloads', 'ir_legalization', 'is_method', 'llvm_pass_timings', 'make_function', 'native_lowering', 'nopython_backend', 'nopython_rewrites', 'null', 'op', 'parfor_fusion_pass', 'parfor_pass', 'phi', 'pre_parfor_pass', 'prune_stats', 'return_type', 'strip_phis', 'template', 'templates', 'typemap', 'typing_errors', 'unreachable', 'w']

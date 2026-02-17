@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/withcontexts.py
+# hypothesis_version: 6.151.6
+
+['$', '$cp', '$cs_var', '$ngvar', '$save_pc', '$spc', '.', 'After with changes', 'Before with changes', 'Cell is empty', 'args', 'getattr', 'kwargs', 'numba', 'reflected']

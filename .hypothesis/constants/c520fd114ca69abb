@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/types/functions.py
+# hypothesis_version: 6.151.6
+
+['\n{}', ' * {}', '%s(%s for %s)', '%s(%s)', '%s: ', ', ', '.', '<numerous>', '<unknown function>', 'CFuncPtr', 'N/A', 'No match.', 'Unknown template', '_FAILURE', '__name__', '__traceback__', '_overload_func', 'cases', 'class(%s)', 'filename', 'generic', 'in', 'kind', 'lines', 'literal', 'name', 'non-literal', 'of', 'qualname,uid', 'recursive(%s)', 'specific_error', 'type(%s)', 'unknown', '{}', '{}: {}', '{}:{}', '{}={}', '{}raised from {}', '{}{}']

@@ -1,0 +1,4 @@
+# file: /usr/bin/pytest
+# hypothesis_version: 6.151.6
+
+['__main__']

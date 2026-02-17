@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/scipy/sparse/construct.py
+# hypothesis_version: 6.151.6
+
+['_construct', 'block_diag', 'bmat', 'bsr_matrix', 'construct', 'coo_matrix', 'csc_matrix', 'csr_matrix', 'dia_matrix', 'diags', 'eye', 'get_index_dtype', 'hstack', 'identity', 'issparse', 'kron', 'kronsum', 'rand', 'random', 'sparse', 'spdiags', 'vstack']

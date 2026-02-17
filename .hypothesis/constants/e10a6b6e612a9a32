@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/cpython/randomimpl.py
+# hypothesis_version: 6.151.6
+
+[-2.0, -1.0, 0.0, 1e-308, 1e-07, 1e-06, 0.3333333333333333, 0.5, 0.9999999, 1.0, 2.0, 4.0, 4.5, 10.0, 67108864.0, 9007199254740992.0, 624, 2636928640, 4022730752, '<', '<=', '==', '>', '>=', 'bbcont', 'bbend', 'binomial(): n <= 0', 'df <= 0', 'internal', 'llvm.ctlz.%s', 'n', 'nocapture', 'nonc < 0', 'nounwind', 'np', 'numba_poisson_ptrs', 'numba_rnd_init', 'numba_rnd_shuffle', 'power(): a <= 0', 'py', 'r', 'randomimpl', 'readnone', 'result', 'ret', 'wald(): mean <= 0', 'wald(): scale <= 0', 'while', 'while.end', 'zipf(): a <= 1']

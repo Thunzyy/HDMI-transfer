@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/np/numpy_support.py
+# hypothesis_version: 6.151.6
+
+['%s%d', '%s[%s]', '-inf', '.', '=|', '?', '?bBhHiIlLqQfd', 'A', 'C', 'C_CONTIGUOUS', 'Char size mismatch', 'F', 'F_CONTIGUOUS', 'M', 'M8', 'Mm', 'O', 'S', 'SU', 'U', 'U1', 'V', '_UFuncLoopSpec', '__array_wrap__', 'bool', 'cf', 'complex128', 'complex64', 'e', 'fields', 'float16', 'float32', 'float64', 'formats', 'inputs', 'int16', 'int32', 'int64', 'int8', 'itemsize', 'iu', 'm', 'm8', 'mM', 'mm', 'names', 'offset', 'offsets', 'outputs', 'safe', 'same_kind', 'supported between ', 'title', 'titles', 'type', 'ufunc_sig', 'uint16', 'uint32', 'uint64', 'uint8']

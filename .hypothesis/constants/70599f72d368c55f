@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/np/math/cmathimpl.py
+# hypothesis_version: 6.151.6
+
+[-2.0, 0.0, 0.25, 0.5, 1.0, 1.4142135623730951, 2.0, 2.302585092994046, 4.0, 'inf', 'nan', 'uno']

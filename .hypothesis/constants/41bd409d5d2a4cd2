@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/np/npyimpl.py
+# hypothesis_version: 6.151.6
+
+['<', '>', 'C', 'F', '_ArrayGUHelper', '_ArrayHelper', '_ArrayIndexingHelper', '__array_wrap__', 'alwaysinline', 'array', 'base_type', 'builder', 'context', 'data', 'dest_shape', 'indices', 'inner_arr_ty', 'input operand', 'is_input_arg', 'layout', 'loc', 'ndim', 'npyimpl', 'numpy', 'real', 'return_val', 'shape', 'src_shape', 'strides']

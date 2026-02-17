@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/bytecode.py
+# hypothesis_version: 6.151.6
+
+['%s %10s\t%s', '.', '>', 'BUILD_LIST', 'BUILD_MAP', 'BUILD_SET', 'CACHE', 'END_FOR', 'FOR_ITER', 'GET_ITER', 'JUMP_BACKWARD', 'LOAD_GLOBAL', 'NOP', 'POP_BLOCK', 'POP_TOP', 'RAISE_VARARGS', 'RETURN_VALUE', 'SETUP_', 'SWAP', '_ExceptionTableEntry', '__builtins__', '__code__', '__numba__', 'arg', 'argsize', 'co_cellvars', 'co_consts', 'co_freevars', 'co_names', 'co_varnames', 'exception_entries', 'func_code', 'func_id', 'labels', 'lineno', 'next', 'offset', 'opcode', 'opcode_info', 'opname', 'table', '{}${}']

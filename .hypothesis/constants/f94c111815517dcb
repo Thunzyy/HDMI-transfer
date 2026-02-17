@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/np/ufunc/parallel.py
+# hypothesis_version: 6.151.6
+
+[12060, '\nOR\n', '.kernel.{}_{}', 'Broken thread_id: ', 'HINT:\n%s', 'OSX_OMP', 'One of:\n%s', 'TBB', 'allocate_sched', 'darwin', 'deallocate_sched', 'default', 'do_scheduling_signed', 'fork', 'forksafe', 'get_num_threads', 'get_sched_size', 'get_thread_id', 'libtbb.12.dylib', 'libtbb.so.12', 'linux', 'num_threads: ', 'numba_parallel_for', 'omp', 'safe', 'set_num_threads', 'tbb', 'tbb12.dll', 'threadsafe', 'win32', 'workqueue']

@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/typing/listdecl.py
+# hypothesis_version: 6.151.6
+
+['list.append', 'list.clear', 'list.extend', 'list.insert', 'list.pop']

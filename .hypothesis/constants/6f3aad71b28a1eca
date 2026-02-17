@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numpy/f2py/__init__.py
+# hypothesis_version: 6.151.6
+
+['get_include', 'run_main', 'src', 'test']

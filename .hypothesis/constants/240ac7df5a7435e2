@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/byteflow.py
+# hypothesis_version: 6.151.6
+
+['$null$', '-', 'AdaptBlockInfo', 'BEFORE_WITH', 'BlockKind({})', 'CACHE', 'DONE Prune PHIs', 'EXCEPT', 'Edge', 'FINALLY', 'LOAD_CONST', 'LOAD_DEREF', 'LOOP', 'MAKE_FUNCTION', 'NOP', 'POP_TOP', 'PRECALL', 'Prune PHIs', 'SETUP_WITH', 'TRY', 'Used_phis: %s', 'WITH', 'WITH_FINALLY', 'active_try_block', 'assertion_error', 'block_infos %s:\n%s', 'blockstack', 'bytecode dump:\n%s', 'changing phismap: %s', 'const', 'defmap: %s', 'end', 'end state. edges=%s', 'end_offset', 'entry_stack', 'exception', 'extra_block', 'handler', 'insts', 'keep phismap: %s', 'kind', 'new_out: %s', 'npop', 'npush', 'null$', 'op_{}', 'outgoing_edgepushed', 'outgoing_phis', 'pc', 'pending: %s', 'phi', 'phismap: %s', 'predicate', 'push_lasti', 'res', 'setup_with_exitfn', 'stack', 'stack %s', 'stack: %s', 'stack_depth', 'state.pc_initial: %s', 'try', 'unreachable', 'with']

@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/experimental/function_type.py
+# hypothesis_version: 6.151.6
+
+['PyExc_MemoryError', '__wrapper_address__', '_get_jit_address', '_get_wrapper_address', 'c_addr', 'ignore', 'jit_addr', 'py_addr', 'return_exc', 'return_null']

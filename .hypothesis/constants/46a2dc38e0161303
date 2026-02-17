@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/funcdesc.py
+# hypothesis_version: 6.151.6
+
+['.NumbaEnv.{}', 'abi_tags', 'arg%d', 'arg.', 'args', 'argtypes', 'calltypes', 'cfunc.', 'cpython', 'doc', 'env_name', 'global_dict', 'inline', 'kws', 'mangled_name', 'modname', 'native', 'noalias', 'qualname', 'restype', 'typemap', 'uid', 'unique_name', '{}.{}']

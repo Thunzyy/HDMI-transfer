@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/itanium_mangler.py
+# hypothesis_version: 6.151.6
+
+['%s%s', '%u%s', '.', 'B', 'Dh', 'E', 'I%sE', 'Li%dE', 'N', 'N%s%sE', '[^a-z0-9_]', '_', '_%02x', '_Z', 'a', 'ascii', 'b', 'd', 'f', 'h', 'i', 'j', 's', 't', 'utf8', 'v', 'x', 'y']

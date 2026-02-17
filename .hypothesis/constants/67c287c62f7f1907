@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/scipy/sparse/_csc.py
+# hypothesis_version: 6.151.6
+
+['csc', 'csc_array', 'csc_matrix', 'isspmatrix_csc', 'mergesort', 'restructuredtext en']

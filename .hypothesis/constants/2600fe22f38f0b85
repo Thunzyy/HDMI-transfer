@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/llvmlite/ir/types.py
+# hypothesis_version: 6.151.6
+
+[128, '"', '"{0}"', '%{name}', ', ', '0', '0.0', '<%d x %s>', '<%s %s>', '<{0}>', '<{}>', 'Q', '[%d x %s]', '[{0}]', '\\', '\\22', '\\5c', 'd', 'double', 'e', 'expected {} for {}', 'f', 'f16', 'f32', 'f64', 'float', 'foo', 'half', 'i%u', 'label', 'metadata', 'null', 'p%d', 'p%d%s', 'ptr', 'ptr addrspace({0})', 'void', 'zeroinitializer', '{%s}', '{0} ()', '{0} (...)', '{0} ({1})', '{0} ({1}, ...)', '{0} addrspace({1})*', '{0} {1}', '{0}*', '{{0:#{0}x}}', '{{{0}}}']

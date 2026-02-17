@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/experimental/jitclass/base.py
+# hypothesis_version: 6.151.6
+
+[', ', 'Opaque.', '_', '_Dtor.{0}', '__', '__%s__', '__annotations__', '__dict__', '__doc__', '__firstlineno__', '__hash__', '__init__', '__module__', '__numba_cls_', '__objclass__', '__weakref__', 'class_type', 'ctor', 'data', 'get', 'getitem', 'jitclass builder', 'libs', 'm_', 'meminfo', 'name shadowing: {0}', 'set', 'setitem']

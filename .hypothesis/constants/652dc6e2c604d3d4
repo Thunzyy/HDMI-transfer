@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/scipy/sparse/dia.py
+# hypothesis_version: 6.151.6
+
+['_dia', 'dia', 'dia_matrix', 'isspmatrix_dia', 'sparse', 'spmatrix']

@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/np/ufunc/wrappers.py
+# hypothesis_version: 6.151.6
+
+['.return', '==', 'A', '__gufunc__.', '__ufunc__.', '_gufunc_wrapper', '_wrapper_info', 'alwaysinline', 'args', 'core.step.ptr', 'data', 'data.ptr', 'dims', 'entry', 'env', 'error', 'guf', 'library', 'loopcount', 'name', 'numba_ndarray_new', 'shape', 'step.ptr', 'steps', 'strides', 'ufunc.core.return', 'ufunc_wrapper', 'weak_odr']

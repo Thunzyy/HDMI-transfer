@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/registry.py
+# hypothesis_version: 6.151.6
+
+['cpu', 'key_type', 'value_type']

@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/scipy/_lib/_ccallback.py
+# hypothesis_version: 6.151.6
+
+[' (', '(*)', ')', '*', ', ', 'LP_', 'c_', 'uintptr_t', 'void', 'void *']

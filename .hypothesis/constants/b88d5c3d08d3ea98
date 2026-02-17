@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/numba/core/typing/templates.py
+# hypothesis_version: 6.151.6
+
+['  | ', '%s -> %s', '%s_CallableTemplate', 'Difference: %s', 'OverloadTemplate_%s', '__name__', '__qualname__', '_args', '_pysig', '_recvr', '_return_type', 'always inlined', 'attribute', 'attributes', 'cases', 'docstring', 'exact_match_required', 'filename', 'folded_args', 'functions', 'generic', 'globals', 'iinfo', 'inline_info', 'intrinsic', 'kind', 'libs', 'lines', 'method', 'name', 'never', 'operator overload', 'overload', 'overload_method', 'recvr', 'registered?', 'resolve_%s', 'sig', 'target', 'typing_key', 'unknown', 'unsafe_casting']

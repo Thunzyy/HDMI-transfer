@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/anyio/streams/memory.py
+# hypothesis_version: 6.151.6
+
+['T_Item', 'T_co', 'T_contra', 'item']
