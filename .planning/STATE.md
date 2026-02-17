@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** Maximum throughput data transfer over HDMI without leaving any trace on the source machine.
-**Current focus:** Phase 4 Performance Optimization -- COMPLETE
+**Current focus:** Phase 5 Fountain Code Optimization -- In Progress
 
 ## Current Position
 
-Phase: 4 of 6 (Performance Optimization)
-Plan: 5 of 5 in current phase
-Status: Phase complete
-Last activity: 2026-02-16 -- Completed 04-05-PLAN.md (CLI integration of performance components)
+Phase: 5 of 6 (Fountain Code Optimization)
+Plan: 1 of 4 in current phase
+Status: In progress
+Last activity: 2026-02-17 -- Completed 05-01-PLAN.md (Robust Soliton Distribution)
 
-Progress: [████████████████████████░░░░░░░] 20/31 (64%)
+Progress: [█████████████████████████░░░░░░] 21/31 (67%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 20
+- Total plans completed: 21
 - Average duration: 5min
-- Total execution time: 100min
+- Total execution time: 108min
 
 **By Phase:**
 
@@ -31,10 +31,11 @@ Progress: [███████████████████████
 | 02-protocol-foundation | 5/5 | 19min | 4min |
 | 03-architecture-refactor | 7/7 | 24min | 3min |
 | 04-performance-optimization | 5/5 | 12min | 2min |
+| 05-fountain-code-optimization | 1/4 | 8min | 8min |
 
 **Recent Trend:**
-- Last 5 plans: 04-01 (3min), 04-04 (2min), 04-03 (3min), 04-02 (3min), 04-05 (4min)
-- Trend: Consistent fast execution
+- Last 5 plans: 04-04 (2min), 04-03 (3min), 04-02 (3min), 04-05 (4min), 05-01 (8min)
+- Trend: Slightly longer for TDD math module
 
 *Updated after each plan completion*
 
@@ -101,6 +102,10 @@ Recent decisions affecting current work:
 - [04-05]: Receive loops sleep 1ms on empty buffer reads to avoid CPU spin with ThreadedCapture
 - [04-05]: FPS reporting at 2s intervals appended to progress lines during reception
 - [04-05]: _run_receiver helper extracts mode dispatch for clean threaded/direct paths
+- [05-01]: Lazy import of degree module in prng.py to break circular dependency (prng -> degree -> protocols.__init__ -> fountain -> prng)
+- [05-01]: bisect.bisect_left for O(log K) CDF sampling in sample_degree
+- [05-01]: CDF[-1] forced to exactly 1.0 to prevent floating-point drift
+- [05-01]: JS cross-language choose_indices vectors deferred to plan 05-03 when JS is updated to RSD
 
 ### Pending Todos
 
@@ -108,11 +113,10 @@ None.
 
 ### Blockers/Concerns
 
-All prior blockers resolved. No new concerns.
-Phase 4 is complete -- ready for Phase 5 (Fountain Code Optimization).
+- JS sender still uses old ad-hoc distribution; must be updated in plan 05-03 before cross-language compatibility is restored.
 
 ## Session Continuity
 
-Last session: 2026-02-16T22:55:22Z
-Stopped at: Completed 04-05-PLAN.md (CLI integration) -- Phase 4 complete
+Last session: 2026-02-17T00:01:50Z
+Stopped at: Completed 05-01-PLAN.md (Robust Soliton Distribution)
 Resume file: None
