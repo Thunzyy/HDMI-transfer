@@ -9,6 +9,7 @@ Usage::
     hdmi-send photo.png --mode sequential --fps 240 --screen 1
     hdmi-send secret.zip --mode fountain --fps 60
     hdmi-send secret.zip --renderer cv2 --mode fountain
+    hdmi-send secret.zip --mode fountain --fountain-redundancy 1.05
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from hdmi_exfil.display.monitors import get_monitors
 from hdmi_exfil.display.renderer import FrameRenderer, PygameRenderer
 from hdmi_exfil.file_handling.metadata import build_start_metadata
 from hdmi_exfil.file_handling.reader import read_input
+from hdmi_exfil.prng import choose_indices
 from hdmi_exfil.protocols import get_protocol
 from hdmi_exfil.protocols.fountain import PAYLOAD_SIZE as FOUNTAIN_PAYLOAD_SIZE
 from hdmi_exfil.protocols.xor_ops import warmup as warmup_numba, xor_into
@@ -65,6 +67,15 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=1,
         help="Times to repeat each frame (default: 1, sequential only)",
+    )
+    parser.add_argument(
+        "--fountain-redundancy",
+        type=float,
+        default=None,
+        help=(
+            "Fountain mode: stop after K * REDUNDANCY droplets "
+            "(e.g. 1.05 = 5%% overhead). Default: None (loop forever)."
+        ),
     )
     parser.add_argument(
         "--screen",
@@ -201,8 +212,17 @@ def _send_fountain(
     file_data: bytes,
     renderer: FrameRenderer | PygameRenderer,
     delay: int,
+    fountain_redundancy: float | None = None,
 ) -> None:
-    """Run the fountain send loop (continuous droplets until user stops)."""
+    """Run the fountain send loop (continuous droplets until user stops).
+
+    Parameters
+    ----------
+    fountain_redundancy:
+        If set, stop after ``K * fountain_redundancy`` droplets.
+        For example 1.05 sends 5% more droplets than chunks.
+        If ``None``, loop forever (backward-compatible).
+    """
     # Wrap metadata + content (same format as sender.html)
     metadata = build_start_metadata(filename, file_data)
     wrapped = metadata + file_data
@@ -218,8 +238,16 @@ def _send_fountain(
         chunk[:end - start] = np.frombuffer(wrapped[start:end], dtype=np.uint8)
         chunks.append(chunk)
 
+    # Compute optional droplet limit from redundancy factor
+    max_droplets: int | None = None
+    if fountain_redundancy is not None:
+        max_droplets = int(math.ceil(K * fountain_redundancy))
+
     print(f"Fountain mode: K={K} chunks, payload_size={FOUNTAIN_PAYLOAD_SIZE}")
-    print("Sending droplets continuously. Press ESC to stop.")
+    if max_droplets is not None:
+        print(f"Redundancy: {fountain_redundancy}x -> {max_droplets} droplets")
+    else:
+        print("Sending droplets continuously. Press ESC to stop.")
 
     start_time = time.time()
     seed = 1
@@ -228,6 +256,10 @@ def _send_fountain(
     paused = False
 
     while True:
+        # Stop if redundancy limit reached
+        if max_droplets is not None and frame_count >= max_droplets:
+            break
+
         if paused:
             action = _show_pause_screen(renderer)
             if action == "quit":
@@ -237,24 +269,8 @@ def _send_fountain(
             print("\nResuming transmission...")
             continue
 
-        # Build droplet payload by XOR-ing selected chunks (Numba-accelerated)
-        from hdmi_exfil.prng import PRNG  # noqa: C0415
-
-        prng = PRNG(seed)
-        degree = 1
-        r = prng.next_float()
-        if r < 0.1:
-            degree = 1
-        elif r < 0.6:
-            degree = 2
-        else:
-            degree = int(prng.next_float() * min(K, 20)) + 1
-        degree = min(degree, K)
-
-        indices: set[int] = set()
-        while len(indices) < degree:
-            idx = prng.next() % K
-            indices.add(idx)
+        # Build droplet payload by XOR-ing selected chunks (RSD via choose_indices)
+        indices = choose_indices(seed, K)
 
         payload = np.zeros(FOUNTAIN_PAYLOAD_SIZE, dtype=np.uint8)
         for idx in indices:
@@ -406,6 +422,7 @@ def main() -> None:
         else:
             _send_fountain(
                 protocol, filename, file_data, renderer, delay,
+                fountain_redundancy=args.fountain_redundancy,
             )
 
 
