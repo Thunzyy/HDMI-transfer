@@ -22,6 +22,7 @@ import cv2
 import numpy as np
 
 from hdmi_exfil.capture.sampler import sample_frame
+from hdmi_exfil.cli.progress import ProgressTracker
 from hdmi_exfil.capture.source import CaptureSource
 from hdmi_exfil.capture.threaded import FPSReporter, ThreadedCapture
 from hdmi_exfil.config import (
@@ -107,6 +108,7 @@ def _receive_sequential(
     received_chunks: dict[int, bytes] = {}
     total_frames_expected: int | None = None
     start_time: float | None = None
+    tracker: ProgressTracker | None = None
     fps_reporter = FPSReporter(report_interval_s=2.0)
     capture_fps_str = ""
 
@@ -143,6 +145,7 @@ def _receive_sequential(
                     total_frames_expected = total
                     state = TransferState.RECEIVING
                     start_time = time.time()
+                    tracker = ProgressTracker(total, file_size)
                     print(f"START received: '{filename}' ({file_size} bytes)")
                     print(f"Expected SHA-256: {sha256_hash.hex()}")
                     print(f"Expecting {total_frames_expected} DATA frames.")
@@ -150,16 +153,20 @@ def _receive_sequential(
             elif ftype == FRAME_TYPE_DATA and state == TransferState.RECEIVING:
                 if idx not in received_chunks:
                     received_chunks[idx] = data
-                    progress = (
-                        len(received_chunks) / total_frames_expected
-                        if total_frames_expected
-                        else 0
-                    )
-                    sys.stdout.write(
-                        f"\rReceiving: {progress:.1%} "
-                        f"({len(received_chunks)}/{total_frames_expected})"
-                        f"{capture_fps_str}"
-                    )
+                    if tracker is not None:
+                        tracker.update(1, len(data))
+                        sys.stdout.write(tracker.format_line(capture_fps_str))
+                    else:
+                        progress = (
+                            len(received_chunks) / total_frames_expected
+                            if total_frames_expected
+                            else 0
+                        )
+                        sys.stdout.write(
+                            f"\rReceiving: {progress:.1%} "
+                            f"({len(received_chunks)}/{total_frames_expected})"
+                            f"{capture_fps_str}"
+                        )
                     sys.stdout.flush()
 
             elif ftype == FRAME_TYPE_END and state == TransferState.RECEIVING:
@@ -243,7 +250,10 @@ def _receive_fountain(
 ) -> None:
     """Run the fountain receive loop (continuous droplets until complete)."""
     decoder: FountainDecoder | None = None
+    tracker: ProgressTracker | None = None
     start_time: float | None = None
+    start_ns: int | None = None
+    bytes_received: int = 0
     fps_reporter = FPSReporter(report_interval_s=2.0)
     capture_fps_str = ""
 
@@ -278,13 +288,34 @@ def _receive_fountain(
                 print(f"\nDetected transmission! K={K} chunks.")
                 decoder = FountainDecoder(K, len(payload))
                 start_time = time.time()
+                start_ns = time.perf_counter_ns()
+                estimated_bytes = K * len(payload)
+                tracker = ProgressTracker(K, estimated_bytes)
 
             if decoder.K == K:
                 decoder.add_droplet(seed, payload)
+                bytes_received += len(payload)
                 progress = len(decoder.chunks) / K
+
+                # Build speed/ETA string using ProgressTracker
+                if tracker is not None and start_ns is not None:
+                    elapsed = time.perf_counter_ns() - start_ns
+                    if elapsed > 2e9:  # after 2s warmup
+                        speed = bytes_received / (elapsed / 1e9)
+                        remaining = (K - len(decoder.chunks)) * len(payload)
+                        eta = remaining / speed if speed > 0 else float("inf")
+                        eta_str = (
+                            f" | {speed / 1024:.1f} KB/s"
+                            f" | ETA: {ProgressTracker._format_eta(eta)}"
+                        )
+                    else:
+                        eta_str = " | ETA: --:--"
+                else:
+                    eta_str = ""
+
                 sys.stdout.write(
                     f"\rProgress: {progress:.1%} ({len(decoder.chunks)}/{K})"
-                    f"{capture_fps_str}"
+                    f"{eta_str}{capture_fps_str}"
                 )
                 sys.stdout.flush()
 
