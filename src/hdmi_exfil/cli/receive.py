@@ -9,6 +9,7 @@ Usage::
     hdmi-recv 0 --mode auto --output received_files
     hdmi-recv recording.mp4 --mode fountain
     hdmi-recv 0 --no-threaded --mode sequential
+    hdmi-recv 0 --profile quality --mode fountain
 """
 
 from __future__ import annotations
@@ -24,15 +25,12 @@ from hdmi_exfil.capture.sampler import sample_frame
 from hdmi_exfil.capture.source import CaptureSource
 from hdmi_exfil.capture.threaded import FPSReporter, ThreadedCapture
 from hdmi_exfil.config import (
-    BLOCK_SIZE,
-    BYTES_PER_FRAME,
-    COLS,
+    DEFAULT_PROFILE,
     FRAME_TYPE_DATA,
     FRAME_TYPE_END,
     FRAME_TYPE_START,
-    HEIGHT,
-    ROWS,
-    WIDTH,
+    PROFILES,
+    ResolutionProfile,
 )
 from hdmi_exfil.file_handling.metadata import (
     parse_fountain_metadata,
@@ -65,6 +63,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Decoding protocol (default: auto-detect from magic number)",
     )
     parser.add_argument(
+        "--profile",
+        choices=list(PROFILES.keys()),
+        default=None,
+        help="Resolution profile: speed (1080p@240fps), balanced (1080p@60fps), quality (4K@30fps)",
+    )
+    parser.add_argument(
         "--threaded",
         action="store_true",
         default=True,
@@ -93,6 +97,7 @@ def _receive_sequential(
     seq_protocol: object,
     cap: object,
     output_dir: str,
+    profile: ResolutionProfile,
 ) -> None:
     """Run the sequential receive loop (START -> DATA -> END)."""
     state = TransferState.START_PENDING
@@ -117,10 +122,10 @@ def _receive_sequential(
         if fps is not None:
             capture_fps_str = f" | Capture: {fps:.1f} FPS"
 
-        if frame.shape[0] != HEIGHT or frame.shape[1] != WIDTH:
-            frame = cv2.resize(frame, (WIDTH, HEIGHT))
+        if frame.shape[0] != profile.height or frame.shape[1] != profile.width:
+            frame = cv2.resize(frame, (profile.width, profile.height))
 
-        sampled = sample_frame(frame, ROWS, COLS, BLOCK_SIZE)
+        sampled = sample_frame(frame, profile.rows, profile.cols, profile.block_size)
         result = seq_protocol.decode_frame(sampled)
 
         if result.is_valid:
@@ -163,13 +168,19 @@ def _receive_sequential(
                     received_chunks, total_frames_expected,
                     expected_file_size, expected_sha256,
                     expected_filename, output_dir, start_time,
+                    bytes_per_frame=profile.seq_bytes_per_frame,
                 )
                 _print_capture_stats(cap)
                 break
 
         # Debug window
         debug_frame = frame.copy()
-        _draw_grid_overlay(debug_frame, sequential=True)
+        _draw_grid_overlay(
+            debug_frame, sequential=True,
+            rows=profile.rows, cols=profile.cols,
+            block_size=profile.block_size,
+            width=profile.width, height=profile.height,
+        )
         cv2.imshow("Receiver View", debug_frame)
         if cv2.waitKey(1) & 0xFF == 27:
             break
@@ -185,6 +196,8 @@ def _finalize_sequential(
     expected_filename: str | None,
     output_dir: str,
     start_time: float | None,
+    *,
+    bytes_per_frame: int,
 ) -> None:
     """Reassemble chunks and save file for sequential transfers."""
     if total_frames is None or expected_size is None:
@@ -198,7 +211,7 @@ def _finalize_sequential(
             full_data.extend(received_chunks[i])
         else:
             missing.append(i)
-            full_data.extend(b"\x00" * BYTES_PER_FRAME)
+            full_data.extend(b"\x00" * bytes_per_frame)
 
     if missing:
         print(f"WARNING: Missing frames: {missing}")
@@ -226,6 +239,7 @@ def _receive_fountain(
     fount_protocol: object,
     cap: object,
     output_dir: str,
+    profile: ResolutionProfile,
 ) -> None:
     """Run the fountain receive loop (continuous droplets until complete)."""
     decoder: FountainDecoder | None = None
@@ -245,10 +259,10 @@ def _receive_fountain(
         if fps is not None:
             capture_fps_str = f" | Capture: {fps:.1f} FPS"
 
-        if frame.shape[0] != HEIGHT or frame.shape[1] != WIDTH:
-            frame = cv2.resize(frame, (WIDTH, HEIGHT))
+        if frame.shape[0] != profile.height or frame.shape[1] != profile.width:
+            frame = cv2.resize(frame, (profile.width, profile.height))
 
-        sampled = sample_frame(frame, ROWS, COLS, BLOCK_SIZE)
+        sampled = sample_frame(frame, profile.rows, profile.cols, profile.block_size)
         result = fount_protocol.decode_frame(sampled)
 
         if result.is_valid and result.data is not None:
@@ -282,7 +296,12 @@ def _receive_fountain(
 
         # Debug window
         debug_frame = frame.copy()
-        _draw_grid_overlay(debug_frame, sequential=False)
+        _draw_grid_overlay(
+            debug_frame, sequential=False,
+            rows=profile.rows, cols=profile.cols,
+            block_size=profile.block_size,
+            width=profile.width, height=profile.height,
+        )
         cv2.imshow("Receiver Fountain", debug_frame)
         if cv2.waitKey(1) & 0xFF == 27:
             break
@@ -330,10 +349,11 @@ def _finalize_fountain(
 def _receive_auto(
     cap: object,
     output_dir: str,
+    profile: ResolutionProfile,
 ) -> None:
     """Auto-detect protocol from magic number and delegate."""
-    seq = get_protocol("sequential")
-    fount = get_protocol("fountain")
+    seq = get_protocol("sequential", profile=profile)
+    fount = get_protocol("fountain", profile=profile)
 
     print("Auto mode: probing frames for protocol magic number...")
 
@@ -343,23 +363,23 @@ def _receive_auto(
             time.sleep(0.001)  # avoid CPU spin when buffer is empty
             continue
 
-        if frame.shape[0] != HEIGHT or frame.shape[1] != WIDTH:
-            frame = cv2.resize(frame, (WIDTH, HEIGHT))
+        if frame.shape[0] != profile.height or frame.shape[1] != profile.width:
+            frame = cv2.resize(frame, (profile.width, profile.height))
 
-        sampled = sample_frame(frame, ROWS, COLS, BLOCK_SIZE)
+        sampled = sample_frame(frame, profile.rows, profile.cols, profile.block_size)
 
         # Try sequential first (3-bit encoding)
         seq_result = seq.decode_frame(sampled)
         if seq_result.is_valid:
             print("Detected SEQUENTIAL protocol.")
-            _receive_sequential(seq, cap, output_dir)
+            _receive_sequential(seq, cap, output_dir, profile)
             return
 
         # Try fountain (3-bit encoding)
         fount_result = fount.decode_frame(sampled)
         if fount_result.is_valid:
             print("Detected FOUNTAIN protocol.")
-            _receive_fountain(fount, cap, output_dir)
+            _receive_fountain(fount, cap, output_dir, profile)
             return
 
         # Debug window while probing
@@ -375,17 +395,26 @@ def _receive_auto(
 # Shared helpers
 # ------------------------------------------------------------------
 
-def _draw_grid_overlay(frame: np.ndarray, sequential: bool = True) -> None:
+def _draw_grid_overlay(
+    frame: np.ndarray,
+    sequential: bool = True,
+    *,
+    rows: int,
+    cols: int,
+    block_size: int,
+    width: int,
+    height: int,
+) -> None:
     """Draw debug grid overlay on *frame* (in-place)."""
     step = 5 if sequential else 10
     color = (0, 255, 255) if sequential else (0, 0, 255)
 
-    for r in range(0, ROWS, step):
-        y = r * BLOCK_SIZE
-        cv2.line(frame, (0, y), (WIDTH, y), color, 1)
-    for c in range(0, COLS, step):
-        x = c * BLOCK_SIZE
-        cv2.line(frame, (x, 0), (x, HEIGHT), color, 1)
+    for r in range(0, rows, step):
+        y = r * block_size
+        cv2.line(frame, (0, y), (width, y), color, 1)
+    for c in range(0, cols, step):
+        x = c * block_size
+        cv2.line(frame, (x, 0), (x, height), color, 1)
 
 
 def _print_receive_stats(total_bytes: int, start_time: float) -> None:
@@ -402,16 +431,20 @@ def _print_capture_stats(cap: object) -> None:
         print(f"Capture: {reporter.total_frames} frames captured")
 
 
-def _run_receiver(source: object, args: argparse.Namespace) -> None:
+def _run_receiver(
+    source: object,
+    args: argparse.Namespace,
+    profile: ResolutionProfile,
+) -> None:
     """Dispatch to the appropriate receive mode."""
     if args.mode == "auto":
-        _receive_auto(source, args.output)
+        _receive_auto(source, args.output, profile)
     elif args.mode == "sequential":
-        seq = get_protocol("sequential")
-        _receive_sequential(seq, source, args.output)
+        seq = get_protocol("sequential", profile=profile)
+        _receive_sequential(seq, source, args.output, profile)
     else:
-        fount = get_protocol("fountain")
-        _receive_fountain(fount, source, args.output)
+        fount = get_protocol("fountain", profile=profile)
+        _receive_fountain(fount, source, args.output, profile)
 
 
 # ------------------------------------------------------------------
@@ -423,6 +456,12 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
+    # Resolve profile
+    if args.profile:
+        profile = PROFILES[args.profile]
+    else:
+        profile = DEFAULT_PROFILE
+
     # Parse source: numeric string -> camera index
     source: int | str = args.source
     if isinstance(source, str) and source.isdigit():
@@ -431,7 +470,10 @@ def main() -> None:
     print(f"Opening video source: {source}")
 
     try:
-        cap = CaptureSource(source, WIDTH, HEIGHT, fps=240)
+        cap = CaptureSource(
+            source, width=profile.width, height=profile.height,
+            fps=profile.target_fps,
+        )
     except RuntimeError as exc:
         print(f"Error: {exc}")
         sys.exit(1)
@@ -448,9 +490,9 @@ def main() -> None:
                 print(
                     f"Threaded capture: buffer_size={args.buffer_size} frames"
                 )
-                _run_receiver(tcap, args)
+                _run_receiver(tcap, args, profile)
         else:
-            _run_receiver(cap, args)
+            _run_receiver(cap, args, profile)
 
 
 if __name__ == "__main__":
