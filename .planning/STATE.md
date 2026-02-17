@@ -125,6 +125,9 @@ Recent decisions affecting current work:
 - [06-01]: ResolutionProfile is additive -- existing module-level constants remain independent (not aliased to DEFAULT_PROFILE)
 - [06-01]: _FOUNT_HEADER_SIZE duplicated in config.py (12 bytes) to avoid circular import with fountain.py
 - [06-01]: Profile injection via optional constructor param (profile=None defaults to DEFAULT_PROFILE)
+- [06-03]: --fps default changed from 240 to None; overrides profile target_fps when explicitly set
+- [06-03]: Fountain path uses manual speed/ETA computation (not ProgressTracker.update) since decoder.chunks is authoritative for progress
+- [06-03]: 2-second warmup before ETA estimation; shows --:-- during warmup period
 - [06-04]: Checkerboard uses only black (0,0,0) and white (255,255,255) for chroma subsampling robustness
 - [06-04]: Perfect capture returns 60.0 dB SNR (capped when noise < 1e-6)
 - [06-04]: Benchmark runs encode/sample/decode in-memory (no display or capture hardware needed)
