@@ -12,16 +12,16 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 Phase: 6 of 6 (UX and Polish)
 Plan: 2 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-17 -- Completed 06-02-PLAN.md (3bpp RGB Encoding for JS Sender)
+Last activity: 2026-02-17 -- Completed 06-01-PLAN.md (Resolution Profiles)
 
-Progress: [████████████████████████████░░░] 25/28 (89%)
+Progress: [█████████████████████████████░░] 26/28 (93%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 25
+- Total plans completed: 26
 - Average duration: 5min
-- Total execution time: 137min
+- Total execution time: 141min
 
 **By Phase:**
 
@@ -32,11 +32,11 @@ Progress: [███████████████████████
 | 03-architecture-refactor | 7/7 | 24min | 3min |
 | 04-performance-optimization | 5/5 | 12min | 2min |
 | 05-fountain-code-optimization | 4/4 | 35min | 9min |
-| 06-ux-polish | 1/4 | 2min | 2min |
+| 06-ux-polish | 2/4 | 6min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 05-01 (8min), 05-02 (9min), 05-03 (8min), 05-04 (10min), 06-02 (2min)
-- Trend: Focused single-file changes execute faster
+- Last 5 plans: 05-02 (9min), 05-03 (8min), 05-04 (10min), 06-02 (2min), 06-01 (4min)
+- Trend: UX plans executing quickly (2-4min)
 
 *Updated after each plan completion*
 
@@ -122,6 +122,9 @@ Recent decisions affecting current work:
 - [05-04]: @pytest.mark.slow registered in pyproject.toml for K>=500 benchmarks
 - [06-02]: JS drawBits uses ABGR uint32 packing (0xFF000000 | B<<16 | G<<8 | R) for 3bpp RGB encoding
 - [06-02]: JS bit order R,G,B per block matches Python np.unpackbits MSB-first + reshape((blocks,3))
+- [06-01]: ResolutionProfile is additive -- existing module-level constants remain independent (not aliased to DEFAULT_PROFILE)
+- [06-01]: _FOUNT_HEADER_SIZE duplicated in config.py (12 bytes) to avoid circular import with fountain.py
+- [06-01]: Profile injection via optional constructor param (profile=None defaults to DEFAULT_PROFILE)
 
 ### Pending Todos
 
@@ -133,6 +136,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-17T08:51:30Z
-Stopped at: Completed 06-02-PLAN.md (3bpp RGB Encoding for JS Sender)
+Last session: 2026-02-17T08:52:48Z
+Stopped at: Completed 06-01-PLAN.md (Resolution Profiles)
 Resume file: None
