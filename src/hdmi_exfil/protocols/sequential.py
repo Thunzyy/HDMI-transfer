@@ -16,19 +16,15 @@ import cv2
 import numpy as np
 
 from hdmi_exfil.config import (
-    BLOCKS_PER_FRAME,
-    BYTES_PER_FRAME,
-    COLS,
+    DEFAULT_PROFILE,
     FRAME_TYPE_DATA,
     FRAME_TYPE_END,
     FRAME_TYPE_START,
     HEADER_SIZE,
-    HEIGHT,
-    ROWS,
+    ResolutionProfile,
     SEQ_HEADER_FMT,
     SEQ_HEADER_PRE_CRC,
     SEQ_MAGIC,
-    WIDTH,
 )
 from hdmi_exfil.file_handling.metadata import build_start_metadata
 from hdmi_exfil.protocols.base import EncodingProtocol, FrameResult
@@ -49,7 +45,17 @@ class SequentialProtocol(EncodingProtocol):
     (``encode_frame``) and the decoding logic in ``receiver.py``
     (``decode_frame_full``) exactly, wrapped behind the
     :class:`EncodingProtocol` ABC.
+
+    Parameters
+    ----------
+    profile:
+        Optional ``ResolutionProfile`` controlling spatial dimensions and
+        capacity.  Defaults to ``DEFAULT_PROFILE`` (1080p/240fps) for full
+        backward compatibility.
     """
+
+    def __init__(self, profile: ResolutionProfile | None = None) -> None:
+        self._profile = profile or DEFAULT_PROFILE
 
     # ------------------------------------------------------------------
     # ABC properties
@@ -63,7 +69,7 @@ class SequentialProtocol(EncodingProtocol):
     @property
     def bytes_per_frame(self) -> int:
         """Maximum payload bytes per frame."""
-        return BYTES_PER_FRAME
+        return self._profile.seq_bytes_per_frame
 
     # ------------------------------------------------------------------
     # ABC methods
@@ -103,22 +109,26 @@ class SequentialProtocol(EncodingProtocol):
         byte_arr = np.frombuffer(full_data, dtype=np.uint8)
         bits = np.unpackbits(byte_arr)
 
-        # Pad bits to frame capacity (BLOCKS_PER_FRAME * 3)
-        total_bits_needed = BLOCKS_PER_FRAME * 3
+        # Pad bits to frame capacity (blocks_per_frame * 3)
+        total_bits_needed = self._profile.blocks_per_frame * 3
         padding_needed = total_bits_needed - len(bits)
         if padding_needed > 0:
             bits = np.pad(bits, (0, padding_needed), "constant")
 
-        # Reshape to (BLOCKS_PER_FRAME, 3) -> RGB values per block
-        pixel_bits = bits.reshape((BLOCKS_PER_FRAME, 3))
+        # Reshape to (blocks_per_frame, 3) -> RGB values per block
+        pixel_bits = bits.reshape((self._profile.blocks_per_frame, 3))
 
         # Map 0 -> 0, 1 -> 255
         pixel_values = pixel_bits * 255
 
-        # Reshape to grid (ROWS, COLS, 3) and upscale
-        blocks_grid = pixel_values.reshape((ROWS, COLS, 3)).astype(np.uint8)
+        # Reshape to grid (rows, cols, 3) and upscale
+        blocks_grid = pixel_values.reshape(
+            (self._profile.rows, self._profile.cols, 3),
+        ).astype(np.uint8)
         img: np.ndarray = cv2.resize(
-            blocks_grid, (WIDTH, HEIGHT), interpolation=cv2.INTER_NEAREST
+            blocks_grid,
+            (self._profile.width, self._profile.height),
+            interpolation=cv2.INTER_NEAREST,
         )
 
         return img
@@ -179,7 +189,7 @@ class SequentialProtocol(EncodingProtocol):
         )[0]
 
         # Sanity check on data_len
-        if data_len > BYTES_PER_FRAME or data_len == 0:
+        if data_len > self._profile.seq_bytes_per_frame or data_len == 0:
             return FrameResult(
                 data=None,
                 frame_type=None,

@@ -22,6 +22,7 @@ import zlib
 import numpy as np
 
 from hdmi_exfil import config
+from hdmi_exfil.config import DEFAULT_PROFILE, ResolutionProfile
 from hdmi_exfil.prng import PRNG
 from hdmi_exfil.protocols.base import EncodingProtocol, FrameResult
 from hdmi_exfil.protocols.degree import robust_soliton_cdf, sample_degree
@@ -271,13 +272,22 @@ class FountainProtocol(EncodingProtocol):
 
     Each frame carries a single fountain droplet:
       - Header: magic(2) + seed(4) + K(2) + crc32(4) = 12 bytes
-      - Payload: 12138 bytes of XOR'd chunk data
-      - Total: 12150 bytes packed as 97200 bits (3 bits per block, RGB)
+      - Payload: XOR'd chunk data (size depends on profile)
+      - Total: packed as bits (3 bits per block, RGB)
+
+    Parameters
+    ----------
+    profile:
+        Optional ``ResolutionProfile`` controlling spatial dimensions and
+        capacity.  Defaults to ``DEFAULT_PROFILE`` (1080p/240fps) for full
+        backward compatibility.
     """
 
-    def __init__(self) -> None:
-        self._payload_size: int = PAYLOAD_SIZE
-        self._bytes_per_frame: int = FOUNTAIN_BYTES_PER_FRAME
+    def __init__(self, profile: ResolutionProfile | None = None) -> None:
+        self._profile = profile or DEFAULT_PROFILE
+        # Recompute payload sizes from profile
+        self._total_bytes: int = self._profile.bits_per_frame // 8
+        self._payload_size: int = self._total_bytes - FOUNT_HEADER_SIZE
 
     # -- ABC properties ------------------------------------------------------
 
@@ -329,27 +339,27 @@ class FountainProtocol(EncodingProtocol):
         # Full frame bytes: header_pre_crc(8) + crc(4) + payload
         frame_bytes = header_pre_crc + crc_bytes + data
 
-        # Pad to exactly FOUNTAIN_BYTES_PER_FRAME if payload is short
-        if len(frame_bytes) < self._bytes_per_frame:
-            frame_bytes += b"\x00" * (self._bytes_per_frame - len(frame_bytes))
+        # Pad to exactly total_bytes if payload is short
+        if len(frame_bytes) < self._total_bytes:
+            frame_bytes += b"\x00" * (self._total_bytes - len(frame_bytes))
 
         # Convert bytes -> bits, 3 bits per block (RGB binary)
         byte_arr = np.frombuffer(frame_bytes, dtype=np.uint8)
         bits = np.unpackbits(byte_arr)
 
-        total_bits_needed = config.BLOCKS_PER_FRAME * 3
+        total_bits_needed = self._profile.blocks_per_frame * 3
         if len(bits) < total_bits_needed:
             bits = np.pad(bits, (0, total_bits_needed - len(bits)), "constant")
 
-        # Reshape to (BLOCKS_PER_FRAME, 3) -> RGB values per block
+        # Reshape to (blocks_per_frame, 3) -> RGB values per block
         pixel_bits = bits[:total_bits_needed].reshape(
-            (config.BLOCKS_PER_FRAME, 3),
+            (self._profile.blocks_per_frame, 3),
         )
         pixel_values = pixel_bits * 255
 
-        # Reshape to (ROWS, COLS, 3) grid
+        # Reshape to (rows, cols, 3) grid
         blocks_grid = pixel_values.reshape(
-            (config.ROWS, config.COLS, 3),
+            (self._profile.rows, self._profile.cols, 3),
         ).astype(np.uint8)
 
         # Scale up to full resolution via nearest-neighbour interpolation
@@ -357,7 +367,7 @@ class FountainProtocol(EncodingProtocol):
 
         frame_img: np.ndarray = cv2.resize(
             blocks_grid,
-            (config.WIDTH, config.HEIGHT),
+            (self._profile.width, self._profile.height),
             interpolation=cv2.INTER_NEAREST,
         )
         return frame_img
