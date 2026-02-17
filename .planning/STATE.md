@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 5 of 6 (Fountain Code Optimization)
-Plan: 2 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-17 -- Completed 05-02-PLAN.md (Gaussian Elimination Fallback Decoder)
+Last activity: 2026-02-17 -- Completed 05-03-PLAN.md (RSD Port to Senders)
 
-Progress: [██████████████████████████░░░░░] 22/31 (71%)
+Progress: [██████████████████████████░░░░░] 23/31 (74%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 22
+- Total plans completed: 23
 - Average duration: 5min
-- Total execution time: 117min
+- Total execution time: 125min
 
 **By Phase:**
 
@@ -31,11 +31,11 @@ Progress: [███████████████████████
 | 02-protocol-foundation | 5/5 | 19min | 4min |
 | 03-architecture-refactor | 7/7 | 24min | 3min |
 | 04-performance-optimization | 5/5 | 12min | 2min |
-| 05-fountain-code-optimization | 2/4 | 17min | 9min |
+| 05-fountain-code-optimization | 3/4 | 25min | 8min |
 
 **Recent Trend:**
-- Last 5 plans: 04-03 (3min), 04-02 (3min), 04-05 (4min), 05-01 (8min), 05-02 (9min)
-- Trend: TDD math/algorithm plans take longer due to correctness verification
+- Last 5 plans: 04-02 (3min), 04-05 (4min), 05-01 (8min), 05-02 (9min), 05-03 (8min)
+- Trend: Phase 5 consistently ~8min per plan (cross-language verification)
 
 *Updated after each plan completion*
 
@@ -111,6 +111,10 @@ Recent decisions affecting current work:
 - [05-02]: Auto-trigger GE after each add_droplet with lightweight n_unresolved >= n_unknown guard
 - [05-02]: GE copies unresolved droplet data to avoid mutating decoder state on failure
 - [05-02]: resolve_chunk() as shared entry point for both BP and GE recovered chunks
+- [05-03]: --fountain-redundancy float flag separate from --redundancy int (sequential frame repeat)
+- [05-03]: Python sender uses choose_indices() directly (single-source-of-truth via degree.py)
+- [05-03]: JS sampleDegree uses (lo+hi)>>1 binary search matching Python bisect.bisect_left
+- [05-03]: JS 3bpp encoding deferred to UX phase (RSD math is encoding-independent)
 
 ### Pending Todos
 
@@ -118,10 +122,10 @@ None.
 
 ### Blockers/Concerns
 
-- JS sender still uses old ad-hoc distribution; must be updated in plan 05-03 before cross-language compatibility is restored.
+- JS sender still uses 1bpp encoding while Python uses 3bpp; deferred to UX/Polish phase.
 
 ## Session Continuity
 
-Last session: 2026-02-17T00:13:35Z
-Stopped at: Completed 05-02-PLAN.md (Gaussian Elimination Fallback Decoder)
+Last session: 2026-02-17T00:14:01Z
+Stopped at: Completed 05-03-PLAN.md (RSD Port to Senders)
 Resume file: None
