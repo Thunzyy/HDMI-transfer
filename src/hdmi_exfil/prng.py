@@ -3,8 +3,9 @@
 Extracted from receiver_fountain.py -- bit-exact port of the JavaScript
 SplitMix32 implementation used by sender.html.
 
-The ``choose_indices`` helper replicates the degree-distribution and index
-selection logic shared by both the JS sender and the Python fountain receiver.
+The ``choose_indices`` helper uses the Robust Soliton Distribution (RSD)
+from ``hdmi_exfil.protocols.degree`` for degree selection, replacing the
+former ad-hoc distribution.
 """
 
 from __future__ import annotations
@@ -39,27 +40,23 @@ class PRNG:
 def choose_indices(seed: int, K: int) -> frozenset[int]:
     """Select fountain-code block indices for the given *seed* and *K* chunks.
 
-    Degree distribution (must match JS exactly):
-      - r < 0.1  -> degree = 1
-      - r < 0.6  -> degree = 2
-      - else     -> degree = floor(next_float * min(K, 20)) + 1
+    Uses the Robust Soliton Distribution (RSD) for degree selection,
+    providing mathematically optimal overhead for LT codes.
 
-    Degree is capped to ``min(degree, K)`` to prevent an infinite loop when
-    ``degree > K`` (bug-fix from Phase 2, decision 02-02).
+    Degree is capped to ``min(degree, K)`` as a safety measure.
 
     Returns a *frozenset* (hashable, suitable for caching).
     """
+    # Lazy import to avoid circular dependency:
+    # prng -> protocols.degree -> (protocols.__init__ -> fountain -> prng)
+    from hdmi_exfil.protocols.degree import robust_soliton_cdf, sample_degree
+
     prng = PRNG(seed)
 
-    r = prng.next_float()
-    if r < 0.1:
-        degree = 1
-    elif r < 0.6:
-        degree = 2
-    else:
-        degree = int(prng.next_float() * min(K, 20)) + 1
+    cdf = robust_soliton_cdf(K)
+    degree = sample_degree(cdf, prng)
 
-    # Cap degree to K to prevent infinite loop when degree > K
+    # Safety cap: degree cannot exceed K
     degree = min(degree, K)
 
     indices: set[int] = set()

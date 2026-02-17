@@ -24,6 +24,7 @@ import numpy as np
 from hdmi_exfil import config
 from hdmi_exfil.prng import PRNG
 from hdmi_exfil.protocols.base import EncodingProtocol, FrameResult
+from hdmi_exfil.protocols.degree import robust_soliton_cdf, sample_degree
 from hdmi_exfil.protocols.xor_ops import xor_into
 
 # ---------------------------------------------------------------------------
@@ -67,17 +68,11 @@ class FountainDecoder:
         """Ingest one fountain droplet identified by *seed*."""
         prng = PRNG(seed)
 
-        # Degree distribution (must match JS exactly)
-        degree = 1
-        r = prng.next_float()
-        if r < 0.1:
-            degree = 1
-        elif r < 0.6:
-            degree = 2
-        else:
-            degree = int(prng.next_float() * min(self.K, 20)) + 1
+        # Robust Soliton Distribution for degree selection
+        cdf = robust_soliton_cdf(self.K)
+        degree = sample_degree(cdf, prng)
 
-        # Cap degree to K to prevent infinite loop when degree > K
+        # Safety cap: degree cannot exceed K
         degree = min(degree, self.K)
 
         indices: set[int] = set()

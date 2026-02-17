@@ -95,32 +95,43 @@ class TestPRNGFloatRange:
 
 
 class TestChooseIndices:
-    """Verify chooseIndices matches across Python and JS."""
+    """Verify chooseIndices determinism and correctness.
 
-    def test_choose_indices_match_js(self):
-        """Load choose_indices vectors and verify all 600 entries match."""
-        vectors = _load_vectors()
-        mismatches = []
+    NOTE: The JS cross-language vectors (prng_vectors.json) use the old ad-hoc
+    degree distribution.  Python now uses RSD (Phase 5, plan 05-01).  The JS
+    sender will be updated to RSD in plan 05-03; cross-language vectors will be
+    regenerated at that point.  Until then, we verify determinism directly.
+    """
 
-        for entry in vectors["choose_indices"]:
-            seed = entry["seed"]
-            K = entry["K"]
-            expected_indices = set(entry["indices"])
-
-            # choose_indices returns frozenset; convert for comparison
-            actual_indices = set(choose_indices(seed, K))
-
-            if actual_indices != expected_indices:
-                mismatches.append(
-                    f"seed={seed}, K={K}: "
-                    f"expected={sorted(expected_indices)}, "
-                    f"got={sorted(actual_indices)}"
+    def test_choose_indices_deterministic(self):
+        """Same (seed, K) always returns the same frozenset."""
+        for seed in range(1, 50):
+            for K in [1, 2, 5, 10, 20, 50]:
+                result_a = choose_indices(seed, K)
+                result_b = choose_indices(seed, K)
+                assert result_a == result_b, (
+                    f"seed={seed}, K={K}: non-deterministic"
                 )
 
-        assert not mismatches, (
-            f"{len(mismatches)} chooseIndices mismatches:\n"
-            + "\n".join(mismatches[:20])
-        )
+    def test_choose_indices_returns_frozenset(self):
+        """choose_indices returns a frozenset (hashable)."""
+        result = choose_indices(1, 10)
+        assert isinstance(result, frozenset)
+
+    def test_choose_indices_within_range(self):
+        """All returned indices are in [0, K)."""
+        for seed in range(1, 100):
+            for K in [1, 5, 10, 50]:
+                indices = choose_indices(seed, K)
+                for idx in indices:
+                    assert 0 <= idx < K, (
+                        f"seed={seed}, K={K}: index {idx} out of range"
+                    )
+
+    def test_choose_indices_k1_singleton(self):
+        """K=1: always returns frozenset({0})."""
+        for seed in range(1, 20):
+            assert choose_indices(seed, 1) == frozenset({0})
 
 
 class TestPRNGEdgeCases:

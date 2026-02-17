@@ -13,6 +13,7 @@ import struct
 import hashlib
 
 from hdmi_exfil.prng import PRNG, choose_indices
+from hdmi_exfil.protocols.degree import robust_soliton_cdf, sample_degree
 from hdmi_exfil.protocols.fountain import (
     FountainDecoder, FOUNTAIN_BYTES_PER_FRAME, PAYLOAD_SIZE,
 )
@@ -54,19 +55,12 @@ def prepare_chunks(data):
 def _compute_degree(seed, K):
     """Compute the degree that the decoder will use for a given seed and K.
 
-    This mirrors the inline chooseIndices logic in FountainDecoder.add_droplet
-    WITHOUT the degree cap, to predict if the decoder would hang.
+    Uses the Robust Soliton Distribution (RSD), matching the production
+    code in choose_indices and FountainDecoder.add_droplet.
     """
     prng = PRNG(seed)
-    degree = 1
-    r = prng.next_float()
-    if r < 0.1:
-        degree = 1
-    elif r < 0.6:
-        degree = 2
-    else:
-        degree = int(prng.next_float() * min(K, 20)) + 1
-    return degree
+    cdf = robust_soliton_cdf(K)
+    return sample_degree(cdf, prng)
 
 
 def _would_hang(seed, K):
