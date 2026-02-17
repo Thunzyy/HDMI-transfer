@@ -314,7 +314,15 @@
         for (let r = 0; r < ROWS; r++) {
           const startY = r * BLOCK_SIZE;
           for (let c = 0; c < COLS; c++) {
-            const color = bits[bitIdx++] ? WHITE : BLACK;
+            // Read 3 bits: R, G, B (matching Python np.unpackbits order)
+            const rBit = bits[bitIdx++];
+            const gBit = bits[bitIdx++];
+            const bBit = bits[bitIdx++];
+            // Pack into ABGR uint32 (little-endian: 0xAABBGGRR)
+            const color = 0xFF000000
+              | ((bBit ? 0xFF : 0x00) << 16)
+              | ((gBit ? 0xFF : 0x00) << 8)
+              | (rBit ? 0xFF : 0x00);
             const startX = c * BLOCK_SIZE;
             for (let y = 0; y < BLOCK_SIZE; y++) {
               const rowOffset = (startY + y) * WIDTH + startX;
