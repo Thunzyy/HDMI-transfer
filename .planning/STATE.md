@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 6 of 6 (UX and Polish)
-Plan: 2 of 4 in current phase
-Status: In progress
-Last activity: 2026-02-17 -- Completed 06-01-PLAN.md (Resolution Profiles)
+Plan: 4 of 4 in current phase
+Status: Phase complete -- ALL PHASES COMPLETE
+Last activity: 2026-02-17 -- Completed 06-04-PLAN.md (Calibration and Benchmark CLI)
 
-Progress: [█████████████████████████████░░] 26/28 (93%)
+Progress: [████████████████████████████████] 28/28 (100%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 26
+- Total plans completed: 28
 - Average duration: 5min
-- Total execution time: 141min
+- Total execution time: 149min
 
 **By Phase:**
 
@@ -32,11 +32,11 @@ Progress: [███████████████████████
 | 03-architecture-refactor | 7/7 | 24min | 3min |
 | 04-performance-optimization | 5/5 | 12min | 2min |
 | 05-fountain-code-optimization | 4/4 | 35min | 9min |
-| 06-ux-polish | 2/4 | 6min | 3min |
+| 06-ux-polish | 4/4 | 14min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: 05-02 (9min), 05-03 (8min), 05-04 (10min), 06-02 (2min), 06-01 (4min)
-- Trend: UX plans executing quickly (2-4min)
+- Last 5 plans: 05-04 (10min), 06-02 (2min), 06-01 (4min), 06-03 (4min), 06-04 (4min)
+- Trend: UX plans executing quickly (2-4min). All phases complete.
 
 *Updated after each plan completion*
 
@@ -125,6 +125,9 @@ Recent decisions affecting current work:
 - [06-01]: ResolutionProfile is additive -- existing module-level constants remain independent (not aliased to DEFAULT_PROFILE)
 - [06-01]: _FOUNT_HEADER_SIZE duplicated in config.py (12 bytes) to avoid circular import with fountain.py
 - [06-01]: Profile injection via optional constructor param (profile=None defaults to DEFAULT_PROFILE)
+- [06-04]: Checkerboard uses only black (0,0,0) and white (255,255,255) for chroma subsampling robustness
+- [06-04]: Perfect capture returns 60.0 dB SNR (capped when noise < 1e-6)
+- [06-04]: Benchmark runs encode/sample/decode in-memory (no display or capture hardware needed)
 
 ### Pending Todos
 
@@ -136,6 +139,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-17T08:52:48Z
-Stopped at: Completed 06-01-PLAN.md (Resolution Profiles)
+Last session: 2026-02-17T09:02:14Z
+Stopped at: Completed 06-04-PLAN.md (Calibration and Benchmark CLI) -- ALL PHASES COMPLETE
 Resume file: None
