@@ -24,6 +24,7 @@ dev = [
 [project.scripts]
 hdmi-send = "hdmi_exfil.cli.send:main"
 hdmi-recv = "hdmi_exfil.cli.receive:main"
+hdmi-calibrate = "hdmi_exfil.cli.calibrate:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
