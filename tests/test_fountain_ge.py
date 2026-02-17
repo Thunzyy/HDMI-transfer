@@ -77,12 +77,17 @@ class TestGERecoveryWhenBPStalls:
         """Manually construct a scenario where BP stalls but GE can solve.
 
         Create K=5 chunks.  Feed the decoder:
-        - 2 degree-1 droplets (chunks 0 and 1 -- BP resolves these)
-        - 3 degree-2 droplets covering {2,3}, {3,4}, {2,4}
+        - Chunks 0 and 1 resolved by BP
+        - 3 droplets covering {2,3}, {3,4}, {2,3,4} (linearly independent)
 
-        After BP resolves chunks 0 and 1, the three degree-2 droplets
-        become a 3x3 system over unknowns {2,3,4}.  BP cannot peel any
-        of them (all degree-2), but GE can solve the full-rank system.
+        After BP resolves chunks 0 and 1, the three droplets form a
+        full-rank 3x3 GF(2) system over unknowns {2,3,4}.  BP cannot
+        peel any of them (all degree >= 2), but GE solves the system.
+
+        GF(2) matrix:     [1,1,0]   (eq0: c2^c3)
+                          [0,1,1]   (eq1: c3^c4)
+                          [1,1,1]   (eq2: c2^c3^c4)
+        Rank = 3 (full rank).
         """
         K = 5
         chunks = _make_chunks(K)
@@ -93,17 +98,15 @@ class TestGERecoveryWhenBPStalls:
         decoder.resolve_chunk(1, chunks[1].copy())
         assert len(decoder.chunks) == 2  # BP resolved 0 and 1
 
-        # Three degree-2 droplets over unknowns {2,3,4}
-        # These form a full-rank GF(2) system:
-        #   eq0: c2 XOR c3 = d0
-        #   eq1: c3 XOR c4 = d1
-        #   eq2: c2 XOR c4 = d2
+        # Three droplets over unknowns {2,3,4} -- full rank in GF(2)
         d0 = _build_droplet_raw({2, 3}, chunks)
         d1 = _build_droplet_raw({3, 4}, chunks)
-        d2 = _build_droplet_raw({2, 4}, chunks)
+        d2 = _build_droplet_raw({2, 3, 4}, chunks)
 
         # Store these as unresolved droplets (simulating BP stall)
-        for indices, data in [({2, 3}, d0), ({3, 4}, d1), ({2, 4}, d2)]:
+        for indices, data in [
+            ({2, 3}, d0), ({3, 4}, d1), ({2, 3, 4}, d2),
+        ]:
             entry = [set(indices), data.copy()]
             decoder.droplets.append(entry)
             for idx in indices:
@@ -133,12 +136,12 @@ class TestGERecoveryWhenBPStalls:
             decoder.resolve_chunk(i, chunks[i].copy())
         assert len(decoder.chunks) == 7
 
-        # 3 equations over unknowns {7, 8, 9}:
-        #   eq0: c7 XOR c8 = d0
-        #   eq1: c8 XOR c9 = d1
-        #   eq2: c7 XOR c9 = d2
-        pairs = [({7, 8}), ({8, 9}), ({7, 9})]
-        for indices in pairs:
+        # 3 linearly independent equations over unknowns {7, 8, 9}:
+        #   eq0: c7 XOR c8       -> [1,1,0]
+        #   eq1: c8 XOR c9       -> [0,1,1]
+        #   eq2: c7 XOR c8 XOR c9 -> [1,1,1]   (rank 3)
+        eqs = [({7, 8}), ({8, 9}), ({7, 8, 9})]
+        for indices in eqs:
             data = _build_droplet_raw(indices, chunks)
             entry = [set(indices), data.copy()]
             decoder.droplets.append(entry)
@@ -259,7 +262,7 @@ class TestGETryAutoTrigger:
         """add_droplet calls GE automatically when BP stalls.
 
         Create K=5, inject degree-1 for chunks 0,1 via add_droplet,
-        then feed crafted degree-2 droplets that BP cannot peel.
+        then inject crafted droplets that BP cannot peel (all degree>=2).
         After enough droplets, the auto-trigger should invoke GE
         and complete decoding.
         """
@@ -271,18 +274,16 @@ class TestGETryAutoTrigger:
         decoder.resolve_chunk(0, chunks[0].copy())
         decoder.resolve_chunk(1, chunks[1].copy())
 
-        # Feed degree-2 droplets covering {2,3}, {3,4}, {2,4}
-        # These form a solvable GF(2) system but BP cannot peel any.
-        pairs = [({2, 3}), ({3, 4}), ({2, 4})]
-        for indices in pairs:
+        # Inject linearly independent droplets: {2,3}, {3,4}, {2,3,4}
+        eqs = [({2, 3}), ({3, 4}), ({2, 3, 4})]
+        for indices in eqs:
             data = _build_droplet_raw(indices, chunks)
             entry = [set(indices), data.copy()]
             decoder.droplets.append(entry)
             for idx in indices:
                 decoder.chunk_to_droplets[idx].append(entry)
 
-        # Now feed one more droplet (any seed) to trigger try_gaussian_elimination
-        # The auto-trigger checks after each add_droplet call
+        # Feed one more droplet to trigger try_gaussian_elimination
         dummy_data = _build_droplet_from_seed(999, K, chunks, CHUNK_SIZE)
         decoder.add_droplet(999, dummy_data)
 

@@ -1,8 +1,8 @@
 """Fountain-code (LT-code) encoding protocol implementation.
 
 Implements FountainProtocol (3-bit-per-block RGB binary encoding with LT-code
-redundancy) and FountainDecoder (belief-propagation / peeling decoder) behind
-the ``EncodingProtocol`` ABC defined in ``base.py``.
+redundancy) and FountainDecoder (hybrid BP + GE decoder) behind the
+``EncodingProtocol`` ABC defined in ``base.py``.
 
 Each block encodes 3 bits (one per R/G/B channel, each either 0 or 255),
 matching the same 3bpp pattern used by SequentialProtocol.  This gives
@@ -42,15 +42,18 @@ PAYLOAD_SIZE: int = FOUNTAIN_BYTES_PER_FRAME - FOUNT_HEADER_SIZE  # 12138
 
 
 # ---------------------------------------------------------------------------
-# FountainDecoder -- belief-propagation peeling decoder
+# FountainDecoder -- hybrid BP + Gaussian elimination decoder
 # ---------------------------------------------------------------------------
 
 class FountainDecoder:
-    """Incremental LT-code decoder using on-the-fly peeling.
+    """Incremental LT-code decoder using hybrid BP + GE.
+
+    Primary decoding path is belief-propagation (peeling).  When BP stalls
+    (no degree-1 droplets remain), Gaussian elimination in GF(2) is
+    attempted on the unresolved droplet system to recover remaining chunks.
 
     Accepts fountain droplets (seed + XOR'd payload), reconstructs the
-    original *K* chunks via belief propagation.  Functionally identical to
-    the decoder formerly in ``receiver_fountain.py`` lines 38-131.
+    original *K* chunks.
     """
 
     def __init__(self, total_chunks: int, payload_size: int) -> None:
@@ -102,6 +105,10 @@ class FountainDecoder:
             for idx in new_indices:
                 self.chunk_to_droplets[idx].append(droplet_entry)
 
+        # Auto-trigger GE when BP stalls and enough equations exist
+        if not self.is_complete():
+            self.try_gaussian_elimination()
+
     def resolve_chunk(self, chunk_idx: int, chunk_data: np.ndarray) -> None:
         """Record a recovered chunk and propagate via peeling."""
         if chunk_idx in self.chunks:
@@ -132,6 +139,127 @@ class FountainDecoder:
             else:
                 out.extend(b"\x00" * self.payload_size)
         return out
+
+    # -- Gaussian elimination fallback ---------------------------------------
+
+    def try_gaussian_elimination(self) -> None:
+        """Attempt GE if enough unresolved equations exist.
+
+        Lightweight check: only invokes the full GE solver when the
+        number of unresolved droplets is at least as large as the number
+        of unknown chunks (necessary condition for solvability).
+        """
+        if self.is_complete():
+            return
+
+        n_unknown = self.K - len(self.chunks)
+        n_unresolved = sum(1 for d in self.droplets if len(d[0]) > 0)
+
+        if n_unresolved >= n_unknown:
+            self.gaussian_elimination_fallback()
+
+    def gaussian_elimination_fallback(self) -> bool:
+        """Solve unresolved droplets via GF(2) Gaussian elimination.
+
+        Collects all droplets with remaining unknown indices, builds a
+        binary coefficient matrix and data matrix, row-reduces in GF(2),
+        and back-substitutes to recover unknown chunks.
+
+        Returns ``True`` if any new chunks were resolved, ``False``
+        otherwise (e.g. underdetermined system or no unresolved work).
+        """
+        # 1. Collect unresolved droplets
+        unresolved = [
+            (d[0].copy(), d[1].copy())
+            for d in self.droplets
+            if len(d[0]) > 0
+        ]
+        if not unresolved:
+            return False
+
+        # 2. Identify unknown chunk indices
+        unknown_set: set[int] = set()
+        for indices, _ in unresolved:
+            unknown_set.update(indices)
+
+        # Remove any chunk indices that are already known
+        unknown_set -= set(self.chunks.keys())
+        if not unknown_set:
+            return False
+
+        unknown_list = sorted(unknown_set)
+        col_map = {chunk_idx: col for col, chunk_idx in enumerate(unknown_list)}
+        n_unknowns = len(unknown_list)
+        n_equations = len(unresolved)
+
+        # 3. Underdetermined check
+        if n_equations < n_unknowns:
+            return False
+
+        # 4. Build binary matrix M (n_equations x n_unknowns) in GF(2)
+        #    and data matrix D (n_equations x payload_size)
+        M = np.zeros((n_equations, n_unknowns), dtype=np.uint8)
+        D = np.zeros((n_equations, self.payload_size), dtype=np.uint8)
+
+        for row, (indices, data) in enumerate(unresolved):
+            # XOR out any known chunks from this droplet's data
+            row_data = data.copy()
+            for idx in list(indices):
+                if idx in self.chunks:
+                    row_data ^= self.chunks[idx]
+                elif idx in col_map:
+                    M[row, col_map[idx]] = 1
+            D[row] = row_data
+
+        # 5. Forward elimination (row echelon form in GF(2))
+        pivot_row = 0
+        pivot_cols: list[int] = []  # tracks which column each pivot row solves
+
+        for col in range(n_unknowns):
+            # Find pivot: first row at or below pivot_row with M[row][col] == 1
+            found = -1
+            for row in range(pivot_row, n_equations):
+                if M[row, col] == 1:
+                    found = row
+                    break
+
+            if found == -1:
+                continue  # No pivot in this column; skip
+
+            # Swap pivot row into position
+            if found != pivot_row:
+                M[[pivot_row, found]] = M[[found, pivot_row]]
+                D[[pivot_row, found]] = D[[found, pivot_row]]
+
+            # Eliminate all other rows with a 1 in this column
+            for row in range(n_equations):
+                if row != pivot_row and M[row, col] == 1:
+                    M[row] ^= M[pivot_row]  # GF(2) XOR
+                    D[row] ^= D[pivot_row]  # GF(2) XOR
+
+            pivot_cols.append(col)
+            pivot_row += 1
+
+        # 6. Back-substitution: extract solved chunks
+        #    After full elimination (forward + back in one pass above),
+        #    each pivot row has exactly one 1 in its pivot column.
+        resolved_any = False
+        for p_row, col in enumerate(pivot_cols):
+            # Verify this row has a clean pivot (M[p_row][col] == 1)
+            if M[p_row, col] != 1:
+                continue
+
+            # Check that no other unknowns remain in this row
+            row_sum = int(np.sum(M[p_row]))
+            if row_sum != 1:
+                continue  # Row has other unknowns; cannot solve
+
+            chunk_idx = unknown_list[col]
+            if chunk_idx not in self.chunks:
+                self.resolve_chunk(chunk_idx, D[p_row].copy())
+                resolved_any = True
+
+        return resolved_any
 
 
 # ---------------------------------------------------------------------------
