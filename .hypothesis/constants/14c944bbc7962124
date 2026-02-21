@@ -1,0 +1,4 @@
+# file: C:\Users\poign\Desktop\HDMI_exfil\src\hdmi_exfil\config.py
+# hypothesis_version: 6.151.9
+
+[240, 1080, 1920, 2160, 3840, '>HBIIH', 'balanced', 'block_size', 'constants.json', 'fountain_magic', 'hdmi_exfil', 'height', 'quality', 'seq_magic', 'speed', 'threshold', 'utf-8', 'width']
