@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Maximum throughput data transfer over HDMI signal encoding"
 requires-python = ">= 3.11"
 dependencies = [
-    "opencv-python-headless >= 4.0",
+    "opencv-python >= 4.0",
     "numpy >= 1.24",
     "screeninfo >= 0.8",
     "pygame-ce >= 2.5.0",
@@ -31,7 +31,7 @@ hdmi-bench = "hdmi_exfil.cli.benchmark:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-hdmi_exfil = ["constants.json"]
+"hdmi_exfil.core" = ["constants.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
