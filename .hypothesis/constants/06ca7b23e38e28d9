@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/scipy/linalg/_misc.py
-# hypothesis_version: 6.151.6
-
-['1', 'LinAlgError', 'LinAlgWarning', '__array__', 'fdFD', 'i', 'lange', 'norm', 'nrm2', 'preferred']

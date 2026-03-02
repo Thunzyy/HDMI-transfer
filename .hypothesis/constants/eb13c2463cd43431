@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/externals.py
-# hypothesis_version: 6.151.6
-
-[128, 4294967295, '__fixunsdfdi', '__fixunssfdi', '__multi3', '_ftol', '_ftol2', 'fptoui', 'fptouif', 'linux', 'multi3', 'win32']

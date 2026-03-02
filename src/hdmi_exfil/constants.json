@@ -1,8 +1,0 @@
-{
-  "width": 1920,
-  "height": 1080,
-  "block_size": 8,
-  "seq_magic": 55930,
-  "fountain_magic": 61632,
-  "threshold": 128
-}

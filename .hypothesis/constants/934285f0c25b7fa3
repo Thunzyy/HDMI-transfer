@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/np/ufunc/dufunc.py
-# hypothesis_version: 6.151.6
-
-[', ', 'DUFuncTyping_', 'Invalid axis', '__array_ufunc__', '__call__', '_keepalive', 'at', 'axis_end', 'identity', 'nargs', 'nin', 'nout', 'npyufunc', 'out', 'reduce', 'signature']

@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/cpu.py
-# hypothesis_version: 6.151.6
-
-['.', 'A', '_dbg_optnone', '_nrt', 'armv7l', 'boundscheck', 'cfunc_wrapper', 'consts', 'cpu', 'dbg_extend_lifetimes', 'debug', 'debuginfo', 'enable_looplift', 'enable_pyobject', 'entry', 'env', 'error_model', 'fastmath', 'forceinline', 'forceobj', 'globals', 'inline', 'libgcc_s.so.1', 'looplift', 'no_cfunc_wrapper', 'no_cpython_wrapper', 'no_rewrites', 'nogil', 'noinline', 'nopython', 'nrt', 'numba.exec', 'offsetof_env_body', 'parallel', 'python', 'wrapper']

@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/annotations/type_annotations.py
-# hypothesis_version: 6.151.6
-
-['  %s', ' -> ', '# File: %s', '# Has %d overloads', '# Loop at line %d', '%s', '%s  :: %s', '%s = %s  :: %s', '%s# %s', '%s# --- LINE %d --- ', '&nbsp;', ':', '<missing>', 'XXX Lifted Loop XXX', '^\\s*', 'call', 'filename', 'funcname', 'ir_indent', 'ir_lines', 'label %s', 'lifted_tag', 'num_lifted_loops', 'object_tag', 'pyobject', 'python_indent', 'python_lines', 'python_tags', 'r', 'template.html']

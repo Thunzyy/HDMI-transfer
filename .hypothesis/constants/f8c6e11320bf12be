@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/np/linalg.py
-# hypothesis_version: 6.151.6
-
-[-1.0, 0.0, 1e-15, 1.0, "'@'", '<BLAS function>', '==', 'A', 'C', 'CF', 'F', 'L', 'N', 'S', 'U', 'V', 'c', 'cholesky', 'cond', 'd', 'det', 'dtype', 'eig', 'eigh', 'eigvals', 'eigvalsh', 'inv', 'kron', 'lstsq', 'matrix_power', 'matrix_rank', 'n', 'norm', 'np', 'np.dot()', 'np.linalg', 'numba_ez_cgeev', 'numba_ez_gelsd', 'numba_ez_geqrf', 'numba_ez_gesdd', 'numba_ez_rgeev', 'numba_ez_xxgetri', 'numba_ez_xxgqr', 'numba_ez_xxxevd', 'numba_fatal_error', 'numba_xgesv', 'numba_xxdot', 'numba_xxgemm', 'numba_xxgemv', 'numba_xxgetrf', 'numba_xxnrm2', 'numba_xxpotrf', 'outer', 'pinv', 'qr', 's', 'slogdet', 'solve', 'svd', 't', 'trace', 'underlying_float', 'unreachable', 'z']

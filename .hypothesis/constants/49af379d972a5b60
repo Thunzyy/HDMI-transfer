@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/types/__init__.py
-# hypothesis_version: 6.151.6
-
-['.', '...', 'I', 'N', '_undef_var', 'any', 'bitgen', 'bool', 'c_bool', 'c_complex128', 'c_complex64', 'c_float16', 'c_float32', 'c_float64', 'c_int16', 'c_int32', 'c_int64', 'c_int8', 'c_uint16', 'c_uint32', 'c_uint64', 'c_uint8', 'code', 'complex128', 'complex64', 'ffi', 'ffi_forced_object', 'float16', 'float32', 'float64', 'float_', 'i', 'int%d', 'int16', 'int32', 'int64', 'int8', 'n', 'none', 'np_bool_', 'np_complex128', 'np_complex64', 'np_float16', 'np_float32', 'np_float64', 'np_int%d', 'np_int16', 'np_int32', 'np_int64', 'np_int8', 'np_uint%d', 'np_uint16', 'np_uint32', 'np_uint64', 'np_uint8', 'py_bool', 'py_complex', 'py_float', 'py_int', 'pyfunc', 'pyobject', 'rng', 'slice<a:b:c>', 'slice<a:b>', 'str', 'uint%d', 'uint16', 'uint32', 'uint64', 'uint8', 'undefined', 'unicode_type', 'unknown', 'void*']

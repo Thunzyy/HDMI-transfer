@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/anyio/streams/tls.py
-# hypothesis_version: 6.151.6
-
-[65536, 'PosArgsT', 'T_Retval']

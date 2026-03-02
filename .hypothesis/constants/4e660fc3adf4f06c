@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/types/common.py
-# hypothesis_version: 6.151.6
-
-['%s(%s, %sd, %s)', 'A', 'C', 'CF', 'CS', 'F', 'FS', "Invalid layout '%s'", 'readonly %s']

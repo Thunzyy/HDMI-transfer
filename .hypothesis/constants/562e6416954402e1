@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/np/npdatetime.py
-# hypothesis_version: 6.151.6
-
-[100, 120, 121, 151, 152, 181, 182, 212, 213, 243, 244, 273, 274, 300, 304, 305, 334, 335, 365, 400, 1970, 1000003, 4294967295, 18446744069414584320, '!=', '<', '<=', '==', '>', '>=', 'D', 'W', '__hash__', 'add', 'leap_year_months_acc', 'nan', 'ret', 'sub', 'uno']

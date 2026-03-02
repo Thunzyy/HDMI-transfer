@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/options.py
-# hypothesis_version: 6.151.6
-
-['OptionMixins', 'auto_parallel', 'boundscheck', 'dbg_extend_lifetimes', 'dbg_optnone', 'debuginfo', 'enable_looplift', 'enable_pyobject', 'error_model', 'fastmath', 'force_pyobject', 'forceinline', 'inline', 'no_cfunc_wrapper', 'no_cpython_wrapper', 'no_rewrites', 'nrt', 'release_gil', 'writable_args']

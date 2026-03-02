@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/np/random/old_random_methods.py
-# hypothesis_version: 6.151.6
-
-[255, 65535, 4294967295, 18446744073709551615, 'low is out of bounds']

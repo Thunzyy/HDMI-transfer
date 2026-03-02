@@ -1,4 +1,0 @@
-pytest>=8.0
-hypothesis>=6.0
-opencv-python-headless>=4.0
-numpy>=2.0

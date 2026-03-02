@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/anyio/_core/_typedattr.py
-# hypothesis_version: 6.151.6
-
-['Attribute not found', 'T_Attr', 'T_Default', '_', '__annotations__']

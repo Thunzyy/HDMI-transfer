@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/caching.py
-# hypothesis_version: 6.151.6
-
-['%s-%s.py%d%d%s', '%s.%s', '%s.nbi', '%s.tmp.%s', '%s.{number:d}.nbc', '-', '.', '.zip', '<', '<%s py_func=%r>', '<ipython-', '>', '_', '__pycache__', 'abiflags', 'frozen', 'ipykernel_', 'nt', 'numba', 'numba_cache', 'rb', 'utf-8', 'wb']

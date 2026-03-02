@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/cpython/old_builtins.py
-# hypothesis_version: 6.151.6
-
-[1.0, 10.0, 1e+22, '==', 'Unsupported type', '__repr__', '__str__', 'always', 'b', 'bytearray', 'bytes', 'float{}', 'llvm.rint.f%d', 'not in', 'strings']

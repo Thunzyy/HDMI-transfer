@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/old_boxing.py
-# hypothesis_version: 6.151.6
-
-['!=', '<=', '==', '>', '>=', 'PyExc_TypeError', 'PyExc_ValueError', 'bit_generator', 'c_void_p', 'cast', 'ctypes', 'fnptr', 'next_double', 'next_uint32', 'next_uint64', 'numba', 'start', 'state', 'state_address', 'step', 'stop', 'typeof', 'value']

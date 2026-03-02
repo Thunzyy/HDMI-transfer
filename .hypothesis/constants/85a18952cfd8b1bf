@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/target_extension.py
-# hypothesis_version: 6.151.6
-
-['CPU', 'CUDA', 'GPU', 'cpu', 'cuda', 'generic', 'gpu', 'npyufunc', 'target']

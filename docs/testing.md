@@ -1,110 +1,67 @@
-# Testing Guide
+# Tests
 
-## Test Suite Overview
-
-The test suite is organized in three levels:
-
-| Level | Hardware | What it tests |
-|-------|----------|---------------|
-| **Unit tests** | None | Encode/decode, PRNG, fountain math, profiles, XOR ops |
-| **Loopback tests** | Elgato on same PC | Full pipeline through real capture card |
-| **Integration tests** | 2 PCs + HDMI cable | Production end-to-end transfer |
-
-## Running Tests
-
-### All unit tests (no hardware)
+## Tests unitaires (pas de matériel requis)
 
 ```bash
+pip install -r requirements-dev.txt
 pytest
 ```
 
-This runs ~300 tests covering sequential/fountain encode/decode, PRNG determinism, profile math, calibration patterns, threaded capture, and property-based tests.
+~300 tests couvrant : encode/decode séquentiel et fountain, PRNG, profils, calibration, capture threadée, tests property-based.
 
-### Exclude slow tests
-
-```bash
-pytest -k "not slow"
-```
-
-Slow tests include fountain overhead benchmarks at large K values (K>=500).
-
-### Verbose output
+### Commandes utiles
 
 ```bash
-pytest -v
+pytest -v                          # sortie détaillée
+pytest -k "not slow"               # exclure les tests lents (K>=500)
+pytest tests/test_fountain.py -v   # un fichier spécifique
 ```
 
-### Specific test file
+## Tests hardware (Elgato requis)
 
 ```bash
-pytest tests/test_profiles.py -v
-pytest tests/test_fountain.py -v
-pytest tests/test_calibration.py -v
+pytest -m hardware
 ```
 
-### Hardware tests (requires Elgato)
+Les tests marqués `@pytest.mark.hardware` nécessitent une Elgato connectée.
+
+## Benchmark en mémoire
 
 ```bash
-pytest --hardware
+hdmi-bench --profile balanced --mode fountain --no-json
 ```
 
-The `--hardware` flag enables tests marked with `@pytest.mark.hardware`. These require an Elgato capture card connected. Without the flag, hardware tests are automatically skipped.
-
-### Full suite with all markers
+## Test loopback complet
 
 ```bash
-pytest --hardware -v
+# Terminal 1 : receiver
+hdmi-recv 1 --profile balanced
+
+# Terminal 2 : sender
+hdmi-send monfichier.zip --mode fountain --profile balanced --screen 0
 ```
 
-## Test Files Reference
+## Résultats validés
 
-| File | What it tests |
-|------|---------------|
-| `test_sequential.py` | Sequential protocol encode/decode round-trips |
-| `test_fountain.py` | Fountain protocol basics, droplet generation |
-| `test_fountain_3bpp.py` | 3-bit-per-block fountain encoding |
-| `test_fountain_ge.py` | Gaussian elimination fallback decoder |
-| `test_fountain_overhead.py` | Overhead ratio at various K values |
-| `test_rsd.py` | Robust Soliton Distribution math |
-| `test_rsd_cross_language.py` | Python/JS PRNG + RSD parity |
-| `test_prng.py` | SplitMix32 determinism and distribution |
-| `test_profiles.py` | ResolutionProfile derived values, protocol injection |
-| `test_properties.py` | Property-based tests (hypothesis) for arbitrary data |
-| `test_xor_ops.py` | Numba XOR operations |
-| `test_calibration.py` | Test pattern generation, SNR computation, benchmark |
-| `test_threaded_capture.py` | Ring buffer threaded capture |
-| `test_pygame_renderer.py` | Pygame SDL2 renderer |
-| `test_loopback.py` | End-to-end loopback via Elgato (hardware) |
+Testé sur Windows 11, Elgato 4K X, écran 1080p dupliqué :
 
-## pytest Markers
+| Test | Résultat |
+|------|----------|
+| Calibration loopback | SNR 60.0 dB (EXCELLENT) |
+| Transfert 2.6 KB | SHA-256 OK, 0.14s |
+| Transfert 50 KB | SHA-256 OK, 0.46s, ~110 KB/s |
 
-Configured in `pyproject.toml`:
+## Fichiers de test
 
-- **`hardware`** -- Requires Elgato capture card. Skipped unless `--hardware` passed.
-- **`slow`** -- Takes >10 seconds (fountain overhead benchmarks at K>=500).
-
-## Writing New Tests
-
-Tests import from the package:
-
-```python
-from hdmi_exfil.protocols.sequential import SequentialProtocol
-from hdmi_exfil.protocols.fountain import FountainProtocol, FountainDecoder
-from hdmi_exfil.config import PROFILES, ResolutionProfile
-from hdmi_exfil.prng import splitmix32, choose_indices
-```
-
-Example encode/decode round-trip test:
-
-```python
-def test_sequential_roundtrip():
-    proto = SequentialProtocol()
-    data = b"hello world" + b"\x00" * (proto.bytes_per_frame - 11)
-    frame = proto.encode_frame(data, frame_index=0, total_frames=1)
-    result = proto.decode_frame(frame)
-    assert result.data[:11] == b"hello world"
-```
-
-## Known Issues
-
-- `test_xor_ops.py::test_fountain_decoder_with_numba` has a pre-existing intermittent failure related to Numba JIT warmup. Not a regression.
+| Fichier | Contenu |
+|---------|---------|
+| `test_sequential.py` | Protocole séquentiel encode/decode |
+| `test_fountain.py` | Protocole fountain, droplets |
+| `test_fountain_3bpp.py` | Encodage 3 bits par bloc |
+| `test_fountain_ge.py` | Élimination de Gauss (fallback) |
+| `test_prng.py` | SplitMix32 déterminisme |
+| `test_rsd.py` | Robust Soliton Distribution |
+| `test_calibration.py` | Patterns de test, SNR |
+| `test_threaded_capture.py` | Capture threadée ring buffer |
+| `test_profiles.py` | Profils de résolution |
+| `test_properties.py` | Tests property-based (hypothesis) |

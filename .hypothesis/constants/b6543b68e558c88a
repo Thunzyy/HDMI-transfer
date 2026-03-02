@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/typing/old_builtins.py
-# hypothesis_version: 6.151.6
-
-['IndexValue(%f, %f)', 'IndexValueType({})', '__class__', 'complex.conjugate', 'getiter', 'index', 'iternext', 'kws not supported', 'not in', 'ns', 'number.item', 'pair_first', 'pair_second', 'print_item', 'pysig', 'slice.indices', 'static_getitem', 'underlying_float', 'value']

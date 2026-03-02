@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/misc/llvm_pass_timings.py
-# hypothesis_version: 6.151.6
-
-[0.0, 0.01, 100, 'Instr', 'Name', 'NamedTimings', 'PassTimingRecord', 'System Time', 'Top timings:', 'Total', 'User Time', 'User+System', 'Wall Time', '[a-zA-Z+ ]+', '[a-zA-Z][a-zA-Z+ ]+', '\\s*(.*)', '_data', '_pb', 'instruction', 'name', 'pass_name', 'self._data Legacy', 'self._data NPM', 'system', 'system_percent', 'system_time', 'timings', 'user', 'user_percent', 'user_system', 'user_system_percent', 'user_system_time', 'user_time', 'wall', 'wall_percent', 'wall_time']

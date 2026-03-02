@@ -1,4 +1,4 @@
-# file: C:\Users\poign\Desktop\HDMI_exfil\src\hdmi_exfil\file_handling\metadata.py
+# file: C:\Users\poign\Desktop\HDMI_exfil\src\file_handling\metadata.py
 # hypothesis_version: 6.151.9
 
 [1024, '>H', '>I', 'utf-8']

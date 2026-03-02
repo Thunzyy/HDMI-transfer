@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/misc/gdb_hook.py
-# hypothesis_version: 6.151.6
-
-['%d', '-ex', '-x', '0', '1', '==', '>', 'attach', 'bsd', 'c', 'cmdlang.gdb', 'darwin', 'execl', 'fork', 'getpid', 'kernel', 'linux', 'numba_gdb_breakpoint', 'proc', 'ptrace_scope', 'rt', 'sleep', 'snprintf', 'sys', 'yama']

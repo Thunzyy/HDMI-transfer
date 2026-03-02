@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/types/containers.py
-# hypothesis_version: 6.151.6
-
-['%s(%s x %d)', '%s(%s)', '%s(%s)<iv=%s>', ',', ', ', 'LiteralList({})', 'Union[{}]', '_asdict', '_ntclazz', 'entry(%s)', 'items[{}]', 'iter(%s)', 'iter[{}->{}]', 'iter[{}->{}],{}', 'keys[{}]', 'list', 'list[{}]', 'pair<%s, %s>', 'payload(%s)', 'reflected list', 'reflected set', 'set', 'values[{}]', '{}[{},{}]<iv={}>', '{}[{}]']

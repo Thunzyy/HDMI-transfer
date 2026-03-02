@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/callwrapper.py
-# hypothesis_version: 6.151.6
-
-['==', 'DEBUGJIT: {0}', 'arg%d.err', 'arg.end', 'entry', 'noinline', 'py_args', 'py_closure', 'py_kws']

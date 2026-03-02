@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/typing/asnumbatype.py
-# hypothesis_version: 6.151.6
-
-[0.0, '__origin__', 'numba']

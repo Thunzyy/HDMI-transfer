@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/typed/listobject.py
-# hypothesis_version: 6.151.6
-
-['!=', '<', '==', '__contains__', '__hash__', '_allocated', '_dtype', '_is_mutable', '_make_immutable', '_make_mutable', '_numba_list_dtor', 'alwaysinline', 'append', 'clear', 'copy', 'count', 'data', 'delitem', 'dtype', 'end', 'expected a {}', 'extend', 'getitem_unchecked', 'getiter', 'index', 'insert', 'item not in list', 'item_type', 'iternext', 'linkonce_odr', 'list', 'list is immutable', 'meminfo', 'nounwind', 'numba_list_allocated', 'numba_list_append', 'numba_list_base_ptr', 'numba_list_delitem', 'numba_list_free', 'numba_list_new', 'numba_list_setitem', 'parent', 'pop', 'pop from empty list', 'readonly', 'remove', 'reverse', 'sext', 'size', 'sort', 'start', 'trunc', 'yield_type']

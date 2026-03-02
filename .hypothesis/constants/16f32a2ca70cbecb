@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/typing/arraydecl.py
-# hypothesis_version: 6.151.6
-
-[', ', '.', 'A', 'Array_', 'C', 'CF', 'F', 'Indexing', 'advanced', 'args not supported', 'args unsupported', 'array.', 'array.argsort', 'array.astype', 'array.copy', 'array.flatten', 'array.item', 'array.itemset', 'array.nonzero', 'array.ravel', 'array.reshape', 'array.sort', 'array.transpose', 'array.view', 'axis', 'dtype', 'f', 'generic', 'i', 'imag', 'index', 'key', 'kind', 'kwargs unsupported', 'kws not supported', 'prefer_literal', 'quicksort', 'real', 'resolve_', 'result', 'static_getitem', 'static_setitem', 'sum']

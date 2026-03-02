@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/cpython/setobj.py
-# hypothesis_version: 6.151.6
-
-[255, '<', '<=', '==', '>', '>=', 'SetLoop', 'calcsize.body', 'calcsize.end', 'cannot allocate set', 'cannot copy set', 'cannot grow set', 'cannot shrink set', 'clear', 'copy', 'difference', 'difference_update', 'discard', 'do_break', 'entries', 'entry', 'found', 'getiter', 'index', 'intersection', 'intersection_update', 'isdisjoint', 'issubset', 'issuperset', 'iternext', 'linkonce_odr', 'lookup.body', 'lookup.end', 'lookup.found', 'lookup.not_found', 'next_entry_body', 'next_entry_end', 'pop', 'remove', 'set.add', 'set.pop(): empty set', 'set.update', 'symmetric_difference', 'union']

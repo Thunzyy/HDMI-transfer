@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/types/npytypes.py
-# hypothesis_version: 6.151.6
-
-['%s(%s, %sd, %s)', ')', ',', ', ', '0d', ';alignment={}', ';title={}', 'A', 'ArrayFlags({0})', 'C', 'CF', 'F', 'Record({};{};{})', '[', '[char x %d]', '[unichr x %d]', ']', '_RecordField', 'aligned', 'alignment', 'array', 'dtype', 'dtype(%s)', 'flat', 'indexed', 'mutable', 'ndim', 'ndindex(ndim={ndim})', 'nestedarray(%s, %s)', 'offset', 'readonly', 'readonly ', 'scalar', 'title', 'type', 'unaligned', 'unaligned ']

@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/extending.py
-# hypothesis_version: 6.151.6
-
-['%s_CallableTemplate', '<intrinsic {0}>', 'BoundLiteralArgs', '_SentryLiteralArgs', '__name__', 'inline', 'literal_args', 'never', 'no_cpython_wrapper', 'nopython', 'prefer_literal', 'pysig']

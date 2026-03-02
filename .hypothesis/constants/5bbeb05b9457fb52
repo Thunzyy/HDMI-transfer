@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/scipy/__init__.py
-# hypothesis_version: 6.151.6
-
-['1.25.2', '2.6.0', 'LowLevelCallable', 'SOABI', '__', '__version__', 'cluster', 'constants', 'datasets', 'differentiate', 'fft', 'fftpack', 'integrate', 'interpolate', 'io', 'linalg', 'ndimage', 'odr', 'optimize', 'scipy.__config__', 'show', 'show_config', 'signal', 'sparse', 'spatial', 'special', 'stats', 'test']

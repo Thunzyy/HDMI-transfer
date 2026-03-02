@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/lowering.py
-# hypothesis_version: 6.151.6
-
-['# external function', '# signature: {0}', '$', 'B%s', 'PHI not stripped', '_VarArgItem', 'addr_of_%s', 'alwaysinline', 'arg.', 'binop', 'build_list', 'build_map', 'build_set', 'build_tuple', 'call', 'cast', 'cond is not i1: %s', 'entry', 'exhaust_iter', 'fptr_of_%s', 'getattr', 'getitem', 'getiter', 'ignore', 'index', 'inplace_binop', 'iternext', 'noinline', 'null', 'optnone', 'pair_first', 'pair_second', 'phi', 'pyaddr_of_%s', 'static_getitem', 'static_setitem', 'target', 'typed_getitem', 'unary', 'undef', 'vararg']

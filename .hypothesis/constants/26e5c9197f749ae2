@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/experimental/jitclass/boxing.py
-# hypothesis_version: 6.151.6
-
-['__', '__abs__', '__add__', '__and__', '__bool__', '__complex__', '__contains__', '__doc__', '__eq__', '__float__', '__floordiv__', '__ge__', '__getitem__', '__gt__', '__hash__', '__iadd__', '__iand__', '__ifloordiv__', '__ilshift__', '__imatmul__', '__imod__', '__imul__', '__index__', '__init__', '__int__', '__ior__', '__ipow__', '__irshift__', '__isub__', '__itruediv__', '__ixor__', '__le__', '__len__', '__lshift__', '__lt__', '__matmul__', '__mod__', '__mul__', '__ne__', '__neg__', '__or__', '__pos__', '__pow__', '__radd__', '__rand__', '__rfloordiv__', '__rlshift__', '__rmatmul__', '__rmod__', '__rmul__', '__ror__', '__rpow__', '__rrshift__', '__rshift__', '__rsub__', '__rtruediv__', '__rxor__', '__setitem__', '__slots__', '__str__', '__sub__', '__truediv__', '__xor__', '_numba_type_', 'accessor', 'box_class_instance', 'get', 'method', 'mutator', 'set']

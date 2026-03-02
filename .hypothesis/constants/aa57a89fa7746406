@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numpy/f2py/_backends/__init__.py
-# hypothesis_version: 6.151.6
-
-['distutils', 'meson']

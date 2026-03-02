@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/scipy/linalg/matfuncs.py
-# hypothesis_version: 6.151.6
-
-['_matfuncs', 'coshm', 'cosm', 'expm', 'expm_cond', 'expm_frechet', 'funm', 'inv', 'khatri_rao', 'linalg', 'logm', 'matfuncs', 'norm', 'rsf2csf', 'schur', 'signm', 'sinhm', 'sinm', 'solve', 'sqrtm', 'svd', 'tanhm', 'tanm']

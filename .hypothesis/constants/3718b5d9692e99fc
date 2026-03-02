@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/typing/cffi_utils.py
-# hypothesis_version: 6.151.6
-
-['C', 'F', 'array', 'bool', 'char', 'double', 'ffi.from_buffer', 'float', 'formats', 'function', 'int', 'int16_t', 'int32_t', 'int64_t', 'int8_t', 'itemsize', 'kind', 'long', 'long long', 'names', 'offsets', 'pointer', 'short', 'size_t', 'ssize_t', 'struct', 'uint16_t', 'uint32_t', 'uint64_t', 'uint8_t', 'uintptr_t', 'union', 'unsigned char', 'unsigned int', 'unsigned long', 'unsigned long long', 'unsigned short', 'void']

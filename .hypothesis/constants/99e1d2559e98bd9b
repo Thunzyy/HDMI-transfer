@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/cpython/old_numbers.py
-# hypothesis_version: 6.151.6
-
-[0.0, 0.5, 1.0, 65536, '!=', '.exit', '.neg', '.numba.python.rem', '.pos', '.postest', '.zero', '1', '<', '<=', '==', '>', '>=', 'complex.conjugate', 'division by zero', 'double', 'entry', 'float', 'imag', 'linkonce_odr', 'llvm.pow', 'modulo by zero', 'nan', 'nsw', 'numba_cpow', 'numba_cpowf', 'number.item', 'quot', 'real', 'rem', 'view']

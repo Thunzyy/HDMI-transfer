@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/interpreter.py
-# hypothesis_version: 6.151.6
-
-['\nBLOCK:', '\nDUMP post hole:', '\nNEW HOLE:', '\nWINDOW:', '$', '$%spred', '$_tuplify', '$callres_{}', '$const_%s', '$exc_match', '$exception_check', '$setup_with_exitfn', '%', '%s_var_%s', '&', '*', '**', '+', '-', '.', '/', '//', '/?', '<<', '=', '>>', '@', 'AssertionError', 'END_FOR', 'TRY', '^', '_', '_UNKNOWN_VALUE({})', '__setitem__', 'append', 'binop', 'bool', 'bool%s', 'build_list', 'build_map', 'build_tuple', 'call', 'end', 'end_try_block', 'exception match', 'exception_check', 'exception_match', 'exhaust_iter', 'extend', 'getattr', 'implicit{}', 'in', 'inplace_binop', 'is', 'is not', 'kind', 'list_to_tuple', 'mark_try_block', 'not', 'not in', 'op_%s', 'print', 'slice', 'str', 'try', 'tuple', 'unpack_single_tuple', 'unreachable', 'update', 'with', '|', '~']

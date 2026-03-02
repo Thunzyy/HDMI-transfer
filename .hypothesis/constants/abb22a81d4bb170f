@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/llvmlite/ir/module.py
-# hypothesis_version: 6.151.6
-
-[', ', '.', '; ModuleID = "%s"', 'llvm.assume', 'llvm.convert.to.fp16', 'llvm.ctlz', 'llvm.cttz', 'llvm.fma', 'llvm.memcpy', 'llvm.memmove', 'llvm.memset', 'llvm.pow', 'llvm.powi', 'target triple = "%s"']

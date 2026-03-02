@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/typed/typedlist.py
-# hypothesis_version: 6.151.6
-
-[1000, ', ', ', ...', '==', 'A', 'ListType[Undefined]', 'List[T]', 'PyExc_TypeError', 'T', 'T_co', '[{0}]', '[{0}{1}]', '_Sequence[T]', '_from_meminfo_ptr', '_opaque', 'allocated', 'dtype', 'empty_list', 'lsttype', 'meminfo', 'ndim', 'pt.SupportsIndex', 'yield_type', '{prefix}({body})', '{}']

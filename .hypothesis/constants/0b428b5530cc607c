@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/llvmlite/binding/targets.py
-# hypothesis_version: 6.151.6
-
-['+', ',', '-', '-elf', '<Target {0} ({1})>', '<dead TargetData>', 'Arch', 'COFF', 'DXContainer', 'ELF', 'Env', 'GOFF', 'MachO', 'OS', 'ObjectFormat', 'SPIRV', 'SubArch', 'Triple', 'Unknown', 'Vendor', 'Wasm', 'XCOFF', 'default', 'dynamicnopic', 'jitdefault', 'kernel', 'large', 'medium', 'nt', 'pic', 'small', 'static', 'utf8', '{0}{1}']

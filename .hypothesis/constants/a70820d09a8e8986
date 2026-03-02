@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/base.py
-# hypothesis_version: 6.151.6
-
-[b'\x00', '.bytes.%s', '.const.%s', '.const.array.data', '<wrapped %s>', 'Expected LLVM type', 'FC', 'PyExc_%s', '_Py_NoneStruct', '__name__', 'alwaysinline', 'arg.%s', 'casts', 'common', 'constants', 'data', 'dllimport', 'functions', 'getattrs', 'libs', 'linkonce', 'loc', 'noinline', 'nrt', 'numba:llvm_lock', 'numba_', 'optnone', 'printf', 'puts', 'setattrs', 'unknown option {0!r}', 'utf-8', 'value', 'win32', '{0} => {1}']

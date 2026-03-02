@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/llvmlite/binding/executionengine.py
-# hypothesis_version: 6.151.6
-
-['aarch64', 'arm64', 'ascii', 'buf_len', 'buf_ptr', 'module_ptr']

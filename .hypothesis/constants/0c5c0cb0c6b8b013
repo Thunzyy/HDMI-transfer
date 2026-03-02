@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/datamodel/old_models.py
-# hypothesis_version: 6.151.6
-
-['.data', '.value', '0d', '==', 'C', 'allocated', 'array', 'arrays', 'as_argument', 'as_data', 'count', 'data', 'deferred.{0}', 'dirty', 'entries', 'exhausted', 'extracted.', 'f', 'fill', 'finger', 'first', 'flat', 'from_argument', 'from_data', 'hash', 'imag', 'index', 'index%d', 'indexed', 'indices', 'inserted.', 'itemsize', 'iter', 'iter%d', 'key', 'mask', 'meminfo', 'nitems', 'parent', 'payload', 'pointers', 'real', 'scalar', 'scalar%d', 'second', 'shape', 'size', 'start', 'step', 'stop', 'stride', 'strides', 'tag', 'tuple', 'used', 'valid', 'value']

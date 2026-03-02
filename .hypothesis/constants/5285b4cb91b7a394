@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/cpython/listobj.py
-# hypothesis_version: 6.151.6
-
-['!=', '.dtor.list.{}', '<', '==', '>', '>=', 'append', 'cannot allocate list', 'cannot resize list', 'clear', 'copy', 'count', 'data', 'extend', 'getitem out of range', 'getiter', 'index', 'insert', 'iternext', 'linkonce_odr', 'list.append', 'list.clear', 'list.extend', 'list.insert', 'list.pop', 'pop', 'pop from empty list', 'remove', 'reverse', 'setitem out of range', 'sort', 'value not in list']

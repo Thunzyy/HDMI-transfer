@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/dispatcher.py
-# hypothesis_version: 6.151.6
-
-['%s %s', '%s(%s)', ', ', '-', ':', '=', 'Arg #{} is {}', 'CallTemplate({0})', '_', '_CompileStats', 'cache_hits', 'cache_misses', 'cache_path', 'cfunc', 'compilation disabled', 'compiler_lock', 'constant_inference', 'default', 'interpreter', 'kwargs not handled', 'llvm_lock', 'nopython', 'numba:compile', 'numba:compiler_lock', 'numba:llvm_lock', 'omitted arg(%r)', 'output_types', 'parfor_diagnostics', 'patch_message', 'py_func', 'python', 'reportable', 'timers', 'typing', 'unsupported_error']

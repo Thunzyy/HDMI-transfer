@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/cgutils.py
-# hypothesis_version: 6.151.6
-
-['\x00', ' %02x', '!=', '.continue', '<', '==', '>', '>=', 'C', 'CF', 'F', 'Loop', '_', 'ascii', 'data', 'do_break', 'for.body', 'for.cond', 'for.end', 'hexdump p=%p n=%zu', 'inbounds', 'index', 'internal', 'latin1', 'llvm.memcpy', 'llvm.memmove', 'llvm.memset', 'loop.count', 'loop.index', 'name', 'nounwind', 'nsw', 'printf', 'printf_format', 'readonly', 'snprintf', 'snprintf_format', 'unreachable', 'utf8', 'value']

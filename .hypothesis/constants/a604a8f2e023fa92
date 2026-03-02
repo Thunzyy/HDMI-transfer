@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/callconv.py
-# hypothesis_version: 6.151.6
-
-['.ret', '==', '>', '>=', 'PyExc_RuntimeError', 'PyExc_StopIteration', 'PyExc_SystemError', 'Status', 'TryStatus', '_in_try_block', 'arg.', 'code', 'excinfo', 'excinfoptr', 'in_try', 'is_error', 'is_none', 'is_ok', 'is_python_exc', 'is_stop_iteration', 'is_user_exc', 'noalias', 'nocapture', 'noinline', 'nounwind', 'numpy', 'python', 'retptr', 'target', 'try_state']

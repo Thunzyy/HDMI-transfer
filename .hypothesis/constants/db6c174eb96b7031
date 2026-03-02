@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/types/iterators.py
-# hypothesis_version: 6.151.6
-
-[', ', 'A', 'enumerate(%s)', 'iter(%s)', 'range_iter_%s', 'range_state_%s', 'zip(%s)']

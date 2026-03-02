@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/cpython/old_tupleobj.py
-# hypothesis_version: 6.151.6
-
-['<', 'TYPED_VALUE_SLOT%s', 'cmp_end', 'getiter', 'index', 'iternext', 'static_getitem', 'switch.%d', 'switch.else', 'switch.end', 'typed_getitem', 'typed_switch.%d', 'typed_switch.else', 'typed_switch.end']

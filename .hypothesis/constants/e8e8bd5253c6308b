@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/llvmlite/binding/orcjit.py
-# hypothesis_version: 6.151.6
-
-['address', 'element_kind', 'name', 'rb', 'utf-8', 'value', 'value_len']

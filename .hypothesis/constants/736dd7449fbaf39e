@@ -1,4 +1,0 @@
-# file: /home/lucas/Desktop/HDMI_exfil/sender.py
-# hypothesis_version: 6.151.6
-
-[100, 165, 200, 240, 255, 300, 400, 1000, 1920, 5000, 1000000, 4294967295, '\nDetected Monitors:', '--fps', '--redundancy', '--screen', '>I', 'DONE', 'HDMI Exfil Sender', 'INTERRUPTED', 'PAUSED', '__main__', 'bottom', 'constant', 'height', 'input_path', 'left', 'q', 'r', 'rb', 'right', 'top', 'utf-8', 'width', 'zip']

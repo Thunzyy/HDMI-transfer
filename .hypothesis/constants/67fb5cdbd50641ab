@@ -1,4 +1,0 @@
-# file: /home/lucas/Desktop/HDMI_exfil/src/hdmi_exfil/protocols/sequential.py
-# hypothesis_version: 6.151.6
-
-[b'\x00', 128, 255, 4294967295, '>I', 'constant', 'sequential']

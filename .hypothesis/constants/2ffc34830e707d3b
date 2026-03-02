@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/np/math/mathimpl.py
-# hypothesis_version: 6.151.6
-
-[-0.0, 180, 2147483647, 2147483648, 9223372036854775807, 9223372036854775808, '+inf', '-inf', '==', '_hypot', '_hypotf', 'acos', 'acosf', 'acosh', 'acoshf', 'asin', 'asinf', 'asinh', 'asinhf', 'atan', 'atan2', 'atan2f', 'atanf', 'atanh', 'atanhf', 'ceil', 'ceilf', 'cosh', 'coshf', 'double', 'erf', 'erfc', 'erfcf', 'erff', 'exp', 'expm1', 'expm1f', 'float', 'float32', 'float64', 'floor', 'floorf', 'hypot', 'hypotf', 'inf', 'lgamma', 'lgammaf', 'llvm.copysign.%s', 'llvm.cos', 'llvm.exp', 'llvm.fabs', 'llvm.log', 'llvm.log10', 'llvm.sin', 'log1p', 'log1pf', 'log2', 'log2f', 'numba_frexp', 'numba_frexpf', 'numba_gamma', 'numba_gammaf', 'numba_ldexp', 'numba_ldexpf', 'ord', 'sinh', 'sinhf', 'sqrt', 'sqrtf', 'tan', 'tanf', 'tanh', 'tanhf', 'trunc', 'truncf', 'uint{}', 'uno', 'win32']

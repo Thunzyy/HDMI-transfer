@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/scipy/linalg/_decomp_qr.py
-# hypothesis_version: 6.151.6
-
-['1|2', 'C', 'C_CONTIGUOUS', 'F', 'L', 'N', 'R', 'T', 'a', 'c', 'd', 'economic', 'expected a 2-D array', 'expected matrix', 'full', 'geqp3', 'geqrf', 'gerqf', 'gorgqr/gungqr', 'gorgrq/gungrq', 'gormqr/gunmqr', 'left', 'lwork', 'orgqr', 'orgrq', 'ormqr', 'qr', 'qr_multiply', 'r', 'raw', 'right', 'rq', 's']

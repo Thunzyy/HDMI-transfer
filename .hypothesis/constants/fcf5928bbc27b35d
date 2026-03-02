@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/scipy/sparse/dok.py
-# hypothesis_version: 6.151.6
-
-['_dok', 'dok', 'dok_matrix', 'isspmatrix_dok', 'sparse', 'spmatrix']

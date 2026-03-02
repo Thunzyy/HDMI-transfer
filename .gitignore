@@ -1,1 +1,30 @@
+# Build / packaging
 *.exe
+*.egg-info/
+dist/
+build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Testing
+.pytest_cache/
+.hypothesis/
+.benchmarks/
+
+# Runtime output
+received_files/
+
+# Environment
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# Claude
+.claude/settings.local.json
+CLAUDE.local.md

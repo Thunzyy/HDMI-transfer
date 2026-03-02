@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/cpython/printimpl.py
-# hypothesis_version: 6.151.6
-
-['print_item', 'printimpl', 'the print() function']

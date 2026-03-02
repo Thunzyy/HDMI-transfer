@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/scipy/__config__cpython-313-x86_64-linux-gnu__.py
-# hypothesis_version: 6.151.6
-
-['-fPIC', '/include', '/usr/bin/python3.13', '0.18.1', '15.2.0', '3.0.1', '3.1.6', '3.12.1', '3.13', 'Build Dependencies', 'Compilers', 'False', 'Machine Information', 'Python Information', 'True', 'args', 'blas', 'build', 'c', 'c++', 'cc', 'commands', 'cpu', 'cross-compiled', 'cython', 'detection method', 'dicts', 'endian', 'false', 'family', 'fortran', 'found', 'gcc', 'gfortran', 'host', 'include directory', 'lapack', 'ld.bfd', 'lib directory', 'linker', 'linker args', 'linux', 'little', 'name', 'path', 'pc file directory', 'pkgconfig', 'pybind11', 'pythran', 'show', 'stdout', 'system', 'unknown', 'version', 'x86_64']

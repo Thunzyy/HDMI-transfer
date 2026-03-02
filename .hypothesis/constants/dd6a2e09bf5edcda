@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/misc/special.py
-# hypothesis_version: 6.151.6
-
-['"%s"', ',', '_gdb_func_injection', 'as_numba_type', 'gdb', 'gdb_breakpoint', 'gdb_init', 'literal_unroll', 'literally', 'pndindex', 'prange', 'typeof']

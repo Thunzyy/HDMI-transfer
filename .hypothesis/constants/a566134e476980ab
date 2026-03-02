@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/consts.py
-# hypothesis_version: 6.151.6
-
-['Unreachable', 'build_list', 'build_tuple', 'call', 'getattr']

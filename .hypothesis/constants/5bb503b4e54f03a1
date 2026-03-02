@@ -1,4 +1,0 @@
-# file: /home/lucas/Desktop/HDMI_exfil/src/hdmi_exfil/protocols/fountain.py
-# hypothesis_version: 6.151.6
-
-[b'\x00', 0.1, 0.6, 128, 255, 4294967295, '>HIH', '>I', 'constant', 'fountain', 'seed']

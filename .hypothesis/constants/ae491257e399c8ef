@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/scipy/linalg/decomp.py
-# hypothesis_version: 6.151.6
-
-['LinAlgError', '_decomp', 'cdf2rdf', 'decomp', 'eig', 'eig_banded', 'eigh', 'eigh_tridiagonal', 'eigvals', 'eigvals_banded', 'eigvalsh', 'eigvalsh_tridiagonal', 'get_lapack_funcs', 'hessenberg', 'linalg', 'norm']

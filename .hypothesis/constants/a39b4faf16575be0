@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/event.py
-# hypothesis_version: 6.151.6
-
-[1000000, 'B', 'E', 'None', '_duration', 'name', 'numba:', 'numba:compile', 'numba:compiler_lock', 'numba:llvm_lock', 'numba:run_pass', 'unreachable', 'w']

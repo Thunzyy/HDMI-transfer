@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/np/ufunc/array_exprs.py
-# hypothesis_version: 6.151.6
-
-['$', '-', '.', '_', 'after-inference', 'arrayexpr', 'binop', 'body', 'call', 'def {0}(): return', 'end_lineno', 'exec', 'lineno', 'numpy', 'unary']

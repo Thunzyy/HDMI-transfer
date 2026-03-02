@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/np/ufunc/ufuncbuilder.py
-# hypothesis_version: 6.151.6
-
-['No definition', 'boundscheck', 'debuginfo', 'enable_looplift', 'enable_pyobject', 'fastmath', 'forceobj', 'ignore', 'nopython', 'npyufunc', 'nrt', 'numpy', 'reorderable', 'targetoptions', 'ufunc', 'writable_args']

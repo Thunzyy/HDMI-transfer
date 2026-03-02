@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/misc/appdirs.py
-# hypothesis_version: 6.151.6
-
-[255, 1024, '\x00', '%s: %s', '-- app dirs %s --', '.', '/etc/xdg', '/usr/local/share', '/usr/share', '1.0', 'AppData', 'CSIDL_APPDATA', 'CSIDL_COMMON_APPDATA', 'CSIDL_LOCAL_APPDATA', 'Cache', 'Common AppData', 'Local AppData', 'Logs', 'Mac', 'MyApp', 'MyCompany', 'Windows', 'XDG_CACHE_HOME', 'XDG_CONFIG_DIRS', 'XDG_CONFIG_HOME', 'XDG_DATA_DIRS', 'XDG_DATA_HOME', '__main__', 'c', 'darwin', 'java', 'linux2', 'log', 'site_config_dir', 'site_data_dir', 'user_cache_dir', 'user_config_dir', 'user_data_dir', 'user_log_dir', 'win32', '~/.cache', '~/.config', '~/.local/share', '~/Library/Caches', '~/Library/Logs']

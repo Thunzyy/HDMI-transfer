@@ -1,4 +1,0 @@
-# file: /home/lucas/Desktop/HDMI_exfil/receiver_fountain.py
-# hypothesis_version: 6.151.6
-
-[b'\x00', 0.001, 0.1, 0.6, 0.7, 1.0, 4294967296.0, 128, 255, 1024, 60000, 61632, 1000000, 2424832, 569420461, 1935289751, 2654435769, 4294967295, '\nDownload Complete!', '--output', '>H', '>HIH', '>I', 'Failed to grab frame', 'Output directory', 'Receiver Fountain', '__main__', 'a', 'd', 'i', 'j', 'k', 'l', 'received_files', 's', 'source', 'utf-8', 'w', 'wb']

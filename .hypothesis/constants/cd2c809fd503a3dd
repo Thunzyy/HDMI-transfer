@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/typing/context.py
-# hypothesis_version: 6.151.6
-
-[' * {0}', 'CallFrame({}, {})', 'Known signatures:', '__call__', 'attributes', 'bitwidth', 'cases', 'exact_match_required', 'functions', 'generic', 'globals', 'metadata', 'promote', 'return_type', 'safe_convert', 'static_getitem', 'static_setitem', 'target', 'template', 'unreachable', 'unsafe_casting', 'unsafe_convert']

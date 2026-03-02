@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/typing/ctypes_utils.py
-# hypothesis_version: 6.151.6
-
-['argtypes', 'restype', 'win32', 'x86_stdcallcc']

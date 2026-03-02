@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/misc/quicksort.py
-# hypothesis_version: 6.151.6
-
-[100, 'Partition', 'compile', 'insertion_sort', 'partition', 'partition3', 'run_quicksort', 'start', 'stop']

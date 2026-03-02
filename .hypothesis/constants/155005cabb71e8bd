@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/typing/typeof.py
-# hypothesis_version: 6.151.6
-
-[', ', '_TypeofContext', '_asdict', '_numba_type_', 'purpose']

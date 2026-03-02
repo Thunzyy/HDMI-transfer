@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/imputils.py
-# hypothesis_version: 6.151.6
-
-['_ForIterLoop', '_builder', '_context', '_pairobj', 'builtin_registry', 'casts', 'constants', 'do_break', 'for_iter.body', 'for_iter.end', 'functions', 'getattrs', 'getiter', 'iternext', 'numpy', 'setattrs', 'unspecified', 'value']

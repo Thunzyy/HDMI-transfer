@@ -1,4 +1,0 @@
-# file: /home/lucas/Desktop/HDMI_exfil/src/hdmi_exfil/config.py
-# hypothesis_version: 6.151.6
-
-['>HBIIH', 'block_size', 'constants.json', 'fountain_magic', 'hdmi_exfil', 'height', 'seq_magic', 'threshold', 'utf-8', 'width']

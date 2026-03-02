@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/cpython/old_hashing.py
-# hypothesis_version: 6.151.6
-
-[268435456.0, -9223372036854775808, 255, 5381, 1000003, 3527539, 374761393, 1546275796, 2246822519, 2654435761, 2870177450012600261, 7237128888997146477, 7816392313619706465, 8317987319222330741, 8387220255154660723, 11400714785074694791, 14029467366897019727, 18446744069414584320, '_PyHASH_BITS', '_PyHASH_MODULUS', '_PyHASH_XXPRIME_1', '_PyHASH_XXPRIME_5', '_PyLong_SHIFT', '_Py_HashSecret', '__hash__', '_hash', '_hashsecret_entry', '_numba_hashsecret_{}', 'a', 'acc', 'b', 'c', 'd', 'djbx33a', 'djbx33a_suffix', 'e', 'expat', 'fnv', 'hashsalt', 'int%s', 'internal', 'jmp', 'k0', 'k1', 'lane', 'm', 'mask', 'mi', 'ohexefef', 'p1', 'p2', 'p3', 'p4', 'padding', 'prefix', 's', 'sign', 'signed', 'siphash', 'siphash13', 'siphash24', 'siphash_k0', 'siphash_k1', 'suffix', 'symbol', 't', 'tl', 'uc', 'uint%s', 'unreachable', 'v0', 'v1', 'v2', 'v3', 'value', 'x', 'y']

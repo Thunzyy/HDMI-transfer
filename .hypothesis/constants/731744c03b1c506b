@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/scipy/sparse/compressed.py
-# hypothesis_version: 6.151.6
-
-['_compressed', 'compressed', 'sparse']

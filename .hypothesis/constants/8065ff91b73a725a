@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/types/abstract.py
-# hypothesis_version: 6.151.6
-
-[0.0, '.', 'A', 'C', 'F', 'Literal', 'Literal[{}]({})', 'Poison<%s>', 'numba', 'typeref[{}]']

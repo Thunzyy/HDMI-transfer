@@ -1,4 +1,0 @@
-# file: /usr/lib/python3/dist-packages/numba/core/typeconv/typeconv.py
-# hypothesis_version: 6.151.6
-
-['-', 'p', 's', 'u']
