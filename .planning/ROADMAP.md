@@ -163,7 +163,12 @@ Plans:
   4. Running `pip install hdmi-exfil` or `hdmi-exfil[all]` installs all dependencies and all CLI commands work
   5. All four existing CLI commands (`hdmi-send`, `hdmi-recv`, `hdmi-calibrate`, `hdmi-bench`) produce identical behavior after the restructure -- no user-visible changes
   6. All existing tests pass after the restructure with zero regressions
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 07-01-PLAN.md -- Replace cv2.resize with np.repeat in protocol encoding (STRUCT-06)
+- [ ] 07-02-PLAN.md -- Move files into core/sender/receiver subpackages with shims (STRUCT-01)
+- [ ] 07-03-PLAN.md -- Update pyproject.toml with extras and verify CLI/tests (STRUCT-02, STRUCT-03, STRUCT-04, STRUCT-05, STRUCT-07)
 
 ### Phase 8: Interactive Sender Console
 **Goal**: Users can operate the sender through an interactive arrow-key menu instead of memorizing CLI flags -- the menu collects all parameters and delegates to the existing send pipeline
@@ -203,11 +208,11 @@ Phases execute in numeric order: 7 -> 8 -> 9
 | 4. Performance Optimization | v1.0 | 5/5 | Complete | 2026-02-16 |
 | 5. Fountain Code Optimization | v1.0 | 4/4 | Complete | 2026-02-17 |
 | 6. UX & Polish | v1.0 | 4/4 | Complete | 2026-02-17 |
-| 7. Monorepo Restructure | v1.1 | 0/? | Not started | - |
+| 7. Monorepo Restructure | v1.1 | 0/3 | Planning complete | - |
 | 8. Interactive Sender Console | v1.1 | 0/? | Not started | - |
 | 9. Interactive Receiver Console | v1.1 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-02-16*
 *v1.1 phases added: 2026-03-02*
-*Last updated: 2026-03-02 -- v1.1 roadmap created (Phases 7-9)*
+*Last updated: 2026-03-02 -- Phase 7 planned (3 plans in 3 waves)*
