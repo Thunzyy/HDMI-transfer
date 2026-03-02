@@ -1,337 +1,530 @@
 # Domain Pitfalls
 
-**Domain:** HDMI data exfiltration via capture card (data-over-video)
-**Project:** HDMI_exfil (Elgato 4K X, fountain codes, 1080p)
-**Researched:** 2026-02-16
+**Domain:** Interactive CLI console addition + monorepo restructure with pip extras
+**Project:** HDMI_exfil v1.1 -- Console Interactive & Restructure
+**Researched:** 2026-03-02
+**Supersedes:** Previous pitfalls research (2026-02-16) focused on v1.0 encoding domain
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause data corruption, complete transfer failures, or rewrites.
+Mistakes that break the existing ~300 tests, corrupt the import graph, or require reverts.
 
 ---
 
-### Pitfall 1: Chroma Subsampling Destroys Color-Encoded Data
+### Pitfall 1: Package-Dir Remapping Breaks All Existing Imports
 
-**What goes wrong:** The Elgato 4K X delivers frames to the host via USB in NV12 (4:2:0), YUY2 (4:2:2), or MJPEG depending on resolution/FPS. At 1080p240, the card uses NV12 (4:2:0 chroma subsampling), which discards 75% of chroma information. The current `sender.py` encodes 3 bits per block (1 per R, G, B channel using 0/255 values), but after 4:2:0 subsampling, the chroma channels (Cb, Cr) are shared across 2x2 pixel groups. For an 8x8 block this might seem safe since the entire block is one color -- but the HDMI-to-USB pipeline converts RGB to YCbCr internally, subsamples the chroma, then OpenCV converts back to BGR. This round-trip introduces color bleeding at block boundaries and can flip threshold decisions on recovered chroma bits, especially at edges where adjacent blocks have different colors.
+**What goes wrong:** The current `pyproject.toml` maps `hdmi_exfil = "src"` via `[tool.setuptools.package-dir]`. This means `src/` IS the `hdmi_exfil` package -- `src/__init__.py` is `hdmi_exfil/__init__.py`, `src/protocols/fountain.py` is `hdmi_exfil.protocols.fountain`, etc. All ~300 tests import from `hdmi_exfil.*` using this mapping.
 
-**Why it happens:** HDMI carries uncompressed RGB, but USB capture cards must compress to fit USB bandwidth. At 1080p240, NV12 requires ~5.97 Gbps which already exceeds USB 3.0's 5 Gbps theoretical max, so the card likely uses MJPEG internally at this rate. MJPEG uses 8x8 DCT blocks with 4:2:0 subsampling, directly corrupting per-pixel color data. Even at 1080p60 with NV12, the 4:2:0 subsampling destroys fine color detail.
+When restructuring to `src/core/`, `src/sender/`, `src/receiver/`, the natural instinct is to create:
+```
+src/
+  core/        -> hdmi_exfil.core.*
+  sender/      -> hdmi_exfil.sender.*
+  receiver/    -> hdmi_exfil.receiver.*
+```
+
+But the current `package-dir` mapping means `src/core/` maps to `hdmi_exfil.core.*` ONLY if the packages list is updated correctly. The real trap is: if you move `src/protocols/` to `src/core/protocols/`, every single test that does `from hdmi_exfil.protocols.fountain import FountainDecoder` breaks instantly. That is 10+ test files, 40+ import lines.
+
+**Why it happens:** The `package-dir` mapping in setuptools is a flat namespace override -- it does not support nested remapping. You cannot map `hdmi_exfil.core = "src/core"` AND `hdmi_exfil = "src"` simultaneously; the second overrides the first. You must choose: either all subpackages live under the mapped root, or you use a completely different layout.
 
 **Consequences:**
-- Bit errors in the R and B channels (which carry chroma information in YCbCr space)
-- The G channel (closest to luma Y) survives best -- which is why `receiver_fountain.py` only reads the green channel (line 157: `bits = (flat[:, 1] > 128)`)
-- Silent data corruption: frames decode but contain wrong bits
-- The 3-bit RGB encoding in `sender.py` vs the 1-bit (black/white) encoding in `sender.html` is not a bug -- it reflects this exact reality: 1-bit-per-block encoding via luma only is the reliable path through capture card compression
+- `ModuleNotFoundError` in every test file on the first `pytest` run after restructure
+- CI/CD goes red and stays red until every import path is updated
+- If done in one massive commit, impossible to bisect which change broke what
+- Editable installs (`pip install -e .`) may cache the old package mapping and silently use stale modules
 
 **Warning signs:**
-- Bit error rate is higher on R/B channels than G
-- Errors cluster at block boundaries
-- Transfer works in loopback test but fails through real hardware
-- Files decode but checksums fail
+- `ImportError: No module named 'hdmi_exfil.protocols'` after moving files
+- Tests pass locally (stale `.pyc` cache) but fail in CI (clean environment)
+- `pip install -e .` completes but `import hdmi_exfil.core` fails
 
 **Prevention:**
-1. Use luma-only encoding (black/white, 1 bit per block) as the reliable default mode. This survives all chroma subsampling schemes because 0 and 255 in all channels maps cleanly to Y=16 (black) and Y=235 (white) in YCbCr, giving maximum threshold margin.
-2. If using multi-bit encoding, encode in YCbCr-aware fashion: use only luma-distinguishable levels (e.g., 4 gray levels per block for 2 bits) rather than relying on color channels.
-3. Test through the actual Elgato 4K X hardware at every target FPS, not just in loopback.
-4. Add per-frame CRC/checksums so corruption is detected rather than silent.
+1. **Keep `hdmi_exfil.*` as the public import namespace.** Do NOT change what tests import. The internal file layout can change, but re-export everything from the original module paths using `__init__.py` re-exports.
+2. **Create compatibility shims.** If `hdmi_exfil.protocols.fountain` moves to `hdmi_exfil.core.protocols.fountain`, keep a `src/protocols/__init__.py` that does `from hdmi_exfil.core.protocols.fountain import *` so old imports continue to work.
+3. **Test the import graph FIRST.** Before moving any file, create a test that does `import hdmi_exfil.protocols.fountain; import hdmi_exfil.config; import hdmi_exfil.capture.sampler` etc. Run it after every file move.
+4. **Move one subpackage at a time.** Move `protocols/` first, verify all tests pass, commit. Then `capture/`, verify, commit. Then `display/`, etc.
+5. **Delete `__pycache__` directories and `.pyc` files** between each restructure step: `find . -type d -name __pycache__ -exec rm -rf {} +`
+6. **Reinstall in editable mode** after each structural change: `pip install -e .` to refresh the package mapping.
 
-**Phase mapping:** Must be addressed in the encoding/decoding refactor phase, before any speed optimization. Reliable 1-bit mode first, optional multi-bit mode as a speed differentiator later.
+**Detection:** Run `pytest --tb=short` after every file move. Any `ModuleNotFoundError` is this pitfall.
 
-**Confidence:** HIGH -- verified via Elgato 4K X documentation (NV12/MJPEG at high FPS), OpenCV color conversion documentation, and Pen Test Partners' independent research showing 3 bits/pixel (1 per channel, 0/255 extremes) as the survivable threshold for protocol compression.
+**Phase mapping:** Must be the FIRST structural change, with full test verification at each step.
+
+**Confidence:** HIGH -- directly verified by reading `pyproject.toml` (line 41: `"hdmi_exfil" = "src"`) and all 40+ test import lines. The setuptools `package-dir` behavior is well-documented.
 
 ---
 
-### Pitfall 2: MJPEG 8x8 DCT Block Artifacts Aligned With Data Block Boundaries
+### Pitfall 2: Setuptools Package List Desync After Restructure
 
-**What goes wrong:** MJPEG compresses each frame as an independent JPEG, using 8x8 pixel DCT blocks. The current project uses `BLOCK_SIZE = 8` for data encoding. When MJPEG compression boundaries perfectly align with data block boundaries, DCT ringing artifacts concentrate at exactly the pixel positions being sampled. The center-pixel sampling strategy (`half_block::BLOCK_SIZE` = sampling at pixel 4 of each 8x8 block) sits at the center of a DCT block, where quantization noise is lowest -- but if the alignment shifts by even 1 pixel (due to capture card cropping, scaling, or timing), the sample point moves toward a DCT block boundary where artifacts are worst.
+**What goes wrong:** The `pyproject.toml` explicitly lists all packages:
 
-**Why it happens:** The 8x8 DCT block size in JPEG/MJPEG is a fixed standard. Choosing `BLOCK_SIZE = 8` for data encoding creates a resonance effect: compression artifacts and data encoding share the same spatial frequency. Any sub-pixel misalignment between the sender's pixel grid and the capture card's MJPEG encoder grid causes worst-case artifact injection into data samples.
+```toml
+[tool.setuptools]
+packages = [
+    "hdmi_exfil",
+    "hdmi_exfil.cli",
+    "hdmi_exfil.capture",
+    "hdmi_exfil.display",
+    "hdmi_exfil.file_handling",
+    "hdmi_exfil.protocols",
+]
+```
+
+When you add new subpackages (`hdmi_exfil.core`, `hdmi_exfil.sender`, `hdmi_exfil.receiver`, etc.), you MUST add them to this list. Miss one, and that subpackage is silently excluded from the installed distribution. This is invisible in development (editable mode with `pip install -e .` uses the source tree directly) but breaks when someone installs from the sdist/wheel, or in CI with `pip install .`.
+
+**Why it happens:** The explicit packages list is a legacy pattern from when auto-discovery was unreliable. It is safe but demands manual maintenance. The failure mode is particularly insidious because editable installs mask the problem -- you only discover it when building a distribution or installing in a fresh environment.
 
 **Consequences:**
-- Sporadic bit errors that appear/disappear based on capture alignment
-- Errors are non-reproducible between runs (alignment shifts)
-- Higher bit error rate than expected given the large threshold margin (0 vs 255)
-
-**Warning signs:**
-- Error rate changes when the sender window is moved slightly
-- Errors concentrate in specific spatial regions of the frame
-- Errors change pattern after capture card reconnection
+- `ModuleNotFoundError` when installing from sdist/wheel but not in development
+- New modules work in editable mode but silently vanish from the distribution
+- CI tests pass (editable install) but user installation breaks
 
 **Prevention:**
-1. Use `BLOCK_SIZE` that is a multiple of 8 but larger (e.g., 16, 24, or 32). This ensures each data block spans multiple MJPEG DCT blocks, and the center-pixel sample is well inside a DCT block regardless of alignment.
-2. At `BLOCK_SIZE = 16`: capacity = (1920/16) * (1080/16) = 120 * 67 = 8,040 blocks per frame. At 1 bit per block = 1,005 bytes/frame. At 60 FPS = ~60 KB/s = ~0.48 Mbps. This is the reliability tradeoff.
-3. Sample multiple pixels per block and use majority voting rather than single center-pixel sampling.
-4. Make `BLOCK_SIZE` configurable and document the speed vs reliability tradeoff.
+1. **Switch to auto-discovery.** Replace the explicit packages list with:
+   ```toml
+   [tool.setuptools.packages.find]
+   where = ["src"]
+   ```
+   This automatically finds all packages under `src/` that have `__init__.py`. Combined with `package-dir = {"" = "src"}` (note: change from the current `"hdmi_exfil" = "src"`), it handles any restructure automatically.
 
-**Phase mapping:** Address during encoding parameter tuning, after basic refactor. This is a tuning parameter, not an architecture change.
+2. **If keeping explicit list:** Add a CI check that compares the listed packages against `find src -name __init__.py` and fails if they diverge.
 
-**Confidence:** HIGH -- MJPEG 8x8 DCT blocks are a standard, and the alignment problem is well-documented in video processing literature.
+3. **Test with `pip install .` (NOT `-e .`)** in CI to catch missing packages.
+
+**Detection:** `pip install .` in a venv, then `python -c "from hdmi_exfil.core.protocols import fountain"` -- if this fails but `pip install -e .` works, you have this bug.
+
+**Phase mapping:** Address at the very start of restructure, ideally by switching to auto-discovery first, before moving files.
+
+**Confidence:** HIGH -- directly observed: the current `pyproject.toml` uses explicit package listing (lines 31-38). The auto-discovery vs explicit listing behavior is well-documented in setuptools docs.
 
 ---
 
-### Pitfall 3: Sender/Receiver Encoding Mismatch Between Modes
+### Pitfall 3: Entry Point Functions Move But pyproject.toml Stale References
 
-**What goes wrong:** The codebase currently has two incompatible encoding schemes that cannot interoperate:
+**What goes wrong:** The current entry points are:
 
-| Component | Encoding | Bits/block | Header |
-|-----------|----------|------------|--------|
-| `sender.py` | 3-bit RGB (0/255 per channel) | 3 | 12 bytes (idx, total, len) |
-| `sender.html` + `receiver_fountain.py` | 1-bit B/W (black or white) | 1 | 6 bytes (seed, K) |
-| `receiver.py` | 3-bit RGB decode | 3 | 12 bytes (idx, total, len) |
+```toml
+[project.scripts]
+hdmi-send = "hdmi_exfil.cli.send:main"
+hdmi-recv = "hdmi_exfil.cli.receive:main"
+hdmi-calibrate = "hdmi_exfil.cli.calibrate:main"
+hdmi-bench = "hdmi_exfil.cli.benchmark:main"
+```
 
-The `sender.py` (3-bit) and `receiver_fountain.py` (1-bit) use completely different frame formats. If a developer accidentally pairs the wrong sender with the wrong receiver, or if the refactor merges them without careful separation, transfers silently produce garbage.
+If the restructure moves CLI modules (e.g., `hdmi_exfil.cli.send` becomes `hdmi_exfil.sender.cli.send`, or the `main()` function is replaced by the new interactive console entry point), the entry point strings in `pyproject.toml` must be updated simultaneously. If they are not, `pip install` generates wrapper scripts that call non-existent module paths, and the `hdmi-send` / `hdmi-recv` commands fail with `ModuleNotFoundError` at invocation time -- not at install time.
 
-**Why it happens:** Organic prototype evolution. The fountain code path was added as a second mode with different encoding to survive capture card compression (correctly), but the frame format diverged from the original mode without explicit version/mode markers in the frame header.
+**Why it happens:** Entry point resolution is lazy -- pip generates a wrapper script that does `from hdmi_exfil.cli.send import main; main()` at runtime. The install succeeds even if the module path is wrong; the error only surfaces when the user runs the command.
 
 **Consequences:**
-- Silent data corruption when wrong sender/receiver paired
-- Confusion during development about which mode is active
-- Refactoring risk: merging into a unified architecture requires resolving this fundamental format difference
+- `hdmi-send`, `hdmi-recv`, `hdmi-calibrate`, `hdmi-bench` all break silently
+- Users who installed the package cannot use it (the error appears at runtime, not install time)
+- If the new interactive console creates NEW entry points (e.g., `hdmi-console`), the old ones must still work or be explicitly deprecated
 
 **Warning signs:**
-- "Sanity check" failures on `data_len` or `K` values (these will look like garbage when the wrong decoder runs)
-- Frame index values that make no sense (e.g., frame 16,843,009 when you have 10 frames)
-- The receiver decodes frames but progress never reaches 100%
+- `ModuleNotFoundError: No module named 'hdmi_exfil.cli.send'` when running `hdmi-send`
+- Package installs successfully but no console scripts work
 
 **Prevention:**
-1. Add a magic number / mode byte as the first bytes of every frame's header. Example: `0xDA7A` for sequential mode, `0xF0C0` for fountain mode.
-2. During refactor, define a single `FrameHeader` structure with a version/mode field that both encoder paths produce and both decoder paths validate.
-3. Reject frames with unrecognized magic numbers rather than attempting to decode them.
-4. Unit test that verifies sender.py frames decode correctly with receiver.py, and sender.html frames decode correctly with receiver_fountain.py.
+1. **Add a smoke test** that imports every entry point function:
+   ```python
+   def test_entry_points_importable():
+       from hdmi_exfil.cli.send import main as send_main
+       from hdmi_exfil.cli.receive import main as recv_main
+       from hdmi_exfil.cli.calibrate import main as cal_main
+       from hdmi_exfil.cli.benchmark import main as bench_main
+       assert callable(send_main)
+       assert callable(recv_main)
+       assert callable(cal_main)
+       assert callable(bench_main)
+   ```
+2. **Keep existing entry points working.** If `hdmi_exfil.cli.send:main` is the old direct-mode entry point, keep it AND add a new `hdmi-sender-console` entry point for the interactive mode. Do not replace; add.
+3. **Update entry points in the same commit** as the module move.
+4. **After restructure, run:** `pip install -e . && hdmi-send --help` to verify each command.
 
-**Phase mapping:** Must be resolved in the architecture/refactor phase, before any new features. This is the first thing to unify.
+**Phase mapping:** Must be verified after every file move that touches the `cli/` directory.
 
-**Confidence:** HIGH -- directly observed in the codebase (common.py defines 3-bit constants, sender.html uses 1-bit).
+**Confidence:** HIGH -- directly observed: 4 entry points defined in pyproject.toml (lines 25-28), all pointing to `hdmi_exfil.cli.*:main`. Setuptools entry point lazy-loading behavior is well-documented.
 
 ---
 
-### Pitfall 4: PRNG Synchronization Failure Between JavaScript and Python
+### Pitfall 4: InquirerPy Maintenance Status and prompt_toolkit Compatibility
 
-**What goes wrong:** The fountain code system relies on sender and receiver independently computing the same degree and index set from the same seed. Both `sender.html` (JavaScript) and `receiver_fountain.py` (Python) implement SplitMix32 PRNG. If the implementations produce different outputs for the same seed, the receiver will XOR the wrong chunks together, producing silently corrupted data. JavaScript and Python handle integer arithmetic fundamentally differently:
+**What goes wrong:** InquirerPy (the planned interactive CLI library) depends on `prompt_toolkit >= 3.0.1`. The library's last PyPI release (0.3.4) was in 2022. The GitHub repository (kazhala/InquirerPy) has had minimal commit activity since 2023. `prompt_toolkit` itself is actively maintained (version 3.0.x), but there is a risk of incompatibility between InquirerPy's pinned dependency range and future prompt_toolkit releases.
 
-- JavaScript: uses `Math.imul()` for 32-bit multiply, `|0` for signed 32-bit truncation, `>>>0` for unsigned conversion
-- Python: arbitrary-precision integers, must manually mask with `& 0xFFFFFFFF`
+More critically for this project: InquirerPy's `inquirer` module uses `prompt_toolkit`'s `Application` class, which takes control of the terminal's event loop. If the HDMI receiver is running OpenCV windows (`cv2.imshow`) or pygame in the same process, the terminal event loop and the GUI event loop will conflict, causing hangs or crashes.
 
-The current Python PRNG uses `& 0xFFFFFFFF` masking but does not mask intermediate addition results the same way JavaScript's `|0` would handle signed overflow. The `(self.a | 0)` on line 16 of `receiver_fountain.py` is a no-op in Python (Python's `|0` does not truncate to 32 bits) -- it was copied from the JavaScript idiom but does nothing.
-
-**Why it happens:** Porting PRNG algorithms between languages with different integer semantics is notoriously error-prone. JavaScript's `|0` forces signed 32-bit representation; Python's `|0` is identity. A single bit difference in any PRNG output cascades into completely wrong chunk selection for every subsequent droplet.
+**Why it happens:** InquirerPy is a wrapper around `prompt_toolkit`'s low-level prompt session, which runs its own event loop (asyncio-based). Libraries like OpenCV and pygame also run event loops (SDL event loop, HighGUI event loop). Two competing event loops in one process is a classic source of deadlocks.
 
 **Consequences:**
-- Complete decoding failure: receiver thinks it decoded correctly but the data is XOR'd garbage
-- Extremely hard to debug: both sides "work" independently, the PRNG "looks correct"
-- May work for small files (low K, low degree) and fail for large files (more seeds exercised)
+- InquirerPy menu appears but keyboard input is swallowed by the OpenCV/pygame event loop
+- Terminal cursor corruption after exiting an InquirerPy prompt when pygame was initialized
+- On Windows specifically, `prompt_toolkit` uses Win32 console APIs that may conflict with pygame's SDL2 console mode
+- If InquirerPy stops being maintained and a prompt_toolkit 4.x is released with breaking changes, the interactive CLI breaks with no upstream fix available
 
 **Warning signs:**
-- Fountain decoding reaches 100% but output file is corrupt
-- Works for tiny files but fails for larger ones
-- Adding debug logging shows different degree sequences for the same seed in JS vs Python
+- Arrow keys don't work in the menu (intercepted by OpenCV/pygame)
+- Terminal renders garbage characters after exiting a menu
+- `RuntimeError: This event loop is already running` errors
+- Menu works fine in isolation but hangs when called between send/receive operations
 
 **Prevention:**
-1. Create a PRNG test vector file: generate 1000 outputs from seeds [1, 2, 3, ...] in JavaScript, save to JSON, and verify the Python PRNG produces identical outputs. This is a one-time test that catches all cross-language drift.
-2. Fix the Python PRNG: remove the meaningless `self.a = (self.a | 0)` line, and ensure every arithmetic step masks to 32 bits: `self.a = (self.a + 0x9e3779b9) & 0xFFFFFFFF`.
-3. The `next_float()` division must use the same denominator (`4294967296.0`) and the unsigned value. Verify: `return (self.next() & 0xFFFFFFFF) / 4294967296.0`.
-4. Pin this test in CI so future PRNG changes are caught.
+1. **Architectural separation:** The interactive menu must run in a phase completely separate from any display/capture operation. Flow: menu collects all parameters -> menu exits completely -> display/capture begins. Never overlap InquirerPy prompts with OpenCV/pygame.
+2. **Lazy-import pygame and cv2.** Do not import them at module level in the console entry point. Import them only when the user selects a send/receive action, after the InquirerPy session is fully closed.
+3. **Pin InquirerPy version explicitly:** `InquirerPy>=0.3.4,<0.4` to avoid accidental upgrades to hypothetical incompatible releases.
+4. **Have a fallback plan.** If InquirerPy becomes unmaintained, `questionary` (built on same `prompt_toolkit`, actively maintained as of 2025) is a near-drop-in replacement with identical arrow-key menu semantics.
+5. **Test the menu in a real terminal**, not just in pytest (which captures stdin/stdout and masks event loop issues).
 
-**Phase mapping:** Must be verified during the refactor phase. Add cross-language PRNG test vectors as one of the first test artifacts.
+**Detection:** Run the interactive console, navigate menus, select "Send Python", verify pygame opens correctly. Then press ESC to return to the menu and verify the menu still works. This round-trip is the critical test.
 
-**Confidence:** HIGH -- the JavaScript/Python integer semantics difference is well-documented, and the Python code contains the telltale `(self.a | 0)` copied idiom.
+**Phase mapping:** Must be validated in the first interactive CLI prototype, BEFORE building out all menu options.
+
+**Confidence:** MEDIUM -- InquirerPy's maintenance status is based on training data (last release 2022, minimal activity 2023). The event loop conflict between prompt_toolkit and SDL2/OpenCV is a well-understood pattern but has not been verified specific to this project.
 
 ---
 
-### Pitfall 5: cv2.waitKey() Cannot Achieve Target Frame Rates Above ~80 FPS
+### Pitfall 5: Extras Dependencies That Import at Module Level Break Minimal Installs
 
-**What goes wrong:** The sender uses `cv2.waitKey(delay)` to control frame timing, with `delay = int(1000 / fps)`. At 240 FPS, `delay = 4ms`. But `cv2.waitKey()` has a minimum effective delay of ~12-13ms on most systems regardless of the parameter value, capping effective display rate at ~75-80 FPS. On Windows, the floor is even worse (~15ms due to timer resolution). This means the sender cannot actually transmit at 240 FPS using `cv2.imshow` + `cv2.waitKey`, even though `--fps 240` is the default argument.
+**What goes wrong:** The plan is `pip install hdmi-exfil[sender]` installs pygame-ce + screeninfo (sender-only deps) and `pip install hdmi-exfil[receiver]` installs opencv-python (receiver-only dep). But the current code has cross-dependencies:
 
-**Why it happens:** `cv2.waitKey()` handles all GUI event processing (window repainting, keyboard input). It waits for a *minimum* of the specified delay. The actual delay is dominated by OS timer resolution (Windows: ~15ms, Linux: ~1ms with `hrtimer`) and GUI event processing overhead. Additionally, `cv2.imshow()` in fullscreen mode adds further overhead.
+1. `hdmi_exfil.config` (shared) imports nothing exotic -- safe.
+2. `hdmi_exfil.protocols.__init__` imports `SequentialProtocol` and `FountainProtocol` -- these import `numpy` (shared) and `struct` (stdlib) -- safe.
+3. `hdmi_exfil.cli.send` imports `pygame-ce` (via `hdmi_exfil.display.renderer.PygameRenderer`) and `screeninfo` at module level.
+4. `hdmi_exfil.cli.receive` imports `cv2` (opencv-python) at module level.
+5. `hdmi_exfil.cli.benchmark` imports `hdmi_exfil.capture.sampler` which imports `numpy` -- safe. But `sample_frame` itself is shared between sender benchmark and receiver decode.
+
+The trap: if `hdmi_exfil.protocols.__init__` is imported during `pip install hdmi-exfil[receiver]`, and it transitively imports something sender-only, the receiver-only installation breaks. Currently `protocols/__init__.py` imports cleanly, but any future change that adds a sender-only import to a shared module breaks the extras model.
+
+More immediately: `hdmi_exfil.display.renderer` imports `cv2` at module level (line 23: `import cv2`). This module is used by the sender (`FrameRenderer`). If `cv2` (opencv-python) is listed as a receiver-only extra but `display.renderer` is imported by sender code, then `[sender]` install without `[receiver]` will ALSO fail because cv2 is missing.
+
+**Why it happens:** Python's import system is eager -- `import cv2` at the top of a module file executes immediately when the module is first imported, regardless of whether the caller uses the cv2-dependent code path. The extras system only controls what pip installs; it cannot control what Python tries to import at runtime.
 
 **Consequences:**
-- Sender reports 240 FPS but actually outputs ~60-80 FPS
-- Speed calculations are wrong (reported Mbps is inflated)
-- Receiver sees duplicate frames or misses the timing assumption
-- On Windows specifically, performance is dramatically worse than on Linux
+- `pip install hdmi-exfil[sender]` fails at runtime because `display.renderer` imports cv2
+- `pip install hdmi-exfil[receiver]` fails at runtime because... actually receiver needs cv2, which is fine. But if receiver code ever imports `display.renderer.PygameRenderer` (which imports pygame), receiver-only install breaks.
+- The entire extras model collapses into "just install everything" (`[all]`)
 
 **Warning signs:**
-- Actual throughput is much lower than calculated from `BYTES_PER_FRAME * fps`
-- Transfer takes 3-4x longer than expected
-- Increasing `--fps` beyond ~80 has no effect on actual speed
+- `ImportError: No module named 'cv2'` when running `hdmi-send`
+- `ImportError: No module named 'pygame'` when running `hdmi-recv`
+- Users give up on extras and use `pip install hdmi-exfil[all]`
 
 **Prevention:**
-1. Measure actual achieved FPS and report it (compare wall-clock time vs frame count).
-2. For high-speed sending, bypass `cv2.imshow` entirely. Options:
-   - Use a dedicated GPU-accelerated rendering backend (SDL2, Pygame, GLFW)
-   - Write frames directly to a framebuffer device on Linux
-   - Use the HTML/canvas sender (`sender.html`) which uses `requestAnimationFrame` and is limited by monitor refresh rate but avoids the `waitKey` bottleneck
-3. Separate the frame generation loop from the display loop using threading.
-4. On Windows, call `timeBeginPeriod(1)` to improve timer resolution (from winmm.dll), though this has system-wide side effects.
+1. **Audit every top-level import in every module.** Create an import dependency graph. Classify each dependency as `core`, `sender`, or `receiver`.
+2. **Lazy-import expensive/optional dependencies.** `display.renderer` should NOT import `cv2` at module level. Instead:
+   ```python
+   class FrameRenderer:
+       def __init__(self, ...):
+           import cv2
+           self._cv2 = cv2
+           ...
+   ```
+3. **Split `display.renderer` into two files:** `display.renderer_cv2` (requires cv2) and `display.renderer_pygame` (requires pygame-ce). The sender imports only the pygame one; the receiver imports only the cv2 one (or neither if it only uses `cv2.imshow` directly).
+4. **Dependency classification for extras:**
+   - `core`: numpy, screeninfo (lightweight)
+   - `sender`: pygame-ce, numba
+   - `receiver`: opencv-python, numba
+   - `all`: core + sender + receiver
+5. **Add import-only tests for each extras profile:**
+   ```python
+   def test_core_imports_without_pygame():
+       # Mock pygame as unavailable, verify core imports work
+   ```
 
-**Phase mapping:** Address during speed optimization phase, after architecture is stable. The HTML sender already partially solves this -- it may become the primary high-speed sender.
+**Detection:** Create a clean venv, `pip install hdmi-exfil[sender]` (without `[receiver]`), then `python -c "from hdmi_exfil.cli.send import main"`. If this fails with `ImportError`, the extras split is broken.
 
-**Confidence:** HIGH -- the `cv2.waitKey` timing floor is extensively documented in OpenCV issue trackers and forums, with independent measurements confirming ~12ms minimum on typical systems.
+**Phase mapping:** Must be resolved DURING the restructure, not after. The file-level split into core/sender/receiver must be driven by the dependency graph, not by functional grouping alone.
+
+**Confidence:** HIGH -- directly verified: `display/renderer.py` line 23 imports `cv2` unconditionally. The eager-import behavior of Python is fundamental and well-documented.
+
+---
+
+### Pitfall 6: constants.json and importlib.resources Path Breaks During Restructure
+
+**What goes wrong:** `config.py` loads `constants.json` using `importlib.resources`:
+
+```python
+_constants_path = files("hdmi_exfil").joinpath("constants.json")
+```
+
+This resolves to `src/constants.json` because `"hdmi_exfil" = "src"` in the package-dir mapping, and `pyproject.toml` declares `package-data = { hdmi_exfil = ["constants.json"] }`.
+
+If the restructure changes the package-dir mapping or moves `constants.json` to a different location (e.g., `src/core/constants.json`), the `files("hdmi_exfil")` call will resolve to the wrong directory. `importlib.resources.files()` is sensitive to the exact package name and its location on disk.
+
+**Why it happens:** `importlib.resources.files("hdmi_exfil")` resolves the package name to a filesystem path using the installed package metadata. If the package-dir mapping changes, or if `constants.json` moves to a subpackage, the path resolution changes. In editable mode, it may point to the source tree; in installed mode, it points to site-packages. These can diverge after restructuring.
+
+**Consequences:**
+- `FileNotFoundError` when importing `hdmi_exfil.config` -- this breaks EVERYTHING because every module depends on config
+- Works in editable mode but fails in installed mode (or vice versa)
+- The web sender template build (`sender.html` built from `constants.json`) may use a different copy than the Python code
+
+**Warning signs:**
+- `FileNotFoundError: constants.json` at import time
+- Config values are different between the web sender and Python sender (if multiple copies of constants.json exist after restructure)
+
+**Prevention:**
+1. **Move constants.json with config.py.** Wherever `config.py` lives, `constants.json` must be in the same package directory.
+2. **Update `package-data` in pyproject.toml** whenever constants.json moves:
+   ```toml
+   [tool.setuptools.package-data]
+   "hdmi_exfil.core" = ["constants.json"]  # if moved to core/
+   ```
+3. **Update the `files()` call** to match:
+   ```python
+   _constants_path = files("hdmi_exfil.core").joinpath("constants.json")
+   ```
+4. **Add a test** that imports `hdmi_exfil.config` and verifies `WIDTH`, `HEIGHT`, `BLOCK_SIZE` are the expected values. This catches silent path resolution failures.
+5. **Verify in both editable AND installed mode** after the move.
+
+**Detection:** `python -c "from hdmi_exfil.config import WIDTH; print(WIDTH)"` -- should print `1920`.
+
+**Phase mapping:** Must be handled in the same commit as any file move involving `config.py` or `constants.json`.
+
+**Confidence:** HIGH -- directly observed: `config.py` line 23 uses `files("hdmi_exfil")`, and `pyproject.toml` line 44 specifies `hdmi_exfil = ["constants.json"]`. Both must be updated atomically with any restructure.
 
 ---
 
 ## Moderate Pitfalls
 
-Mistakes that cause delays, technical debt, or reduced reliability.
+Mistakes that cause delays, technical debt, or degraded developer experience.
 
 ---
 
-### Pitfall 6: Bare Exception Handling Silently Swallows Errors
+### Pitfall 7: Interactive Menu Blocks Terminal When OpenCV/Pygame Crashes
 
-**What goes wrong:** Both `receiver_fountain.py` (lines 316-318) and the monitor detection in `sender.py` (lines 166-170) use bare `except Exception` blocks that catch all errors and either `pass` silently or print a generic message. During the real-time decode loop, if a frame produces a struct unpacking error, corrupt seed, or NumPy shape mismatch, the error is silently discarded and that frame is lost forever. With sequential (non-fountain) transfers, a single silently-dropped frame means a corrupted file with no indication of where the corruption occurred.
+**What goes wrong:** The interactive console flow is: menu -> user selects "Send Python" -> pygame starts fullscreen -> send completes -> return to menu. If pygame crashes or the HDMI transfer fails with an unhandled exception, the terminal is left in a corrupted state because:
 
-**Why it happens:** Prototype development prioritizes "keep running" over "report precisely." In a real-time capture loop, you don't want one bad frame to crash the program. But the tradeoff is taken too far when *all* error information is discarded.
+1. InquirerPy/prompt_toolkit alters terminal settings (raw mode, alternate screen buffer)
+2. pygame-ce alters display mode (fullscreen, resolution change)
+3. If pygame crashes without calling `pygame.quit()`, the display may stay in fullscreen mode, making the terminal inaccessible
+4. On Windows, `prompt_toolkit` may have changed the console code page or input mode
 
-**Consequences:**
-- Debugging transfer failures becomes extremely difficult
-- No way to distinguish "capture card produced garbage frame" from "decoder bug"
-- Intermittent failures cannot be root-caused
-- Performance problems hidden (e.g., every other frame fails to decode but program keeps running)
-
-**Prevention:**
-1. Replace bare `except Exception: pass` with typed exception handling: catch `struct.error` for unpacking failures, `ValueError` for shape mismatches, etc.
-2. Log errors with rate limiting (e.g., count errors per second, log summary every N seconds) rather than per-frame logging which would flood output.
-3. Track error statistics: `frames_received`, `frames_failed_decode`, `frames_failed_sanity_check`. Report these at the end of transfer and periodically during transfer.
-4. Never `pass` silently -- at minimum increment an error counter.
-
-**Phase mapping:** Address during the architecture refactor phase. Define a proper error handling strategy before restructuring the decode loop.
-
-**Confidence:** HIGH -- directly observed in the codebase.
-
----
-
-### Pitfall 7: Windows-Only APIs Block Cross-Platform Use
-
-**What goes wrong:** `sender.py` uses `ctypes.windll.user32.EnumDisplayMonitors` (Windows API) for monitor detection. This immediately crashes on Linux/macOS with `AttributeError: module 'ctypes' has no attribute 'windll'`. The receiver uses `cv2.CAP_DSHOW` (DirectShow, Windows-only) for capture card access. On Linux, this must be `cv2.CAP_V4L2` or omitted (auto-select). These are hard failures -- the program will not start at all on non-Windows platforms.
-
-**Why it happens:** Prototype was developed and tested on Windows only. Monitor detection and capture card access are inherently platform-specific operations.
+**Why it happens:** Both InquirerPy and pygame modify global terminal/display state. If either crashes, the cleanup code (context manager `__exit__`, atexit hooks) may not run, leaving the terminal in a non-interactive state.
 
 **Consequences:**
-- Cannot run sender on Linux (monitor detection crashes)
-- Cannot run receiver on Linux (DirectShow unavailable or ignored)
-- Contributors on macOS/Linux cannot test or develop
-- CI/CD testing impossible without Windows runners
-
-**Warning signs:**
-- `ImportError` or `AttributeError` on `ctypes.windll`
-- `cv2.VideoCapture` silently fails to open (returns `cap.isOpened() == False`)
-- Different behavior between `CAP_DSHOW`, `CAP_V4L2`, and `CAP_MSMF` backends
+- Terminal becomes unusable after a crash (no cursor, raw mode active, wrong resolution)
+- User must close and reopen the terminal
+- On Windows, the console window may be behind a stuck fullscreen pygame surface
 
 **Prevention:**
-1. Abstract platform-specific code behind a platform detection layer:
+1. **Wrap every display/capture operation in try/finally:**
    ```python
-   import platform
-   if platform.system() == 'Windows':
-       from .platform_win import get_monitors, get_capture_backend
-   elif platform.system() == 'Linux':
-       from .platform_linux import get_monitors, get_capture_backend
+   try:
+       with PygameRenderer(...) as renderer:
+           do_send(...)
+   finally:
+       pygame.quit()  # belt-and-suspenders cleanup
    ```
-2. For monitor detection on Linux, use `xrandr` subprocess or `screeninfo` library.
-3. For capture backend, auto-detect: `cv2.CAP_DSHOW` on Windows, `cv2.CAP_V4L2` on Linux, `cv2.CAP_AVFOUNDATION` on macOS. Or use `cv2.CAP_ANY` with fallback.
-4. Use the HTML sender (`sender.html`) as the cross-platform sender path -- browsers handle fullscreen display natively across all platforms.
+2. **Register an `atexit` handler** that calls `pygame.quit()` and `cv2.destroyAllWindows()`.
+3. **Never run InquirerPy prompts while pygame/cv2 windows are open.** Close all windows, release all resources, THEN show the menu.
+4. **Add a keyboard interrupt handler** (Ctrl+C) that performs cleanup before re-raising.
+5. **Test the crash recovery path:** Force-kill the sender mid-transfer and verify the terminal recovers.
 
-**Phase mapping:** Address in the cross-platform support phase. Can be deferred if Linux support is not immediately needed, but the abstraction layer should be designed during architecture refactor.
+**Phase mapping:** Must be built into the console architecture from day one. Not something to add later.
 
-**Confidence:** HIGH -- directly observed in the codebase (`ctypes.windll`, `cv2.CAP_DSHOW`).
+**Confidence:** HIGH -- pygame fullscreen recovery issues and prompt_toolkit terminal state corruption are well-documented in both projects' issue trackers.
 
 ---
 
-### Pitfall 8: Fountain Code Degree Distribution is Not Optimized for Small K
+### Pitfall 8: Test Suite Regression From Accidental Import Side Effects
 
-**What goes wrong:** The current fountain code degree distribution (in both `sender.html` and `receiver_fountain.py`) uses a simple custom distribution:
-- 10% chance of degree 1
-- 50% chance of degree 2
-- 40% chance of degree `random(1, min(K, 20))`
+**What goes wrong:** The current test suite uses `--import-mode=importlib` (pyproject.toml line 48). This mode is more strict than the default `prepend` mode: it does not add the test directory to `sys.path` and instead relies on the installed package. This means tests import from the installed `hdmi_exfil` package, not directly from the source tree.
 
-This is neither the Ideal Soliton Distribution nor the Robust Soliton Distribution from LT code theory. For small K (common with small files -- e.g., a 16KB file with 4044 bytes/chunk = K=4), this distribution generates too few degree-1 droplets for the decoder to start peeling, and the high-degree droplets (up to 20) cover more chunks than exist when K < 20. The result is high overhead (many more droplets needed than K) or outright decoding failure.
+During restructure, if the editable install becomes stale (e.g., you moved files but didn't re-run `pip install -e .`), tests will import from the OLD installed location (stale `.pth` file) while you're editing the NEW location. This causes confusing failures where your code changes don't seem to take effect, or tests import modules you've already deleted.
 
-**Why it happens:** Implementing the Robust Soliton Distribution requires careful parameter tuning (c, delta) that depends on K. The current ad-hoc distribution was likely tuned by trial and error for one specific file size and works "well enough" for medium K values, but breaks down at the extremes.
+Additionally, several test files use import-time side effects:
+- `test_calibration.py` imports `BenchmarkResult` and `run_benchmark` at function level (lazy imports inside test functions) -- this is safe.
+- `test_pygame_renderer.py` imports `PygameRenderer` at function level -- safe.
+- But `test_sequential.py`, `test_fountain.py`, `test_xor_ops.py` all import at module level -- these run at test collection time and will fail immediately if the import paths are broken.
+
+**Why it happens:** `--import-mode=importlib` is the correct choice for avoiding accidental source-tree imports, but it means the package MUST be properly installed at all times during development. It creates a stricter contract between the source layout and the installed layout.
 
 **Consequences:**
-- Small files (K < 10) may require 3-5x overhead to decode, or fail entirely
-- Large files (K > 1000) may have inefficient overhead because the degree cap of 20 is too low relative to K
-- Inconsistent performance: "sometimes it works, sometimes it doesn't" depending on file size
-- No way to predict required transmission time because overhead is unpredictable
+- Tests appear to pass/fail inconsistently (stale install vs fresh code)
+- `pytest` crashes at collection time with `ImportError` before any tests run
+- Developer wastes hours debugging "why doesn't my fix work" when the answer is "you need to re-run pip install -e ."
+
+**Prevention:**
+1. **Always re-run `pip install -e .`** after any file move or pyproject.toml change. Add this to the contributing guide.
+2. **Add a conftest.py check** that verifies the installed package version matches the source:
+   ```python
+   import hdmi_exfil
+   import importlib.metadata
+   installed_version = importlib.metadata.version("hdmi-exfil")
+   # At minimum, verify the package is importable
+   ```
+3. **Use a Makefile/script** that wraps `pytest` with a `pip install -e .` first:
+   ```bash
+   pip install -e . && pytest
+   ```
+4. **Clear `__pycache__`** directories when debugging import issues.
+
+**Phase mapping:** Applicable throughout the entire restructure process. The conftest check should be added before restructuring begins.
+
+**Confidence:** HIGH -- directly observed: `pyproject.toml` line 48 specifies `--import-mode=importlib`. The behavior of importlib import mode is documented in pytest docs.
+
+---
+
+### Pitfall 9: Extras Groups With Conflicting or Circular Dependencies
+
+**What goes wrong:** The planned extras are `[sender]`, `[receiver]`, and `[all]`. Consider the dependency assignments:
+
+- `numpy` -- needed by both sender AND receiver (core dep, not an extra)
+- `numba` -- needed by both (fountain XOR acceleration in both encode and decode)
+- `opencv-python` -- needed by receiver (capture) AND sender (FrameRenderer uses cv2)
+- `pygame-ce` -- needed by sender only
+- `screeninfo` -- needed by sender only
+- `InquirerPy` -- needed by both sender and receiver consoles
+
+The problem: `opencv-python` is currently used by the sender too (FrameRenderer). If it is classified as receiver-only, sender-only install breaks. If it is classified as core, then the extras split provides less value. Similarly, `numba` is used by sender (XOR encode acceleration) AND receiver (XOR decode acceleration) -- it should be core, not an extra.
+
+Additionally, `opencv-python` and `opencv-python-headless` are mutually exclusive on PyPI but have the same import name (`cv2`). If someone has `opencv-python-headless` installed and you depend on `opencv-python`, pip may install both and create a broken state, or refuse to resolve dependencies.
+
+**Why it happens:** The project was built as a monolith where all dependencies are available everywhere. Retroactively splitting into extras requires untangling the actual dependency graph, which rarely matches functional boundaries (sender/receiver) cleanly.
+
+**Consequences:**
+- Extras that don't actually save any dependencies (everything ends up in core)
+- Conflicting opencv variants causing `ImportError` or wrong build (no GUI support in headless)
+- Users confused about which extras to install
+
+**Prevention:**
+1. **Map actual imports, not functional roles.** Use `pipdeptree` or manual analysis to determine which modules import which dependencies.
+2. **Be honest about the split.** If the real dependency graph is:
+   - Core: numpy, numba, InquirerPy
+   - Sender extras: pygame-ce, screeninfo
+   - Receiver extras: opencv-python
+   Then the extras only save ~2 packages for receiver-only install and ~1 package for sender-only install. That may be acceptable -- document it.
+3. **Refactor display/renderer.py** to remove the cv2 dependency from the sender path. The sender should use ONLY PygameRenderer. FrameRenderer (cv2-based) is legacy and can be receiver-only or removed entirely.
+4. **Use `opencv-python` (not `-headless`)** as the dependency name and document that headless won't work (receiver needs `cv2.imshow` for the debug window).
+5. **Test each extras profile in isolation** in CI with separate venvs.
+
+**Phase mapping:** Dependency graph analysis must happen BEFORE the restructure, as it determines what moves where.
+
+**Confidence:** HIGH -- directly observed: `display/renderer.py` imports cv2 at module level, and `cli/send.py` imports `FrameRenderer` and `PygameRenderer` from it. The opencv-python/headless conflict is well-documented on PyPI.
+
+---
+
+### Pitfall 10: InquirerPy on Windows -- Raw Mode and ANSI Escape Issues
+
+**What goes wrong:** InquirerPy uses `prompt_toolkit`, which relies on ANSI escape sequences for cursor movement, color, and arrow-key navigation. On Windows, the behavior depends on the terminal:
+
+- **Windows Terminal (wt.exe):** Full ANSI support. Works correctly.
+- **cmd.exe:** Limited ANSI support (only with VT processing enabled via `SetConsoleMode`). `prompt_toolkit` enables this automatically, but if the console mode change fails (e.g., redirected stdout), menus render garbage characters.
+- **PowerShell ISE:** Does NOT support VT sequences. Menus are completely broken.
+- **Git Bash / MSYS2:** Uses mintty, which has its own terminal emulation. `prompt_toolkit` detects this as a "dumb terminal" and may fall back to basic input mode (no arrow keys, no colors).
+- **SSH sessions / VSCode terminal:** Generally work but may have issues with terminal size detection.
+
+Since this project targets Windows (Elgato 4K X + Windows is the primary platform), this is not a theoretical concern.
+
+**Why it happens:** Windows terminal emulation has been fragmented for decades. `prompt_toolkit` handles most cases via the `win32` input/output backends, but edge cases remain. InquirerPy does not add a compatibility layer on top of `prompt_toolkit` -- it inherits all of its platform quirks.
+
+**Consequences:**
+- Menu renders as garbled text in some terminals
+- Arrow keys don't work (user cannot navigate the menu)
+- Colors don't display (menu is unreadable)
+- Menu works in developer's terminal but fails in user's terminal
 
 **Warning signs:**
-- Decoding stalls at 90-95% (missing chunks that no remaining droplet can resolve)
-- Small test files fail to decode while larger files succeed
-- Increasing redundancy helps but requires much more than theoretical ~5% overhead
+- `[?25l` and other escape sequences printed as literal text
+- Menu items displayed but arrow keys do nothing
+- `UnicodeEncodeError` when rendering menu items with special characters
 
 **Prevention:**
-1. Implement the Robust Soliton Distribution with parameters tuned for expected K range.
-2. For small K (< 50), consider using a simple repetition/interleaving scheme instead of fountain codes -- the overhead of fountain codes is not worthwhile at very small K.
-3. Cap degree at `min(degree, K)` to prevent degrees larger than the number of chunks.
-4. Add an overhead parameter: allow configuring how many extra droplets (as percentage of K) to send. Default to 20% overhead for small K, 5-10% for large K.
-5. Test at extreme K values: K=1 (one chunk), K=5, K=50, K=500, K=5000.
+1. **Document required terminal:** "Use Windows Terminal (wt.exe) for best experience."
+2. **Add a terminal capability check** at console startup:
+   ```python
+   import sys
+   if sys.platform == 'win32' and not sys.stdout.isatty():
+       print("Error: interactive console requires a real terminal.")
+       sys.exit(1)
+   ```
+3. **Provide a `--no-interactive` fallback** that uses the existing argparse-based CLI for terminals that don't support InquirerPy.
+4. **Test in multiple Windows terminals** during development: Windows Terminal, cmd.exe, PowerShell, Git Bash.
+5. **Catch `prompt_toolkit` exceptions** at menu initialization and fall back gracefully:
+   ```python
+   try:
+       from InquirerPy import inquirer
+       result = inquirer.select(message="Choose action:", choices=[...]).execute()
+   except Exception:
+       # Fall back to simple numbered menu
+       result = _simple_menu(choices)
+   ```
 
-**Phase mapping:** Address during fountain code optimization phase, after architecture is stable. Requires empirical testing with different file sizes.
+**Phase mapping:** Must be validated in the first interactive CLI prototype. Build the fallback mechanism before building all menu options.
 
-**Confidence:** MEDIUM -- the custom degree distribution is observed in the code, and the theoretical pitfalls of non-optimal distributions for small K are well-documented in academic literature, but the exact failure behavior for *this specific* distribution would need empirical testing.
+**Confidence:** MEDIUM -- Windows terminal fragmentation is well-known. The specific interaction between `prompt_toolkit` and each Windows terminal variant is based on training data and general knowledge, not verified against InquirerPy's current version specifically.
 
 ---
 
-### Pitfall 9: No Data Integrity Verification (Checksums/CRC)
+### Pitfall 11: Monorepo Extras Don't Prevent Cross-Boundary Imports at Runtime
 
-**What goes wrong:** Neither the sequential nor the fountain receiver verifies data integrity. The sequential receiver checks for missing frames but has no way to detect bit errors within successfully decoded frames. The fountain receiver has no integrity check at all -- `is_complete()` only checks that all K chunks have been resolved, not that they were resolved correctly. A single bit error in an early-decoded chunk propagates through the XOR peeling process, corrupting multiple dependent chunks.
+**What goes wrong:** Pip extras are a dependency management mechanism, not an access control mechanism. Even if `hdmi-exfil[sender]` does not install `opencv-python`, nothing prevents Python code in the sender package from importing `cv2` if it happens to be installed for another reason. Similarly, nothing prevents a developer from adding `from hdmi_exfil.receiver.some_module import something` in a sender module.
 
-**Why it happens:** Prototype focused on "does it work at all" before adding integrity checking.
+Over time, cross-boundary imports creep in because Python does not enforce package boundaries. The extras split gradually becomes meaningless as code evolves.
+
+**Why it happens:** Python has no concept of module visibility or package-level access control. Any installed module can import any other installed module. The extras split exists only in pyproject.toml metadata -- it is not enforced at runtime.
 
 **Consequences:**
-- Silently corrupted files with no error indication
-- User believes transfer succeeded but file is damaged
-- In fountain mode, a single corrupted droplet can poison the entire decode through XOR error propagation
-- No way to request retransmission (one-way channel) so corruption must be caught and the user must know to retry
-
-**Warning signs:**
-- Files transfer "successfully" but cannot be opened
-- Zip files fail CRC checks when extracted
-- Images have visual artifacts
-- Executables crash
+- Extras boundaries erode over time
+- "Works on my machine" because the developer has all extras installed
+- Clean installs fail because of undeclared cross-boundary dependencies
 
 **Prevention:**
-1. Add per-frame CRC-32 to the frame header. Reject frames that fail CRC before decoding.
-2. Add a whole-file hash (SHA-256) in the first frame's metadata. After reassembly, verify the hash and report pass/fail.
-3. In fountain mode, add per-chunk CRC so the decoder can verify each resolved chunk before using it in XOR peeling. Discard chunks that fail CRC rather than propagating errors.
-4. Display final integrity result prominently: "Transfer complete: SHA-256 VERIFIED" or "Transfer complete: INTEGRITY CHECK FAILED -- retry recommended."
+1. **Add a CI job that tests each extras profile in isolation:**
+   ```bash
+   # Test sender-only
+   pip install .[sender,dev]
+   pytest tests/test_sender_*.py
 
-**Phase mapping:** Must be added during the refactor phase. CRC-per-frame is cheap and should be in the first refactored version. Whole-file hash can follow.
+   # Test receiver-only
+   pip install .[receiver,dev]
+   pytest tests/test_receiver_*.py
 
-**Confidence:** HIGH -- directly observed: no checksums anywhere in the codebase.
+   # Test core-only
+   pip install .[dev]
+   pytest tests/test_core_*.py
+   ```
+2. **Use an import linter** like `import-linter` or a custom check that verifies modules in `sender/` never import from `receiver/` and vice versa.
+3. **Document the boundary** in the architecture docs and CLAUDE.md for the project.
+4. **Organize tests by extras group** so each test file only tests code from one group.
+
+**Phase mapping:** Set up the CI isolation tests during the restructure phase. The import linter can be added later but should be planned for.
+
+**Confidence:** HIGH -- this is a well-known limitation of Python's module system. No specific tooling verification needed.
 
 ---
 
-### Pitfall 10: Refactoring Breaks Working Prototype (The Big Rewrite Trap)
+### Pitfall 12: New Interactive Console Doubles the Number of Entry Points to Maintain
 
-**What goes wrong:** The prototype currently works end-to-end through real hardware. A common failure mode when refactoring working prototypes is attempting to restructure everything at once -- new module boundaries, new encoding format, new error handling, new testing -- and ending up with a system that is architecturally cleaner but functionally broken. The specific risk here is high because:
-- The system involves hardware in the loop that is hard to mock
-- Timing-sensitive behavior (frame rates, capture timing) may change with restructuring
-- The encoding/decoding math must remain bit-exact across refactoring
-- Two modes (sequential + fountain) must both keep working
+**What goes wrong:** The current 4 entry points (`hdmi-send`, `hdmi-recv`, `hdmi-calibrate`, `hdmi-bench`) are standalone CLI commands with argparse. The new interactive console adds 2 more (`hdmi-sender-console`, `hdmi-receiver-console` or similar). But the existing entry points must continue to work for:
+- Scripting and automation (CI, scheduled transfers)
+- Users who don't want interactive menus
+- Backward compatibility with existing documentation and workflows
 
-**Why it happens:** Refactoring is seductive: "while we're in here, let's also fix X, Y, and Z." Each additional change multiplies the risk of regressions. Without tests to catch regressions, the first sign of breakage may be a completely failed transfer through hardware.
+This means every action in the interactive menu (send, calibrate, benchmark, etc.) must be implementable both as an interactive menu option AND as a standalone CLI command. If the logic is duplicated, they will drift apart. If the logic is shared, the shared code must handle both "I have all parameters from argparse" and "I need to ask the user interactively."
+
+**Why it happens:** Adding an interactive layer on top of an existing CLI without planning the abstraction creates a dual-code-path maintenance burden.
 
 **Consequences:**
-- Days or weeks of debugging to find which change broke which behavior
-- Loss of the working baseline (if not properly version-controlled)
-- Temptation to "just rewrite from scratch" which resets all empirical tuning
-- Loss of confidence in the refactoring effort
+- Bug fixes applied to the CLI path but not the console path (or vice versa)
+- Interactive console prompts for parameters that the CLI already has defaults for
+- Different behavior between `hdmi-send photo.png --mode fountain` and selecting "Send Python" from the console menu
 
 **Prevention:**
-1. **Establish baseline tests BEFORE refactoring.** Create loopback tests (encode then decode without hardware) for both sequential and fountain modes. Run these tests after every refactoring change.
-2. **Refactor incrementally.** One structural change at a time, verified by tests:
-   - Step 1: Extract constants to config (test: loopback still works)
-   - Step 2: Separate encoding from display (test: loopback still works)
-   - Step 3: Add platform abstraction (test: loopback still works)
-   - Step 4: Unify frame format (test: loopback still works)
-3. **Keep the old code runnable.** Don't delete `sender.py`, `receiver.py` until the refactored versions pass all the same tests.
-4. **Tag the working baseline.** `git tag v0.1-working-prototype` before starting any refactoring.
-5. **Hardware validation checkpoints.** After every 2-3 structural changes, run an actual transfer through the Elgato to verify real-world behavior matches loopback tests.
+1. **Single implementation, two entry points.** The interactive console collects parameters and builds the same `argparse.Namespace` (or equivalent config object) that the CLI command uses, then calls the same underlying function.
+2. **Extract core logic from `main()` functions.** Each CLI entry point currently has a `main()` that parses args AND runs the operation. Split into `parse_args() -> Namespace` and `run(config) -> None`. The interactive console calls `run(config)` directly with parameters collected from the menu.
+3. **Keep existing entry points unchanged.** The `hdmi-send` command should continue to work exactly as before. The console is an ADDITIONAL entry point, not a replacement.
+4. **Test both paths** with the same test cases:
+   ```python
+   @pytest.mark.parametrize("entry", ["cli", "console"])
+   def test_send_benchmark(entry):
+       ...
+   ```
 
-**Phase mapping:** This is a meta-pitfall that applies to the entire refactoring effort. Address by making the *first* phase of the roadmap "add tests to the existing code without changing it," *then* begin structural changes.
+**Phase mapping:** This architectural pattern must be established before building the interactive console. Refactor existing `main()` functions first.
 
-**Confidence:** HIGH -- this is one of the most well-documented pitfalls in software engineering, and the current codebase has minimal test coverage (one loopback test with wrong function signatures).
+**Confidence:** HIGH -- directly observed: all 4 `main()` functions in `cli/*.py` mix argument parsing with execution logic. This is a common pattern in CLIs that later need interactive wrappers.
 
 ---
 
@@ -341,90 +534,48 @@ Mistakes that cause annoyance, confusion, or minor bugs.
 
 ---
 
-### Pitfall 11: Existing Loopback Test is Already Broken
+### Pitfall 13: `pip install -e .` Editable Installs and Package Discovery Caching
 
-**What goes wrong:** The current `tests/test_loopback.py` calls `encode_frame(chunk, i)` with 2 arguments and `decode_frame(sampled)` expecting 3 return values, but the actual functions have different signatures:
-- `encode_frame(data_chunk, frame_index, total_frames)` requires 3 arguments
-- `decode_frame(frame_grid)` returns 4 values `(frame_index, total_frames, data, data_len)`
+**What goes wrong:** During active restructuring, developers run `pip install -e .` frequently. On Windows, pip's editable installs create a `.pth` file in site-packages that points to the source tree. If the package structure changes (new directories, renamed packages), the `.pth` file may point to stale paths. Additionally, Python caches the package `__path__` at first import, so even after re-running `pip install -e .`, a running Python process (or pytest session) may use cached stale paths.
 
-The test cannot run as-is. This means there is effectively zero test coverage.
+**Prevention:**
+1. Always start a fresh pytest session after `pip install -e .`
+2. Delete `build/`, `*.egg-info/`, and `__pycache__/` before reinstalling
+3. Consider using `pip install -e . --no-build-isolation` for faster iteration
 
-**Prevention:** Fix the test signatures as the very first task. Then run it to establish the baseline before any refactoring.
+**Phase mapping:** Minor -- just a development workflow annoyance during restructure.
 
-**Phase mapping:** Immediate -- fix before any other work.
-
-**Confidence:** HIGH -- directly observed by reading the code.
+**Confidence:** HIGH -- standard pip behavior.
 
 ---
 
-### Pitfall 12: Duplicated Constants Between Python and JavaScript
+### Pitfall 14: InquirerPy Prompt Reuse / Repeated Menu Bug
 
-**What goes wrong:** Constants like `WIDTH`, `HEIGHT`, `BLOCK_SIZE`, `HEADER_LEN`, and PRNG parameters are defined independently in `common.py` and `sender.html`. If one is updated without the other, the sender and receiver will disagree on frame format, causing silent decoding failure.
+**What goes wrong:** The interactive console is a loop: show menu -> user picks action -> execute action -> show menu again. InquirerPy's `inquirer.select()` creates a new `prompt_toolkit` Application each time. On some platforms (particularly Windows), rapidly creating and destroying prompt_toolkit Applications can cause resource leaks (file handles, console mode state). After many iterations (e.g., user runs calibrate 10 times), the menu may become sluggish or stop responding.
 
 **Prevention:**
-1. Generate the JavaScript constants from the Python source (or vice versa) as part of a build step.
-2. Or define constants in a shared JSON file that both Python and JavaScript read.
-3. At minimum, document prominently that constants must match and add a test that parses both files and compares values.
+1. Create the menu prompt once and re-execute it in a loop, rather than recreating it each iteration.
+2. If InquirerPy does not support prompt reuse, add periodic cleanup (e.g., garbage collection) between menu iterations.
+3. Monitor resource usage during long interactive sessions.
 
-**Phase mapping:** Address during architecture refactor.
+**Phase mapping:** Low priority -- only matters for extended interactive sessions.
 
-**Confidence:** HIGH -- directly observed.
+**Confidence:** LOW -- based on general knowledge of prompt_toolkit resource management. Not verified with InquirerPy specifically. Flag for validation during implementation.
 
 ---
 
-### Pitfall 13: Frame Capture Rate vs Display Rate Mismatch
+### Pitfall 15: sender.html Web Sender Template and constants.json Injection Path
 
-**What goes wrong:** The sender displays frames at rate X, but the capture card captures at rate Y. If Y < X, frames are missed. If Y > X, duplicate frames are captured. The fountain code mode handles missed frames gracefully (that is its purpose), but duplicate frames waste decode effort. The sequential mode has no tolerance for missed frames at all -- a single miss corrupts the output.
-
-In the current code, the sender defaults to `--fps 240` but the fountain receiver sets capture FPS to 60 (`cap.set(cv2.CAP_PROP_FPS, 60)` on line 177 of `receiver_fountain.py`). This 4:1 mismatch means the receiver sees only every ~4th frame in the best case.
+**What goes wrong:** The web sender (`sender.html`) is built from `web/sender.template.html` with `constants.json` injected. If the restructure moves `constants.json` to a different location (e.g., `src/core/constants.json`), the build script for `sender.html` must be updated to find it. If it is not, `sender.html` will be built with the wrong constants (or fail to build), and the web sender will use different encoding parameters than the Python sender.
 
 **Prevention:**
-1. Document that sender FPS should not exceed receiver capture FPS for sequential mode.
-2. For fountain mode, this mismatch is acceptable but should be documented as expected behavior (fountain codes are designed for erasure channels).
-3. Report actual capture FPS on the receiver side so users can tune sender FPS.
-4. Consider auto-negotiation: sender embeds its FPS in the frame header, receiver reports if it is keeping up.
+1. Keep `constants.json` in a well-known, documented location
+2. If it moves, update all build scripts that reference it
+3. Add a test that verifies the built `sender.html` contains the same constants as `hdmi_exfil.config`
 
-**Phase mapping:** Address during speed optimization phase.
+**Phase mapping:** Check during any restructure step that moves constants.json.
 
-**Confidence:** HIGH -- directly observed in the code.
-
----
-
-### Pitfall 14: Python GIL and Byte-Level XOR Performance
-
-**What goes wrong:** The fountain decoder performs XOR operations in a Python `for` loop (lines 69-70 and 103-104 of `receiver_fountain.py`): `for i in range(len(current_data)): current_data[i] ^= chunk_data[i]`. With `PAYLOAD_SIZE = 4044` bytes, this executes 4044 Python-level XOR operations per droplet. At 60 droplets/second, that is ~242,640 Python loop iterations/second just for XOR. This is orders of magnitude slower than necessary and becomes the bottleneck for decode speed.
-
-**Prevention:**
-1. Replace byte-level loops with NumPy vectorized XOR:
-   ```python
-   current_data = np.frombuffer(current_data, dtype=np.uint8)
-   chunk_data = np.frombuffer(chunk_data, dtype=np.uint8)
-   result = np.bitwise_xor(current_data, chunk_data).tobytes()
-   ```
-2. Or use Python's built-in `int.from_bytes()` / `int.to_bytes()` for whole-chunk XOR in a single operation.
-3. For maximum performance, use `ctypes` or a C extension for the XOR hot loop.
-
-**Phase mapping:** Address during speed optimization phase.
-
-**Confidence:** HIGH -- directly observed in the code, and NumPy XOR performance is well-documented.
-
----
-
-### Pitfall 15: OpenCV Color Space Conversion Uses BT.601 Instead of BT.709
-
-**What goes wrong:** OpenCV's FFmpeg backend applies YUV-to-RGB conversion using the BT.601 matrix regardless of the stream's actual color standard. The Elgato 4K X outputs in BT.709 (the standard for HD content). This color matrix mismatch shifts pixel values by several units -- for 0/255 binary encoding with a threshold of 128 this is irrelevant, but for any future multi-level encoding (e.g., 4 gray levels at 0, 85, 170, 255), the BT.601/709 mismatch shifts the received values and can push them across threshold boundaries.
-
-**Prevention:**
-1. For binary encoding (0/255), this is a non-issue -- no action needed.
-2. If implementing multi-level encoding, either:
-   - Force the capture backend to deliver raw YUV and handle conversion manually
-   - Calibrate thresholds based on actual received values rather than theoretical ones
-   - Use the green channel only (closest to luma, least affected by color matrix choice)
-3. Document this as a known limitation for future multi-bit encoding modes.
-
-**Phase mapping:** Only relevant if/when implementing multi-bit encoding. Flag for future reference.
-
-**Confidence:** MEDIUM -- the BT.601/709 mismatch is documented in OpenCV issue trackers, but its practical impact on binary encoding is negligible.
+**Confidence:** HIGH -- directly observed: `sender.html` exists alongside `web/sender.template.html`, and `config.py` loads from `files("hdmi_exfil").joinpath("constants.json")`.
 
 ---
 
@@ -432,45 +583,56 @@ In the current code, the sender defaults to `--fps 240` but the fountain receive
 
 | Phase Topic | Likely Pitfall | Mitigation |
 |-------------|---------------|------------|
-| **Testing foundation** | Existing test is broken (Pitfall 11) | Fix test signatures first, verify baseline before any changes |
-| **Architecture refactor** | Breaking working prototype (Pitfall 10) | Incremental refactoring with loopback test gates between each step |
-| **Architecture refactor** | Encoding mismatch confusion (Pitfall 3) | Unify frame format with magic number/version field |
-| **Architecture refactor** | Bare exception handling (Pitfall 6) | Define error handling strategy before restructuring decode loop |
-| **Encoding/decoding** | Chroma subsampling corruption (Pitfall 1) | Default to luma-only encoding; optional multi-bit as advanced mode |
-| **Encoding/decoding** | MJPEG 8x8 alignment (Pitfall 2) | Use BLOCK_SIZE > 8 or multi-sample voting |
-| **Fountain codes** | PRNG cross-language mismatch (Pitfall 4) | Test vector validation as first fountain-code test |
-| **Fountain codes** | Degree distribution for small K (Pitfall 8) | Implement Robust Soliton or adaptive distribution |
-| **Fountain codes** | XOR performance (Pitfall 14) | Replace Python loops with NumPy vectorized XOR |
-| **Data integrity** | No checksums (Pitfall 9) | Add per-frame CRC-32 and whole-file SHA-256 |
-| **Speed optimization** | waitKey FPS ceiling (Pitfall 5) | Alternative display backend or HTML sender for high-speed mode |
-| **Speed optimization** | Sender/receiver FPS mismatch (Pitfall 13) | Document, auto-report actual FPS, match rates |
-| **Cross-platform** | Windows-only APIs (Pitfall 7) | Platform abstraction layer, HTML sender as cross-platform path |
-| **Multi-bit encoding** | BT.601/709 color shift (Pitfall 15) | Calibrate thresholds or use luma-only levels |
-| **Ongoing** | Duplicated constants (Pitfall 12) | Shared config or build-step generation |
+| **Pre-restructure setup** | Stale editable install masks import errors (Pitfall 8) | Add conftest.py import verification, document `pip install -e .` workflow |
+| **Package-dir change** | All imports break simultaneously (Pitfall 1) | Keep `hdmi_exfil.*` namespace, use `__init__.py` re-exports for backward compat |
+| **Package list update** | New subpackages missing from distribution (Pitfall 2) | Switch to auto-discovery before restructuring |
+| **Entry point update** | CLI commands break silently (Pitfall 3) | Smoke test that imports all entry point functions |
+| **Dependency split** | Module-level imports defeat extras isolation (Pitfall 5) | Lazy-import pygame/cv2, split renderer file |
+| **Dependency split** | opencv-python in sender path (Pitfall 9) | Remove FrameRenderer cv2 dep from sender, make pygame-only |
+| **constants.json move** | FileNotFoundError crashes everything (Pitfall 6) | Move atomically with config.py, update package-data |
+| **Interactive CLI prototype** | Event loop conflict with pygame/cv2 (Pitfall 4) | Menu phase and display phase must be completely separate |
+| **Interactive CLI prototype** | Terminal corruption on crash (Pitfall 7) | try/finally cleanup, atexit hooks |
+| **Interactive CLI prototype** | Windows terminal incompatibility (Pitfall 10) | Test in multiple terminals, provide `--no-interactive` fallback |
+| **Console architecture** | Dual code paths drift apart (Pitfall 12) | Extract core logic from main(), single implementation |
+| **Extras CI** | Cross-boundary imports undetected (Pitfall 11) | CI tests each extras profile in isolation |
+| **Web sender** | constants.json path change breaks template build (Pitfall 15) | Update build script, add cross-validation test |
+
+---
+
+## Recommended Restructure Sequence (Risk-Minimizing Order)
+
+Based on the pitfall analysis, the safest order for the v1.1 milestone is:
+
+1. **Add import smoke tests** (tests all current `hdmi_exfil.*` imports work) -- catches regressions from step 2+
+2. **Switch to auto-discovery** in pyproject.toml -- eliminates Pitfall 2 before it can occur
+3. **Refactor `display/renderer.py`** to lazy-import cv2 and split renderers -- prerequisite for Pitfall 5/9
+4. **Extract core logic from `main()` functions** -- prerequisite for Pitfall 12
+5. **Move files incrementally** (one subpackage per commit, test after each) -- manages Pitfall 1
+6. **Update entry points and package-data** atomically with each move -- manages Pitfall 3/6
+7. **Add InquirerPy interactive console** (after restructure is stable) -- addresses Pitfall 4/7/10
+8. **Define extras groups** and test in CI -- addresses Pitfall 5/9/11
 
 ---
 
 ## Sources
 
-### HIGH Confidence (Official Documentation / Direct Code Analysis)
-- Elgato 4K X supported resolutions and formats: [Elgato Support](https://help.elgato.com/hc/en-us/articles/23479175821069-Elgato-Game-Capture-4K-X-Supported-Resolutions-and-Frame-Rates)
-- OpenCV VideoCapture color conversion BT.601 bug: [OpenCV Issue #20513](https://github.com/opencv/opencv/issues/20513)
-- OpenCV waitKey timing: [OpenCV Issue #23456](https://github.com/opencv/opencv/issues/23456)
-- OpenCV VideoCapture backend overview: [OpenCV Docs](https://docs.opencv.org/3.4/d0/da7/videoio_overview.html)
-- LT Codes original paper: [Michael Luby, Digital Fountain](https://www.inference.org.uk/mackay/dfountain/LT.pdf)
-- Fountain codes overview: [CMU Course Notes](https://www.andrew.cmu.edu/user/gaurij/FountainCodes.pdf)
-- MJPEG chroma subsampling: [NearStream Guide](https://www.nearstream.us/blog/the-science-of-color-chroma-subsampling-422-vs-420-capture-cards)
-- Compression artifacts guide: [Encode.moe](https://guide.encode.moe/encoding/video-artifacts.html)
+### HIGH Confidence (Direct Code Analysis)
+- `pyproject.toml` package-dir mapping: line 41, `"hdmi_exfil" = "src"`
+- `pyproject.toml` explicit package list: lines 31-38
+- `pyproject.toml` entry points: lines 25-28
+- `pyproject.toml` importlib import mode: line 48
+- `config.py` importlib.resources usage: line 23, `files("hdmi_exfil").joinpath("constants.json")`
+- `display/renderer.py` unconditional cv2 import: line 23, `import cv2`
+- All 40+ test import lines verified via grep of `tests/` directory
+- `conftest.py` configuration: hardware marker support
 
-### MEDIUM Confidence (Verified with Multiple Sources)
-- Pen Test Partners pixel exfiltration research: [PTP Blog](https://www.pentestpartners.com/security-blog/exfiltration-by-encoding-data-in-pixel-colour-values/)
-- SplitMix32 PRNG implementations: [bryc/code on GitHub](https://github.com/bryc/code/blob/master/jshash/PRNGs.md)
-- OBS capture card documentation: [OBS Forums](https://obsproject.com/forum/resources/capture-card-documentation-latency-decode-modes-formats-more.777/)
-- NumPy XOR performance: [NumPy v2.3 Manual](https://numpy.org/doc/stable/reference/generated/numpy.bitwise_xor.html)
-- Refactoring best practices: [Sonar](https://www.sonarsource.com/resources/library/refactoring/) and [Tembo](https://www.tembo.io/blog/code-refactoring)
-- Testing hardware-dependent code: [SoftwareCraft](https://softwarecraft.ch/software-testing-when-hardware-is-involved/)
+### MEDIUM Confidence (Training Data + General Knowledge)
+- InquirerPy maintenance status (last release ~2022, based on training data)
+- prompt_toolkit / pygame event loop conflicts (well-known pattern, not verified for this specific combination)
+- Windows terminal ANSI escape sequence support (well-documented, not tested with InquirerPy specifically)
+- setuptools auto-discovery behavior (documented in setuptools docs, not verified against latest version)
 
-### LOW Confidence (Single Source / Needs Validation)
-- OBS Rec.709 color space issue on macOS: [OBS Issue #11224](https://github.com/obsproject/obs-studio/issues/11224)
-- Elgato RGB mode "not true RGB" claim from review: [Stream Guides](https://streamguides.gg/2024/02/elgato-4k-x-4k-pro-review/)
-- Degree distribution optimization via RL: [arXiv:2502.07355](https://www.arxiv.org/pdf/2502.07355)
+### LOW Confidence (Needs Validation)
+- InquirerPy prompt reuse / resource leak behavior (Pitfall 14) -- theoretical, needs testing
+- `questionary` as InquirerPy fallback (based on training data, should verify current maintenance status)
+- prompt_toolkit 4.x compatibility risk (speculative -- no evidence of a 4.x release planned)

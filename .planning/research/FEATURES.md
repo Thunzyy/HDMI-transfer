@@ -1,189 +1,174 @@
 # Feature Landscape
 
-**Domain:** HDMI data exfiltration / data-over-video one-way channel
-**Researched:** 2026-02-16
-**Overall confidence:** MEDIUM-HIGH (informed by existing codebase analysis, TGXf prior art, fountain code literature, and capture card specifications)
+**Domain:** Interactive CLI consoles and monorepo restructure for HDMI data exfiltration tool
+**Researched:** 2026-03-02
+**Overall confidence:** MEDIUM (InquirerPy well-known from training data, but no live verification of latest version; monorepo patterns from setuptools/pip extras are stable and well-documented)
 
 ## Table Stakes
 
-Features users expect. Missing = transfer fails or is unreliable to the point of being unusable.
+Features users expect. Missing = the interactive console feels broken or incomplete.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **TS-1: Reliable frame synchronization** | Without sync, receiver cannot distinguish data frames from noise/idle/other content. Current prototype has no explicit sync -- relies on always-running sender and receiver detecting valid headers. This breaks on startup, interruption, and multi-transfer sessions. | High | Requires dedicated sync pattern (magic bytes or visual marker) at known position in each frame. TGXf uses a "bounded region" approach; QRT uses `QRT1` magic header. Our approach should embed a magic byte sequence in the first N bytes of each frame. |
-| **TS-2: Start/end of transmission signaling** | Receiver needs to know when a transfer begins and ends. Current fountain receiver auto-detects K from first valid frame but has no explicit start signal and no end signal -- it decodes until complete, with no way to handle sender restart or new file. | Medium | Implement distinct frame types: IDLE (black/pattern), START (metadata), DATA (payload), END (completion signal). Similar to QRT's HDR/DAT/END frame types. |
-| **TS-3: File integrity verification (checksum)** | One-way channel means no retransmission. Must verify data arrived correctly. Currently zero verification -- fountain decoder produces output with no way to know if it is correct. | Medium | Embed SHA-256 hash of original file in START frame metadata. Receiver computes hash after reassembly and reports PASS/FAIL. CRC32 per-frame is also useful for frame-level validation but SHA-256 for file-level is the standard. |
-| **TS-4: Metadata protocol (filename, size, hash)** | Receiver needs to know what it is receiving. Current implementation has basic filename metadata (4-byte length + name bytes) but no file size or hash, making it impossible to detect truncation or corruption. | Low | Extend metadata header: filename (existing), file size (4 bytes), SHA-256 hash (32 bytes), timestamp (optional). Embed in START frame. |
-| **TS-5: Progress reporting and transfer statistics** | User has no idea if transfer is working, how fast it is going, or when it will finish. Current receiver prints frame count but no speed, ETA, or completion percentage for fountain mode. | Low | Real-time display: frames received, unique chunks decoded, K total, decode %, estimated speed (bytes/sec), ETA. Update every 0.5-1s. Terminal-based, no GUI needed. |
-| **TS-6: Multi-bit per block encoding (3 bits/block)** | Current fountain sender.html uses 1 bit/block (black/white only), while sender.py uses 3 bits/block (1 bit per RGB channel). The fountain path is leaving 3x throughput on the table. This is the single biggest easy win. | Medium | Upgrade sender.html and receiver_fountain.py to use 3 bits/block (R=0/255, G=0/255, B=0/255 per block). TGXf achieved 12.1 Mbps at 3bpp -- validates this approach for HDMI capture. Elgato 4K X supports NV12 and 4:2:2 capture at 1080p240 -- 3bpp binary encoding (0 or 255 per channel) survives chroma subsampling because values are extremes. |
-| **TS-7: Robust degree distribution for fountain codes** | Current degree distribution is hand-tuned (10% degree-1, 50% degree-2, 40% random up to 20). This is not based on the Robust Soliton Distribution from literature. For small K (typical: 1-500 chunks for files up to 2MB), overhead can be 14-42% with naive distributions vs 3-5% with proper tuning. | High | Implement Robust Soliton Distribution with parameters c and delta. For small K, combine belief propagation with Gaussian elimination for final decoding. Literature shows this reduces overhead from ~42% to ~3% for K=500. |
-| **TS-8: Cross-platform receiver (remove Windows-only deps)** | receiver_fountain.py uses `cv2.CAP_DSHOW` (DirectShow, Windows-only). Receiver should work on Linux and macOS where Elgato cards are also used. | Low | Use platform detection: CAP_DSHOW on Windows, CAP_V4L2 on Linux, CAP_AVFOUNDATION on macOS. Or just omit backend flag and let OpenCV auto-detect. |
+### Console Menu Features
+
+| Feature | Why Expected | Complexity | Dependencies | Notes |
+|---------|--------------|------------|--------------|-------|
+| **TS-1: Arrow-key navigation main menu** | This is the defining feature of an interactive console. Users expect Up/Down arrows to highlight options and Enter to select. Without this, there is no "interactive console" -- it is just argparse. | Low | InquirerPy `inquirer.select()` | InquirerPy wraps prompt-toolkit and provides list/select prompts with arrow-key navigation out of the box. Both sender and receiver get a main menu with their respective actions. |
+| **TS-2: Sender main menu actions** | Sender users expect to pick from the core operations: send file (Python), send file (web/browser), calibrate, detect hardware, benchmark, settings. These map 1:1 to existing CLI commands. | Low | Existing `cli/send.py`, `cli/calibrate.py`, `cli/benchmark.py`, `display/monitors.py` | Each menu action calls into existing functions. The console is a thin wrapper that collects parameters interactively instead of via argparse flags. |
+| **TS-3: Receiver main menu actions** | Receiver users expect: receive file, calibrate signal, detect capture card, view last transfer stats, settings. Maps to existing `cli/receive.py` and `cli/calibrate.py`. | Low | Existing `cli/receive.py`, `cli/calibrate.py` | Same pattern as sender -- interactive wrapper over existing functionality. |
+| **TS-4: Interactive file picker for send** | When user selects "Send File (Python)", they need to specify a file path. A text input prompt with path completion or at minimum a clear text input is expected. Bare `input()` with no guidance is poor UX. | Low | InquirerPy `inquirer.filepath()` or `inquirer.text()` | InquirerPy has a `filepath` prompt type with path auto-completion. This replaces the positional `input_path` argparse argument. |
+| **TS-5: Profile selection prompt** | Before sending or receiving, user must pick a resolution profile (speed/balanced/quality). Arrow-key selection from the three options is natural. | Low | InquirerPy `inquirer.select()`, `config.PROFILES` | Display profile name + description (e.g., "speed -- 1080p@240fps"). Pre-select the last-used or default profile. |
+| **TS-6: Mode selection prompt** | User must choose encoding mode (sequential/fountain) for send, or auto/sequential/fountain for receive. | Low | InquirerPy `inquirer.select()` | Simple 2-3 option list. Default to fountain for send (higher throughput), auto for receive. |
+| **TS-7: Monitor/capture device selection** | Sender needs to pick which monitor to display on. Receiver needs to pick which capture device. Both should list detected hardware and let user arrow-select. | Medium | `display/monitors.get_monitors()`, OpenCV `cv2.VideoCapture` enumeration | Monitor detection already works via screeninfo. Capture device enumeration is trickier -- OpenCV does not have a clean "list devices" API. On Windows, can probe indices 0-9. Display device name if available. |
+| **TS-8: Graceful exit and Ctrl-C handling** | User expects Ctrl-C to cleanly exit at any point, returning to the main menu or exiting the program without a stack trace. | Low | Python `KeyboardInterrupt` handling, InquirerPy built-in Ctrl-C support | InquirerPy raises `KeyboardInterrupt` on Ctrl-C during prompts. Wrap console loop in try/except. Transfers should also handle Ctrl-C (existing ESC-to-pause logic can be extended). |
+| **TS-9: Return to main menu after action** | After a send/receive/calibrate completes, user expects to return to the main menu rather than the program exiting. This is what makes it a "console" rather than a single-shot command. | Low | Console main loop | Simple while-True loop wrapping the menu prompt. Actions run and control returns to menu. "Exit" option at bottom of menu. |
+| **TS-10: Clear screen / visual separation between actions** | After completing an action and returning to the menu, the terminal should be visually distinct -- either clear the screen or print a separator. Otherwise prior output clutters the menu. | Low | `os.system('cls' or 'clear')` or print separators | Simple terminal clear before re-showing the menu. Keep it minimal -- no need for a full TUI framework. |
+
+### Monorepo Restructure Features
+
+| Feature | Why Expected | Complexity | Dependencies | Notes |
+|---------|--------------|------------|--------------|-------|
+| **TS-11: pip install with extras** | `pip install hdmi-exfil[sender]` installs only sender deps (pygame-ce, screeninfo). `pip install hdmi-exfil[receiver]` installs only receiver deps (opencv-python). `pip install hdmi-exfil[all]` installs everything. This is the stated goal. | Medium | pyproject.toml `[project.optional-dependencies]` | Core deps (numpy, numba) stay in base. pygame-ce, screeninfo go to `[sender]`. opencv-python goes to `[receiver]`. InquirerPy goes to both (or base if shared). |
+| **TS-12: Clean module separation** | `src/core/` for shared protocol/encoding code, `src/sender/` for sender-specific code, `src/receiver/` for receiver-specific code. Currently everything is flat under `src/`. | High | All existing modules need to be relocated | This is the most complex task. Imports change across the entire codebase. Tests need updating. Need to avoid breaking existing functionality. The `protocols/`, `file_handling/`, `config.py`, `prng.py` go to core. `display/` goes to sender. `capture/` goes to receiver. `cli/` splits. |
+| **TS-13: Console entry points** | New entry points `hdmi-sender` and `hdmi-receiver` for the interactive consoles, alongside existing `hdmi-send`, `hdmi-recv`, etc. for direct argparse use. | Low | pyproject.toml `[project.scripts]` | Two new script entries. Existing entry points stay for backward compatibility and scripting/automation use. |
+| **TS-14: Existing CLI commands still work** | `hdmi-send`, `hdmi-recv`, `hdmi-calibrate`, `hdmi-bench` must continue to work unchanged after restructure. The interactive consoles are additive, not replacements. | Medium | All existing `cli/*.py` modules | This is a hard constraint. The argparse CLIs are the scripting interface. The interactive consoles are the human interface. Both must coexist. |
 
 ## Differentiators
 
-Features that set this tool apart from TGXf, txqr, and naive approaches. Not expected, but create significant value.
+Features that elevate the console experience beyond a basic menu. Not expected, but valued.
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **D-1: Multi-resolution mode profiles** | Different hardware setups benefit from different settings. 4K@30fps = max data per frame but slow refresh. 1080p@240fps = 8x more frames but less data per frame. 1080p@60fps = middle ground. Provide tested, named profiles ("speed", "balanced", "reliable") rather than forcing users to calculate parameters. | Medium | Profiles: `4k30` (3840x2160, 30fps, ~10MB/frame raw), `1080p240` (1920x1080, 240fps, ~1MB/frame raw), `1080p60` (1920x1080, 60fps, lower CPU demand). Each profile sets: resolution, block size, fps target, fountain code parameters. Benchmark each to find actual throughput. |
-| **D-2: Adaptive block size based on capture quality** | Larger blocks (16x16) are more robust to alignment errors and compression artifacts. Smaller blocks (4x4) pack more data. Let the system auto-tune or provide presets. Current 8x8 is a reasonable default but not optimal for all scenarios. | Medium | Provide block sizes 4x4, 8x8, 16x16. Default 8x8. Calibration mode (see D-4) can recommend optimal block size by testing capture fidelity at each size. Smaller blocks = more data but require better alignment. |
-| **D-3: Threaded capture pipeline** | At 240fps, OpenCV's blocking `.read()` is the bottleneck -- real-world tests show it caps at ~30-60fps even with 240fps-capable hardware. A dedicated capture thread with frame buffer is essential for high throughput. Literature shows up to 379% improvement with threaded capture. | Medium | Separate capture thread fills a ring buffer. Processing thread pulls latest frame. Measure actual achieved capture FPS and report it. This is not a "nice to have" -- at 240fps target, it is nearly mandatory to actually achieve that rate. |
-| **D-4: Calibration mode** | Before transfer, sender displays a known calibration pattern. Receiver analyzes captured pattern to detect: alignment offset (pixel shift), scaling, color accuracy, achievable block size, and capture FPS. Current prototype has a basic calibration frame in sender.py but receiver does not analyze it. | High | Calibration sequence: 1) Sender displays alignment grid with known pattern at corners, 2) Receiver captures and analyzes: detects sub-pixel offset, measures SNR per channel, determines max usable block size, measures actual capture FPS. 3) Results feed into transfer parameters. TGXf uses a "bounded region" approach; we should auto-detect the region. |
-| **D-5: Per-frame CRC for frame-level error detection** | Beyond file-level SHA-256, detect per-frame corruption immediately. Allows the receiver to count and report corrupted frames in real time, even during fountain decoding. Useful for diagnostics and tuning. | Low | Add CRC32 (4 bytes) to each frame's header. Receiver validates before processing. Corrupted frames are discarded rather than fed to the decoder. QRT protocol uses this exact approach. |
-| **D-6: Fountain code overhead optimization** | Move from custom degree distribution to Robust Soliton Distribution. Add Gaussian elimination as fallback when belief propagation stalls (standard technique for small K). Target: decode at K + 5% overhead instead of K + 30%. | High | Implement proper RSD with tunable c (0.1-0.3) and delta (0.01-0.1). Add Gaussian elimination decoder for the final 5-10% of unchunked symbols. This is well-documented in literature but requires careful implementation. For very small K (<50), even simple random linear coding with GE may outperform LT codes. |
-| **D-7: Session management (multi-transfer)** | Current tool handles one transfer per run. Support sending multiple files sequentially without restarting sender/receiver. Each transfer gets a session ID. | Medium | Session ID (random 4-byte value) in every frame header. Receiver detects new session ID = new transfer. Enables continuous operation. |
-| **D-8: Benchmarking mode** | Automated throughput measurement. Send known data, measure: actual FPS captured, frame loss rate, decode overhead ratio, effective throughput (bytes/sec). Essential for comparing configurations and publishing results. | Medium | `--benchmark` flag sends random data of configurable size. Receiver reports detailed statistics: capture FPS, unique frames/sec, fountain overhead, raw throughput, effective throughput, time to decode. Outputs machine-parseable results (JSON). |
-| **D-9: Python sender with fountain codes** | Currently sender.py uses sequential encoding (3 bits/block) while sender.html uses fountain encoding (1 bit/block). Combine both: Python sender with fountain codes AND 3 bits/block. This is the maximum throughput path. | Medium | Port fountain code logic from sender.html to Python sender. Use numpy for XOR operations. Add 3-bit RGB encoding. Python sender + fountain codes + 3bpp + threaded display = theoretical max throughput. |
+| Feature | Value Proposition | Complexity | Dependencies | Notes |
+|---------|-------------------|------------|--------------|-------|
+| **D-1: Settings persistence** | Remember last-used profile, mode, screen index, output directory across sessions. Saves user from re-selecting defaults every time they launch the console. | Medium | JSON config file (~/.hdmi-exfil/config.json or similar) | InquirerPy supports `default` parameter on prompts. Load saved settings and pass as defaults. Save after each successful action. |
+| **D-2: Live hardware status on menu** | Show detected monitors and capture devices in the menu header before user selects an action. e.g., "2 monitors detected, Elgato 4K X on index 1". User knows hardware state without running a separate detect command. | Medium | `get_monitors()`, device probe on startup | Run detection once on console startup. Display as header text above menu. Refresh only when user selects "Detect Hardware". Avoid slow startup -- if detection takes >1s, show "detecting..." and update async. |
+| **D-3: Confirm before send/receive** | After collecting all parameters (file, profile, mode, screen), show a summary and ask for confirmation before starting the transfer. Prevents accidental sends with wrong settings. | Low | InquirerPy `inquirer.confirm()` | Simple yes/no confirmation prompt showing all selected parameters. |
+| **D-4: Last transfer stats on receiver menu** | Receiver menu shows summary of last completed transfer (filename, size, speed, integrity status) without needing to scroll through terminal history. | Low | In-memory state from last transfer | Store last transfer result in a module-level variable. Display in menu header or as a dedicated menu action. |
+| **D-5: Fuzzy file path input** | InquirerPy's fuzzy finder for file selection -- type partial filename and it filters. Better than raw text input for finding files. | Low | InquirerPy `inquirer.fuzzy()` or `filepath` with completion | InquirerPy supports fuzzy matching. Use for file path input if the prompt type supports it. Falls back to text input gracefully. |
+| **D-6: Colored output and status indicators** | Use terminal colors to indicate status: green for success, red for errors, yellow for warnings, cyan for info. Makes the console feel polished. | Low | ANSI escape codes or `colorama` or built-in InquirerPy styling | InquirerPy uses prompt-toolkit which supports rich terminal styling. Can color menu items, headers, and status messages. Avoid adding heavy dependencies -- ANSI codes work on Windows 10+ terminals. |
+| **D-7: Sender web-launch integration** | "Send File (Web)" menu option opens sender.html in the default browser with one keypress. Currently user has to manually open the HTML file. | Low | `webbrowser.open()` stdlib | Python stdlib `webbrowser` module opens default browser. Just need to locate sender.html relative to package installation. |
+| **D-8: Advanced settings submenu** | Expose less-common settings (FPS override, redundancy, buffer size, threaded capture toggle) in a nested submenu rather than cluttering the main menu. | Low | InquirerPy `inquirer.number()`, `inquirer.select()` | Keep main menu clean (6-7 items). "Settings" opens a submenu for advanced tweaks. Defaults are sensible -- most users never touch these. |
 
 ## Anti-Features
 
-Features to explicitly NOT build. Common mistakes in this domain.
+Features to explicitly NOT build. Common mistakes when adding interactivity to CLI tools.
 
 | Anti-Feature | Why Avoid | What to Do Instead |
 |--------------|-----------|-------------------|
-| **AF-1: Back-channel communication** | The entire value proposition is one-way HDMI channel with zero traces on source. Any back-channel (network, USB, audio) defeats the purpose and adds complexity. Fountain codes exist precisely because there is no back-channel. | Keep the one-way constraint absolute. Fountain codes handle what a back-channel would handle (retransmission). All tuning must be done pre-transfer (calibration) or be adaptive on the sender side only (send excess droplets). |
-| **AF-2: Steganography / hiding data in normal video** | Data is encoded as visible pixel blocks, not hidden in normal video content. Steganographic encoding would dramatically reduce throughput (to kbps range) and add massive complexity. The threat model assumes physical control of the capture path, not visual concealment. | Keep visible block encoding. If concealment is needed, it is a fundamentally different tool with different tradeoffs. |
-| **AF-3: Encryption** | HDMI is a physical air-gapped channel. Adding encryption adds complexity, computation overhead on the sender (especially browser sender), and solves a problem that does not exist in the threat model. | If encryption is ever needed, it should be applied to the file before feeding it to the sender, not built into the transport protocol. Keep the transport layer simple. |
-| **AF-4: GUI application** | CLI + browser is the right interface. A GUI adds massive development overhead, cross-platform headaches, and dependencies. The browser sender IS the GUI for the source PC. The receiver needs terminal output only. | CLI with rich terminal output (progress bars, stats). The browser sender.html already provides the GUI experience on the source machine. |
-| **AF-5: Multi-file queue / batch transfers** | Adds session management complexity, partial failure handling, and progress tracking across files. One file at a time is simpler and more reliable. Directory transfer already works via auto-zip. | Keep auto-zip for directories. If multiple files need sending, zip them first or send sequentially. Session management (D-7) enables sequential transfers without restart, which is sufficient. |
-| **AF-6: Intermediate grayscale / multi-level encoding (4+ bits per channel)** | Going beyond binary per channel (0 or 255) to intermediate values (0, 85, 170, 255 for 2 bits/channel) is theoretically possible but extremely fragile. Capture cards apply chroma subsampling (4:2:2 or 4:2:0), compression, gamma curves, and noise that destroy intermediate levels. TGXf explicitly found that 1bpp (binary per channel) is the only reliable mode across most capture cards. The Elgato 4K X does NV12 at 240fps which is 4:2:0 -- only the extremes (0 and 255) survive reliably. | Stick with binary encoding: each channel is 0 or 255. This gives 3 bits per block with 3 channels, which is already the practical maximum for capture card channels. If more throughput is needed, reduce block size (more blocks per frame) rather than adding gray levels. |
-| **AF-7: Real-time compression on sender** | Compressing data before encoding into frames adds CPU overhead on the source PC and complexity. For the browser sender, JavaScript compression is slow. The file should be pre-compressed if needed. | If files are compressible, compress before feeding to sender. The transport protocol should treat data as opaque bytes. Auto-zip for directories is acceptable because it is a one-time pre-processing step, not per-frame. |
-| **AF-8: Audio channel data encoding** | HDMI carries audio alongside video. Some approaches try to encode data in the audio channel for additional bandwidth. This adds complexity, requires audio capture setup, and the throughput gain is negligible compared to video (audio is ~1.5 Mbps vs video at ~250 MB/s raw). | Ignore audio channel entirely. Video bandwidth dwarfs audio. |
-| **AF-9: Raptor/RaptorQ codes** | While Raptor codes are theoretically superior to LT codes (O(K) vs O(K log K), ~0.2% overhead vs ~5%), they are significantly more complex to implement, may have patent concerns (Qualcomm), and the practical improvement for our use case (K < 1000 typically) is modest. LT codes with Robust Soliton + Gaussian elimination get close enough. | Use LT codes with Robust Soliton Distribution and Gaussian elimination fallback. This gets overhead to ~3-5% for typical K values, which is sufficient. Revisit Raptor only if LT overhead is demonstrably the bottleneck (unlikely -- capture FPS will be the bottleneck). |
+| **AF-1: Full TUI framework (curses, textual, rich TUI)** | The consoles need arrow-key menus, not a full terminal UI with panels, layouts, and widgets. Textual/curses add massive complexity, require careful terminal handling, and conflict with existing cv2.imshow windows and pygame displays. InquirerPy is intentionally lightweight -- it takes over the terminal only during prompts, then releases it for normal stdout. | Use InquirerPy for prompts only. Regular print() for output. No persistent TUI layout. The console is a prompt loop, not a dashboard. |
+| **AF-2: Async/concurrent menu updates** | Do not try to update the menu in real-time while a transfer is running. Transfers use cv2.imshow, pygame, and stdout writes that are incompatible with a concurrent TUI. | Menu is shown only when no transfer is active. During transfers, existing progress reporting (stdout writes) continues unchanged. Return to menu after transfer completes. |
+| **AF-3: Custom keybindings beyond arrow keys** | Do not invent custom keyboard shortcuts (Ctrl-S to send, F5 to refresh, etc.). This creates a learning curve and conflicts with terminal shortcuts. | Arrow keys + Enter + Ctrl-C is the complete interaction model. All actions are accessible through the menu. No hidden shortcuts. |
+| **AF-4: Configuration file format bikeshedding** | Do not implement TOML, YAML, or INI config files when JSON suffices. The settings are simple key-value pairs. | If settings persistence is implemented, use JSON. One file. No schema validation beyond basic type checks. |
+| **AF-5: Plugin system or extensible menus** | Do not add plugin architecture to extend the console with custom menu items. This is a single-purpose tool with a fixed set of operations. | Hardcode the menu items. If new features are added, add them to the menu directly. |
+| **AF-6: Replacing argparse CLIs with console-only interface** | Do not remove or deprecate the existing argparse-based commands. They are essential for scripting, automation, CI/CD, and headless operation. The interactive consoles are an addition, not a replacement. | Both interfaces coexist. `hdmi-send` (argparse) and `hdmi-sender` (interactive) share the same underlying functions but differ in parameter collection. |
+| **AF-7: Auto-update or version checking** | Do not add update checking, version comparison, or auto-update features to the console. This is a local tool that should work offline. | Version is in pyproject.toml. Users update manually with pip. |
+| **AF-8: Transfer history database** | Do not build a SQLite or file-based transfer history. Last transfer stats in-memory is sufficient. Historical data adds complexity with minimal value for this tool's use case. | Store last transfer result in memory. Display on request. Lost when console exits. That is fine. |
 
 ## Feature Dependencies
 
 ```
-TS-1 (Frame sync)
+TS-12 (Module separation)
   |
-  +---> TS-2 (Start/end signaling) -- requires frame type field in sync header
+  +---> TS-11 (pip extras) -- extras reference separated modules
   |       |
-  |       +---> TS-3 (Integrity verification) -- hash in START frame
+  |       +---> TS-13 (Console entry points) -- entry points need correct module paths
+  |
+  +---> TS-14 (Existing CLIs work) -- must not break during restructure
+
+TS-1 (Arrow-key menu) -- InquirerPy
+  |
+  +---> TS-2 (Sender menu actions) -- menus call into existing sender functions
   |       |
-  |       +---> TS-4 (Metadata protocol) -- metadata in START frame
+  |       +---> TS-4 (File picker) -- send action needs file selection
   |       |
-  |       +---> D-7 (Session management) -- session ID in frame header
+  |       +---> TS-5 (Profile selection) -- send action needs profile
+  |       |
+  |       +---> TS-6 (Mode selection) -- send action needs mode
+  |       |
+  |       +---> TS-7 (Monitor selection) -- send action needs target screen
   |
-  +---> D-5 (Per-frame CRC) -- CRC in frame header alongside sync
-
-TS-6 (3-bit encoding)
+  +---> TS-3 (Receiver menu actions) -- menus call into existing receiver functions
+  |       |
+  |       +---> TS-7 (Device selection) -- receive action needs capture source
   |
-  +---> D-9 (Python fountain sender) -- combines fountain + 3bpp
+  +---> TS-8 (Ctrl-C handling) -- all prompts need clean exit
   |
-  +---> D-1 (Multi-resolution profiles) -- each profile sets bpp mode
-
-TS-7 (Robust Soliton Distribution)
+  +---> TS-9 (Return to menu) -- console loop wraps menu
   |
-  +---> D-6 (Fountain optimization + GE) -- builds on proper distribution
+  +---> TS-10 (Clear screen) -- visual reset between actions
 
-D-3 (Threaded capture)
+D-1 (Settings persistence)
   |
-  +---> D-4 (Calibration mode) -- needs fast capture to measure FPS
-  |
-  +---> D-8 (Benchmarking) -- needs accurate FPS measurement
+  +---> D-8 (Advanced settings submenu) -- settings need saving
 
-TS-8 (Cross-platform) -- independent, can be done anytime
+D-2 (Live hardware status) -- independent, runs at startup
 
-TS-5 (Progress reporting) -- independent, can be done anytime
+D-3 (Confirm before send) -- independent, added to send/receive flow
 
-D-2 (Adaptive block size) -- depends on D-4 (calibration) for auto-selection
+D-4 (Last transfer stats) -- independent, in-memory
+
+D-7 (Web launch) -- independent, stdlib only
 ```
 
-## Priority Recommendation
+### Critical Path
 
-For the next milestone, prioritize in this order:
+The monorepo restructure (TS-12) is the highest-risk, highest-effort feature and blocks pip extras (TS-11). The interactive console (TS-1 through TS-10) is mostly independent of the restructure -- it could be built before or after. However, if built after the restructure, the import paths will be correct from the start, avoiding double-migration.
 
-### Phase 1: Foundation (must have for reliable transfers)
-1. **TS-1: Frame synchronization** -- everything depends on this
-2. **TS-2: Start/end signaling** -- frame protocol enables everything else
-3. **TS-6: 3-bit encoding for fountain mode** -- 3x throughput, low risk
-4. **TS-5: Progress reporting** -- needed for all testing and benchmarking
-5. **TS-8: Cross-platform receiver** -- quick win, unblocks Linux/Mac testing
+**Recommended order:**
+1. Module separation (TS-12) first -- highest risk, do it while codebase is stable
+2. Pip extras and entry points (TS-11, TS-13) -- wire up the new structure
+3. Verify existing CLIs (TS-14) -- ensure nothing broke
+4. Sender console (TS-1, TS-2, TS-4-7, TS-8-10) -- interactive sender
+5. Receiver console (TS-3, TS-7, TS-8-10) -- interactive receiver
+6. Differentiators (D-1 through D-8) -- polish
 
-### Phase 2: Integrity and Performance
-6. **TS-4: Metadata protocol** -- extend START frame with size + hash
-7. **TS-3: File integrity verification** -- SHA-256 in metadata, verify on completion
-8. **D-5: Per-frame CRC** -- frame-level error detection
-9. **D-3: Threaded capture pipeline** -- unlock actual high FPS capture
-10. **D-9: Python fountain sender** -- max throughput sender path
+## MVP Recommendation
 
-### Phase 3: Optimization and Polish
-11. **TS-7: Robust Soliton Distribution** -- reduce fountain overhead
-12. **D-6: Fountain optimization + GE** -- further reduce overhead
-13. **D-1: Multi-resolution profiles** -- named presets for different setups
-14. **D-4: Calibration mode** -- auto-detect optimal parameters
-15. **D-8: Benchmarking mode** -- automated performance measurement
+**Prioritize these table stakes first:**
 
-### Defer (post-milestone)
-- **D-2: Adaptive block size** -- needs calibration mode first, nice to have
-- **D-7: Session management** -- only needed for continuous operation
+1. **TS-12: Module separation** -- Highest risk, must be done carefully with all tests passing after each move. This is the structural foundation.
+2. **TS-11: pip extras** -- Wire up the separated modules in pyproject.toml. Verify `pip install -e .[sender]`, `.[receiver]`, `.[all]` all work.
+3. **TS-14: Existing CLIs work** -- Run full test suite. Run each CLI command manually. Non-negotiable.
+4. **TS-1 + TS-2 + TS-9: Sender console (basic)** -- Main menu with arrow keys, 6 actions, return-to-menu loop.
+5. **TS-1 + TS-3 + TS-9: Receiver console (basic)** -- Main menu with arrow keys, 5 actions, return-to-menu loop.
+6. **TS-4 + TS-5 + TS-6 + TS-7: Interactive parameter collection** -- File picker, profile select, mode select, device select.
+7. **TS-8 + TS-10: Polish** -- Ctrl-C handling, screen clearing.
 
-## Theoretical Throughput Analysis
+**Defer these to post-MVP:**
+- **D-1 (Settings persistence):** Nice to have but not needed for functional console. Users can re-select each time initially.
+- **D-2 (Live hardware status):** Adds startup latency. Users can use "Detect Hardware" menu action.
+- **D-5 (Fuzzy file path):** Standard text input with filepath completion is sufficient for MVP.
+- **D-8 (Advanced settings submenu):** Use sensible defaults. Add submenu later if users request fine-tuning.
 
-Understanding the ceiling helps prioritize which features actually move the needle.
+## Complexity Assessment
 
-### Current state (sender.html fountain mode, 1bpp)
-- 1920x1080 resolution, 8x8 blocks = 240 cols x 135 rows = 32,400 blocks
-- 1 bit per block = 32,400 bits = 4,050 bytes per frame
-- At 60fps capture (realistic with OpenCV blocking reads): 243 KB/s = ~1.9 Mbps
-- With fountain overhead (~30% with current distribution): ~1.3 Mbps effective
-
-### After TS-6 (3bpp fountain mode)
-- 3 bits per block = 97,200 bits = 12,150 bytes per frame
-- At 60fps: 729 KB/s = ~5.8 Mbps
-- With fountain overhead (~30%): ~4.1 Mbps effective
-
-### After D-3 + D-6 (threaded capture + optimized fountain)
-- At 240fps with threaded capture: 12,150 * 240 = 2.92 MB/s = ~23.3 Mbps
-- With optimized fountain overhead (~5%): ~22.1 Mbps effective
-
-### After D-1 (4K@30fps profile, 3bpp)
-- 3840x2160, 8x8 blocks = 480 cols x 270 rows = 129,600 blocks
-- 3 bits per block = 388,800 bits = 48,600 bytes per frame
-- At 30fps: 1.46 MB/s = ~11.7 Mbps
-- Note: 1080p@240fps (23 Mbps) likely beats 4K@30fps (11.7 Mbps) -- needs benchmarking
-
-### Theoretical maximum (1080p@240fps, 4x4 blocks, 3bpp)
-- 480 cols x 270 rows = 129,600 blocks at 4x4
-- 3 bits per block = 388,800 bits = 48,600 bytes per frame
-- At 240fps: 11.66 MB/s = ~93.3 Mbps
-- This is aggressive -- 4x4 blocks require perfect alignment
-
-### Bottleneck analysis
-1. **Capture FPS** (biggest bottleneck): OpenCV blocking reads limit to ~30-60fps. Threaded capture is essential.
-2. **Fountain overhead** (second bottleneck): 30% overhead with current distribution wastes ~30% of frames.
-3. **Bits per block** (third bottleneck): 1bpp vs 3bpp is a 3x difference.
-4. **Block size** (fourth bottleneck): 8x8 vs 4x4 is a 4x difference but requires better alignment.
-5. **Frame processing time** (fifth): numpy operations for encode/decode need to be fast.
+| Feature Group | Estimated Effort | Risk Level | Notes |
+|---------------|-----------------|------------|-------|
+| Module separation (TS-12) | 4-6 hours | HIGH | Every import path changes. Tests must all pass. One mistake breaks everything. |
+| pip extras (TS-11, TS-13) | 1-2 hours | LOW | pyproject.toml changes only. Well-documented pattern. |
+| Backward compat (TS-14) | 1-2 hours | MEDIUM | Testing and fixing import issues from restructure. |
+| Sender console (TS-1,2,4-7,8-10) | 3-4 hours | LOW | InquirerPy is straightforward. Mostly wiring prompts to existing functions. |
+| Receiver console (TS-1,3,7,8-10) | 2-3 hours | LOW | Same pattern as sender, fewer options. |
+| Differentiators (D-1 through D-8) | 3-4 hours total | LOW | All are small, independent additions. |
+| **Total** | **14-21 hours** | | |
 
 ## Sources
 
-### Direct prior art (HIGH confidence)
-- [ThruGlassXfer (TGXf)](http://thruglassxfer.com/) -- closest comparable tool, achieved 12.1 Mbps at 3bpp/10fps via HDMI capture
-- [QRT Protocol](https://github.com/smyrgeorge/qrt) -- multi-QR screen-to-camera transfer with CRC32 integrity, HDR/DAT/END frame types
-- [TXQR / divan/txqr](https://github.com/divan/txqr) -- animated QR transfer using fountain codes, measured ~25 kbps at 12fps
+### InquirerPy (MEDIUM confidence -- training data, no live verification)
+- InquirerPy is a Python port of Inquirer.js, built on prompt-toolkit
+- Supports prompt types: select (list), checkbox, confirm, text, filepath, fuzzy, number, password, expand, rawlist
+- Latest known version: 0.3.4 (as of training data cutoff)
+- License: MIT
+- Dependencies: prompt-toolkit >= 3.0.1, pfzy >= 0.3.1
+- Works on Windows, Linux, macOS
+- Arrow-key navigation is the default for select/list prompts
 
-### Fountain code literature (HIGH confidence)
-- [Fountain Codes - CMU](https://www.andrew.cmu.edu/user/gaurij/FountainCodes.pdf) -- Robust Soliton Distribution theory
-- [LT Codes - Luby](https://www.inference.org.uk/mackay/dfountain/LT.pdf) -- original LT code paper
-- [Raptor Codes - Qualcomm](https://www.qualcomm.com/content/dam/qcomm-martech/dm-assets/documents/Raptor_Codes_IEEE_technical_analysis.pdf) -- Raptor vs LT performance analysis
-- [Fountain code - Wikipedia](https://en.wikipedia.org/wiki/Fountain_code) -- practical overhead numbers: LT ~5-14% for K=2000-10000, Raptor ~0.2%
-- [Fountain codes blog - divan](https://divan.dev/posts/fountaincodes/) -- practical LT overhead measurement, ~20% frame loss tolerance
+### setuptools pip extras (HIGH confidence -- stable, well-documented pattern)
+- `[project.optional-dependencies]` in pyproject.toml is the standard PEP 621 mechanism
+- `pip install package[extra]` syntax has been stable for years
+- Multiple extras can be defined: `[sender]`, `[receiver]`, `[all]`, `[dev]`
+- The `[all]` extra typically includes all other extras via cross-referencing
 
-### Capture card specifications (MEDIUM confidence -- official docs but 403 on some pages)
-- [Elgato 4K X Specifications](https://help.elgato.com/hc/en-us/articles/23658118721421-Elgato-Game-Capture-4K-X-Technical-Specifications) -- 1080p@240fps capture, HDMI 2.1, USB 3.2 Gen 2
-- [Elgato 4K X Resolutions](https://help.elgato.com/hc/en-us/articles/23479175821069) -- NV12 at 240fps, YUY2 4:2:2 at lower rates
-
-### OpenCV performance (MEDIUM confidence -- community forums + PyImageSearch)
-- [OpenCV VideoCapture FPS](https://forum.opencv.org/t/capture-speed-framerate-of-cv2-videocapture/5665) -- blocking reads limit practical FPS
-- [Threaded capture - PyImageSearch](https://pyimagesearch.com/2015/12/21/increasing-webcam-fps-with-python-and-opencv/) -- up to 379% improvement with threading
-- [Frame synchronization - Wikipedia](https://en.wikipedia.org/wiki/Frame_synchronization) -- frame alignment signal theory
-
-### File integrity (HIGH confidence -- well-established)
-- [File verification - Wikipedia](https://en.wikipedia.org/wiki/File_verification) -- SHA-256 for integrity, CRC32 for error detection
-- [FIVER algorithm](https://arxiv.org/pdf/1811.01161) -- overlapping checksum computation with transfer
-
-### Visual channel encoding (MEDIUM confidence -- academic papers)
-- [RGB VLC MIMO](https://opg.optica.org/oe/fulltext.cfm?uri=oe-24-9-9383&id=340132) -- multi-bit RGB encoding theory
-- [HiLight screen-camera](https://www.cs.columbia.edu/~xia/publication/mobisys15-hilight/mobisys15-hilight.pdf) -- pixel modulation for screen-camera data transfer
-- [Color depth - Wikipedia](https://en.wikipedia.org/wiki/Color_depth) -- 8-bit per channel, chroma subsampling effects
+### Python CLI console patterns (MEDIUM confidence -- training data)
+- Interactive prompt libraries (InquirerPy, questionary, PyInquirer) all follow the Inquirer.js pattern
+- The standard pattern is: prompt loop -> collect parameters -> execute action -> return to prompt
+- Clean separation between parameter collection (interactive prompts) and execution (existing functions) is the best practice
+- Ctrl-C handling via KeyboardInterrupt is universal across all prompt libraries

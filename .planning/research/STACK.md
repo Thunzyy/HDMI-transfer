@@ -1,319 +1,313 @@
-# Stack Research
+# Technology Stack: v1.1 Interactive CLI & Monorepo Restructure
 
-**Domain:** HDMI data exfiltration via capture card -- maximizing throughput
-**Researched:** 2026-02-16
-**Confidence:** MEDIUM-HIGH (core stack verified, some capture-path specifics are hardware-dependent)
+**Project:** HDMI Exfil
+**Researched:** 2026-03-02
+**Scope:** NEW additions only -- interactive menus and monorepo pip extras
+**Confidence:** MEDIUM (training data, no live verification available)
 
-## Current State
+## Existing Stack (DO NOT CHANGE)
 
-The prototype uses Python 3.13, OpenCV (cv2.imshow for sender display, cv2.VideoCapture for receiver capture), NumPy for bit packing, and a hand-rolled LT fountain code decoder. The sender is Windows-only (ctypes.windll). The browser sender uses vanilla JS with Canvas + requestAnimationFrame.
+These are validated and shipping. Listed for context only.
 
-**Current throughput bottlenecks identified from code review:**
-1. `cv2.imshow` + `cv2.waitKey(delay)` -- caps sender FPS, not designed for high-perf rendering
-2. `cv2.VideoCapture` with `CAP_DSHOW` -- Windows-only, blocking reads, not optimized for 240fps UVC
-3. 3-bit encoding (1 bit per R/G/B channel) -- theoretically ~12KB/frame at 1080p with 8x8 blocks, but fragile
-4. Fountain decoder uses Python `bytearray` XOR loops -- O(n) per symbol in pure Python
-5. No async/threaded pipeline -- encode, display, capture, decode all serial
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Python | 3.11+ | Runtime |
+| numpy | >=1.24 | Array ops |
+| opencv-python | >=4.0 | Capture |
+| pygame-ce | >=2.5.0 | Sender display |
+| numba | >=0.60.0 | JIT XOR |
+| screeninfo | >=0.8 | Monitor detection |
+| pytest | >=8.0 | Testing |
+| hypothesis | >=6.0 | Property tests |
 
-## Recommended Stack
+## New Stack Additions
 
-### Core Technologies
+### Interactive CLI: InquirerPy
 
-| Technology | Version | Purpose | Why Recommended | Confidence |
-|------------|---------|---------|-----------------|------------|
-| Python | 3.13+ | Runtime | Already in use; free-threading (PEP 703) experimental support is a bonus for future pipeline parallelism | HIGH |
-| NumPy | >=2.4.2 | Array operations, bit pack/unpack, XOR | Already in use. `np.packbits`/`np.unpackbits` are the fastest pure-Python bit packing. Vectorized XOR via `np.bitwise_xor` is critical for fountain code performance. Latest 2.4.x has improved free-threaded support. | HIGH |
-| OpenCV (opencv-python-headless) | >=4.10 | Receiver: frame capture from capture card | Keep for capture -- it wraps V4L2 (Linux) / DirectShow (Windows) well. Use `CAP_V4L2` backend on Linux for best performance. Switch to `opencv-python-headless` to avoid GUI dependency conflicts with the sender display library. | HIGH |
-| Numba | >=0.61 | JIT-compile fountain encode/decode hot loops | `@njit` turns Python XOR loops into SIMD-vectorized machine code with zero boilerplate. 100-1000x speedup over pure Python for the fountain encoder's XOR-across-chunks operation. `@njit(parallel=True)` with `prange` for encoding multiple symbols simultaneously. | HIGH |
-| pygame-ce | >=2.5.6 | Sender: fullscreen frame display | SDL2-backed, hardware-accelerated blitting. `pygame.surfarray.blit_array()` renders a NumPy array directly to a fullscreen surface with zero copy. Faster than `cv2.imshow` which uses platform-specific windowing (Win32 DIB) not designed for high-throughput rendering. pygame-ce is the actively maintained fork (original pygame has stalled). | MEDIUM-HIGH |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| InquirerPy | >=0.3.4 | Arrow-key interactive menus for sender/receiver consoles | Best Python prompt library for structured menu UX. Built on prompt_toolkit. Supports list, checkbox, confirm, input prompts with arrow-key navigation. Already identified in PROJECT.md as the chosen library. |
 
-### Supporting Libraries
+**Why InquirerPy over alternatives:**
 
-| Library | Version | Purpose | When to Use | Confidence |
-|---------|---------|---------|-------------|------------|
-| bitarray | >=3.8.0 | Advanced bit-level manipulation | When you need bit-level indexing, variable-length prefix codes, or efficient boolean arrays beyond what `np.packbits` provides. C-implemented, 60x faster than dict-based alternatives. Interoperates with NumPy via `.pack()`/`.unpack()`. | MEDIUM |
-| hypothesis | >=6.100 | Property-based testing for encode/decode round-trips | Testing that `decode(encode(data)) == data` for arbitrary binary inputs. `st.binary()` strategy generates edge-case binary data automatically. Integrates natively with pytest. | HIGH |
-| pytest | >=8.0 | Test framework | Standard Python testing. Fixtures for hardware mocking (mock `cv2.VideoCapture`), markers for skipping hardware-dependent tests in CI. | HIGH |
-| pytest-cov | >=5.0 | Coverage reporting | Measuring test coverage of encode/decode paths | HIGH |
-| ruff | >=0.9 | Linter + formatter (replaces flake8+black+isort) | Single Rust-based tool, 100x faster than flake8. Configure in `pyproject.toml`. | HIGH |
-| mypy | >=1.14 | Static type checking | Type-check the encode/decode pipeline. NumPy stubs are mature in 2025+. | HIGH |
-| v4l2py | >=3.1 | Direct V4L2 access on Linux | If OpenCV's V4L2 backend doesn't achieve 240fps, bypass it with direct V4L2 mmap capture for zero-copy frame access. Async support (asyncio/gevent). Only needed if OpenCV capture is the bottleneck. | LOW-MEDIUM |
-| structlog | >=25.1 | Structured logging | Replace `print()` statements with structured, leveled logging for production debugging of transfer sessions. | MEDIUM |
+| Criterion | InquirerPy | questionary | simple-term-menu | raw prompt_toolkit |
+|-----------|-----------|-------------|------------------|--------------------|
+| Arrow-key list menus | Yes, native | Yes, native | Yes, native | Manual build |
+| Nested/hierarchical menus | Yes (action dispatch) | Limited | No | Manual build |
+| Keybinding customization | Full (prompt_toolkit) | Limited | Moderate | Full |
+| Async support | Yes | No | No | Yes |
+| Separator/header in menus | Yes (built-in Separator) | No | No | Manual |
+| Style/theming | Full prompt_toolkit styles | Basic | ANSI only | Full |
+| Dependency weight | prompt_toolkit + pfzy | prompt_toolkit | Zero deps (stdlib only) | prompt_toolkit |
+| Maintenance (as of 2025) | Active | Slower releases | Active | Active (core) |
+| Windows terminal support | Good (via prompt_toolkit) | Good | Poor (POSIX-centric) | Good |
 
-### Development Tools
+**Recommendation: InquirerPy.** It provides the richest menu UX with minimal code. The `list` prompt type is exactly what the sender/receiver consoles need -- arrow-key selection from a list of actions. It supports `Separator` objects for visual grouping (e.g., separating "Transfer" actions from "Tools" actions). Built on `prompt_toolkit` which handles Windows Console API and Unix terminal correctly.
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| pyproject.toml | Unified project config | Single file for build, deps, ruff, pytest, mypy config. Use `hatchling` as build backend. |
-| uv | Package manager | Rust-based, 10-100x faster than pip. Use `uv pip install` and `uv venv`. |
-| pre-commit | Git hooks | Run ruff + mypy + pytest before each commit |
+**Why NOT questionary:** Functionally similar but fewer features. No `Separator` support in list prompts, no fuzzy search, less customizable keybindings. Both use prompt_toolkit under the hood, so dependency weight is identical. InquirerPy is the superset.
+
+**Why NOT simple-term-menu:** Zero dependencies is appealing, but it has poor Windows terminal support (relies on POSIX termios). This project targets Windows (Elgato capture card, ctypes.windll in sender). Disqualified.
+
+**Why NOT raw prompt_toolkit:** Too low-level for menu-style prompts. InquirerPy is a well-designed layer over prompt_toolkit that saves 50-100 lines of boilerplate per menu. No reason to reinvent it.
+
+### InquirerPy Dependencies (Transitive)
+
+| Library | Pulled By | Notes |
+|---------|-----------|-------|
+| prompt_toolkit | InquirerPy (required) | Terminal rendering engine. Already mature (v3.x). Handles Windows Console API, ANSI escape sequences, input event loops. |
+| pfzy | InquirerPy (required) | Fuzzy matching for search-capable prompts. Tiny library, no further deps. |
+
+**Total new dependency footprint:** 3 packages (InquirerPy + prompt_toolkit + pfzy). All pure Python, no C extensions, no build requirements.
+
+### Integration Pattern
+
+InquirerPy integrates with the existing CLI by wrapping the current `argparse`-based entry points. The interactive menu dispatches to the same functions that argparse currently calls.
+
+```python
+# src/cli/sender_console.py (new file)
+from InquirerPy import inquirer
+from InquirerPy.separator import Separator
+
+def sender_menu() -> None:
+    """Interactive sender console with arrow-key menu."""
+    while True:
+        action = inquirer.select(
+            message="HDMI Sender Console",
+            choices=[
+                "Send file (Python)",
+                "Send file (Web browser)",
+                Separator(),
+                "Calibrate display",
+                "Detect monitors",
+                "Benchmark throughput",
+                Separator(),
+                "Settings",
+                "Exit",
+            ],
+            default="Send file (Python)",
+        ).execute()
+
+        if action == "Exit":
+            break
+        # dispatch to existing functions...
+```
+
+**Key integration points with existing code:**
+- `send.py::main()` -- the argparse-based sender becomes the "Send file (Python)" action
+- `receive.py::main()` -- becomes the "Receive file" action
+- `calibrate.py::main()` -- becomes "Calibrate" action
+- `benchmark.py::main()` -- becomes "Benchmark" action
+- New console entry points (`hdmi-sender`, `hdmi-receiver`) wrap the interactive menus
+- Old entry points (`hdmi-send`, `hdmi-recv`, etc.) remain as direct CLI commands
+
+**Pattern: Interactive menu wraps argparse, does not replace it.**
+The interactive console builds an `argparse.Namespace` object from user selections and passes it to the existing `main()` logic. This preserves both interfaces: scripting via `hdmi-send file.zip --mode fountain` and interactive via `hdmi-sender`.
+
+## Monorepo with pip extras
+
+### Current pyproject.toml Structure
+
+```toml
+[project]
+dependencies = [
+    "opencv-python >= 4.0",
+    "numpy >= 1.24",
+    "screeninfo >= 0.8",
+    "pygame-ce >= 2.5.0",
+    "numba >= 0.60.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest >= 8.0", "hypothesis >= 6.0"]
+```
+
+### Proposed pyproject.toml Structure
+
+```toml
+[project]
+name = "hdmi-exfil"
+version = "1.1.0"
+requires-python = ">= 3.11"
+
+# Core: shared protocol, encoding, config -- minimal deps
+dependencies = [
+    "numpy >= 1.24",
+    "numba >= 0.60.0",
+]
+
+[project.optional-dependencies]
+# Sender: display, monitor detection, interactive console
+sender = [
+    "pygame-ce >= 2.5.0",
+    "screeninfo >= 0.8",
+    "InquirerPy >= 0.3.4",
+]
+# Receiver: capture card, interactive console
+receiver = [
+    "opencv-python >= 4.0",
+    "InquirerPy >= 0.3.4",
+]
+# Everything
+all = [
+    "hdmi-exfil[sender]",
+    "hdmi-exfil[receiver]",
+]
+# Development
+dev = [
+    "hdmi-exfil[all]",
+    "pytest >= 8.0",
+    "hypothesis >= 6.0",
+]
+
+[project.scripts]
+# Direct CLI commands (non-interactive, backward compat)
+hdmi-send = "hdmi_exfil.cli.send:main"
+hdmi-recv = "hdmi_exfil.cli.receive:main"
+hdmi-calibrate = "hdmi_exfil.cli.calibrate:main"
+hdmi-bench = "hdmi_exfil.cli.benchmark:main"
+# Interactive consoles (new)
+hdmi-sender = "hdmi_exfil.cli.sender_console:main"
+hdmi-receiver = "hdmi_exfil.cli.receiver_console:main"
+```
+
+### Install Patterns
+
+```bash
+# Sender machine only (no opencv needed)
+pip install hdmi-exfil[sender]
+
+# Receiver machine only (no pygame needed)
+pip install hdmi-exfil[receiver]
+
+# Full install (both sender + receiver)
+pip install hdmi-exfil[all]
+
+# Development (everything + test tools)
+pip install -e ".[dev]"
+```
+
+### Dependency Partitioning Rationale
+
+| Package | Core | Sender | Receiver | Why |
+|---------|------|--------|----------|-----|
+| numpy | Yes | -- | -- | Protocol encoding/decoding needs array ops everywhere |
+| numba | Yes | -- | -- | XOR acceleration used by both sender (fountain encode) and receiver (fountain decode) |
+| pygame-ce | -- | Yes | -- | Only sender displays frames; receiver never renders |
+| screeninfo | -- | Yes | -- | Only sender needs monitor detection |
+| opencv-python | -- | -- | Yes | Only receiver captures from capture card |
+| InquirerPy | -- | Yes | Yes | Both consoles need interactive menus |
+
+**Why numpy and numba in core, not optional:** Both protocols (sequential and fountain) use numpy for bit packing and numba for XOR. If you install only `[receiver]`, you still need numpy+numba to decode frames. If you install only `[sender]`, you still need them to encode. They are core dependencies, not role-specific.
+
+### Package Directory Structure (Post-Restructure)
+
+```toml
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+```
+
+The source tree moves from flat `src/` mapped as `hdmi_exfil` to a proper `src/hdmi_exfil/` layout:
+
+```
+src/
+  hdmi_exfil/
+    __init__.py
+    config.py
+    prng.py
+    constants.json
+    core/                 # Shared protocol + encoding
+      __init__.py
+      protocols/
+      file_handling/
+    sender/               # Sender-specific
+      __init__.py
+      display/
+      cli/
+        send.py
+        sender_console.py
+    receiver/             # Receiver-specific
+      __init__.py
+      capture/
+      cli/
+        receive.py
+        receiver_console.py
+    cli/                  # Shared CLI utilities
+      __init__.py
+      calibrate.py
+      benchmark.py
+      progress.py
+```
+
+**Important: Keep `setuptools` as build backend.** The existing pyproject.toml uses `setuptools >= 61.0` as the build backend. Do NOT switch to hatchling or flit for this milestone. The previous STACK.md mentioned hatchling, but the project already works with setuptools and `extras_require` is a native setuptools feature via `[project.optional-dependencies]` (PEP 621). Switching build backends is unnecessary churn.
+
+### Self-Referencing Extras
+
+The `all` and `dev` extras use self-referencing (`hdmi-exfil[sender]`), which is supported in setuptools >= 61.0 and pip >= 21.2. Since the project already requires setuptools >= 61.0, this works out of the box. No build system change needed.
+
+## What NOT to Add
+
+| Avoid | Why |
+|-------|-----|
+| click / typer | Overkill for wrapping argparse. The existing argparse CLI works fine. InquirerPy handles the interactive layer. Adding click would require rewriting all 4 existing CLI modules for zero benefit. |
+| rich | Tempting for pretty output, but adds a heavy dependency (25+ transitive) for cosmetic improvement. The project uses simple `print()` and `sys.stdout.write()` which is fine for a transfer tool. If future milestones want progress bars, `rich` can be considered then. |
+| textual | TUI framework for full terminal apps. Massive overkill -- we need a menu, not a dashboard. |
+| blessed / curses | Low-level terminal manipulation. prompt_toolkit (via InquirerPy) handles this better and cross-platform. |
+| hatchling / flit / pdm | Build backend migration. Unnecessary -- setuptools works, extras work, no reason to change. |
+| poetry | Dependency manager migration. Unnecessary churn for this milestone. |
+
+## Version Compatibility Notes
+
+| Concern | Status | Notes |
+|---------|--------|-------|
+| InquirerPy + Python 3.11+ | Compatible | InquirerPy supports Python 3.7+. No known issues with 3.11-3.13. |
+| prompt_toolkit 3.x + Windows | Compatible | prompt_toolkit 3.x uses Windows Console API for input and ANSI for output. Works on Windows Terminal, PowerShell, cmd.exe. |
+| Self-referencing extras | Compatible | Requires setuptools >= 61.0 (already specified) and pip >= 21.2 (standard in Python 3.11+). |
+| InquirerPy + numba | No conflict | InquirerPy is pure Python. No native extension conflicts. |
+| opencv-python + pygame-ce | No conflict in `[all]` | Both can coexist. opencv-python-headless would avoid GUI backend conflicts, but the existing project uses `opencv-python` (non-headless) and it works. Do not change unless a conflict surfaces. |
 
 ## Installation
 
 ```bash
-# Create virtual environment
-uv venv .venv && source .venv/bin/activate
+# New dependency only (InquirerPy)
+pip install "InquirerPy>=0.3.4"
 
-# Core dependencies
-uv pip install numpy>=2.4.2 opencv-python-headless>=4.10 pygame-ce>=2.5.6 numba>=0.61
-
-# Supporting
-uv pip install bitarray>=3.8.0 structlog>=25.1
-
-# Dev dependencies
-uv pip install pytest>=8.0 pytest-cov>=5.0 hypothesis>=6.100 ruff>=0.9 mypy>=1.14 pre-commit
+# Full dev install with extras
+pip install -e ".[dev]"
 ```
 
-## Detailed Rationale
+## Confidence Assessment
 
-### Sender Display: pygame-ce over cv2.imshow
+| Claim | Confidence | Basis |
+|-------|------------|-------|
+| InquirerPy is the right choice over questionary | MEDIUM | Training data comparison. InquirerPy's Separator support and richer API are well-documented in its GitHub/docs. Could not verify latest release version live. |
+| InquirerPy >=0.3.4 is the latest stable | LOW | Training data only. Last known version was 0.3.4 (2023). Library may have newer releases. Verify with `pip install InquirerPy` to get latest. |
+| prompt_toolkit Windows support is solid | HIGH | prompt_toolkit is the foundation of the Python REPL (IPython, ptpython) and has been Windows-tested for years. |
+| Self-referencing extras in setuptools >=61.0 | MEDIUM | PEP 621 + setuptools docs support this. Standard pattern but not live-verified. |
+| Proposed package structure works with setuptools | MEDIUM | Standard `src/` layout with `find:` packages. Well-documented pattern but needs testing with the existing import paths. |
+| InquirerPy has no native extensions | HIGH | Pure Python + prompt_toolkit (pure Python) + pfzy (pure Python). No C/Rust compilation needed. |
 
-**Problem:** `cv2.imshow` is a debugging tool, not a rendering engine. On Windows it creates a Win32 window, copies the `cv::Mat` into a DIB bitmap, and invalidates the window rect. On Linux it uses GTK or Qt. Both paths have unnecessary overhead for our use case (rendering a pre-computed NumPy array fullscreen at max FPS).
+## Migration Risk
 
-**Solution:** pygame-ce with SDL2 backend.
+**LOW risk addition.** InquirerPy is a new optional dependency that only affects the new console entry points. The existing `hdmi-send`, `hdmi-recv`, `hdmi-calibrate`, and `hdmi-bench` commands are untouched. If InquirerPy breaks, only the interactive consoles fail -- all direct CLI commands continue to work.
 
-```python
-import pygame
-import numpy as np
-
-pygame.init()
-screen = pygame.display.set_mode((1920, 1080), pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF)
-pygame.display.set_caption("HDMI Exfil Sender")
-
-# Render a frame (NumPy array -> screen)
-frame = np.zeros((1080, 1920, 3), dtype=np.uint8)  # your encoded frame
-pygame.surfarray.blit_array(screen, frame.transpose(1, 0, 2))  # pygame wants (W, H, 3)
-pygame.display.flip()
-```
-
-**Why not ModernGL/OpenGL?** ModernGL (v5.12.0) with PBO double-buffering is theoretically fastest for GPU texture upload. However, it adds significant complexity (shader programs, texture management, OpenGL context) for marginal gain. Our frames are pre-computed NumPy arrays -- the bottleneck is RAM-to-VRAM transfer, which SDL2's `blit_array` handles efficiently via hardware-accelerated blitting. ModernGL is overkill unless we hit a display bottleneck, which is unlikely at 1080p.
-
-**Why not DXcam/BetterCam for display?** DXcam captures screens; it does not render to them. It uses Desktop Duplication API for screen capture (input), not display (output). Wrong tool.
-
-### Receiver Capture: OpenCV CAP_V4L2 (Linux) / CAP_DSHOW (Windows)
-
-**Problem:** Current code hardcodes `cv2.CAP_DSHOW` (Windows only). Need cross-platform, high-FPS capture.
-
-**Solution:** Use OpenCV with platform-appropriate backend:
-
-```python
-import cv2
-import platform
-
-if platform.system() == "Linux":
-    cap = cv2.VideoCapture(device_index, cv2.CAP_V4L2)
-    # MJPG codec for higher FPS (less bandwidth than raw YUYV)
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-elif platform.system() == "Windows":
-    cap = cv2.VideoCapture(device_index, cv2.CAP_DSHOW)
-
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-cap.set(cv2.CAP_PROP_FPS, 240)
-```
-
-**Elgato 4K X at 1080p240:**
-- Capture formats: **NV12** (4:2:0, SDR) or **YUY2/YUYV** (4:2:2, SDR)
-- For data exfil, NV12 is fine -- we only need luminance channel for black/white block decoding
-- 4:4:4 RGB capture maxes at **1080p120** -- not 240fps
-- On Linux: UVC/V4L2 driver. May need `uvcvideo quirks=0x80` for bandwidth issues
-
-**Fallback:** If OpenCV V4L2 cannot sustain 240fps, use `v4l2py` with mmap for zero-copy frames, or `ffmpegcv` which provides GPU-accelerated decode. These are escalation paths, not defaults.
-
-**Why not GStreamer?** Viable but adds pipeline complexity. OpenCV can use GStreamer as a backend (`CAP_GSTREAMER`) if needed, so this is a configuration change, not a library swap.
-
-### Fountain Codes: Custom (Numba-accelerated) over External Libraries
-
-**Problem:** External LT code libraries (`lt-code` on PyPI, `Spriteware/lt-codes-python`) are:
-1. Not optimized for real-time streaming (designed for file transfer)
-2. Use pure Python XOR loops (slow)
-3. Don't match the existing PRNG/degree distribution in the codebase
-4. Would require rewriting the browser sender's JS implementation to match
-
-**Solution:** Keep custom fountain code, but accelerate with Numba.
-
-```python
-import numba
-import numpy as np
-
-@numba.njit
-def xor_chunks(target: np.ndarray, source: np.ndarray) -> None:
-    """XOR source into target in-place. SIMD-vectorized by Numba."""
-    for i in range(len(target)):
-        target[i] ^= source[i]
-
-@numba.njit(parallel=True)
-def encode_symbols(source_chunks: np.ndarray, seeds: np.ndarray, K: int) -> np.ndarray:
-    """Encode multiple fountain symbols in parallel."""
-    n_symbols = len(seeds)
-    symbol_size = source_chunks.shape[1]
-    output = np.zeros((n_symbols, symbol_size), dtype=np.uint8)
-    for s in numba.prange(n_symbols):
-        # ... degree distribution + XOR logic with PRNG
-        pass
-    return output
-```
-
-**Why not Raptor codes (RFC 6330)?** Raptor codes have linear-time encode/decode (vs LT's O(K*ln(K))) and near-optimal overhead. However:
-1. Patented (Qualcomm) -- legal risk for open-source
-2. No maintained Python implementation exists
-3. The only open-source implementation (OpenRQ) is Java
-4. LT codes are sufficient for our channel (HDMI is low-loss; the main issue is frame drops, not bit errors)
-
-**Why not `lt-code` from PyPI?** Its belief-propagation decoder and degree distribution differ from the existing codebase's SplitMix32 PRNG + custom distribution. Adopting it would break compatibility with the browser sender.
-
-### Bit Encoding: NumPy vectorized (current) is optimal
-
-**Current approach:** `np.unpackbits` / `np.packbits` with threshold at 128. This is already near-optimal.
-
-**Potential improvement -- multi-bit encoding:**
-Instead of 1 bit per channel (black/white), use 2 bits per channel (4 levels: 0, 85, 170, 255). This doubles throughput from 3 bits/block to 6 bits/block.
-
-```python
-# 2-bit encoding: 4 levels per channel
-LEVELS = np.array([0, 85, 170, 255], dtype=np.uint8)
-
-# Encode: 2 bits -> level
-def encode_2bit(bits_pair):
-    return LEVELS[bits_pair[0] * 2 + bits_pair[1]]
-
-# Decode: level -> 2 bits (with threshold ranges)
-THRESHOLDS = np.array([42, 127, 212], dtype=np.uint8)
-```
-
-This is an architecture decision, not a library choice. The stack supports it via NumPy's vectorized operations.
-
-### Testing: pytest + hypothesis + hardware mocking
-
-**Strategy:**
-1. **Unit tests** (no hardware): Encode/decode round-trips, fountain code algebra, bit packing
-2. **Property-based tests** (Hypothesis): `decode(encode(arbitrary_binary)) == arbitrary_binary`
-3. **Integration tests** (hardware-optional): Capture card tests with `pytest.mark.skipif` when no device
-
-```python
-# conftest.py
-import pytest
-
-@pytest.fixture
-def mock_capture(monkeypatch):
-    """Mock cv2.VideoCapture for CI environments."""
-    class FakeCapture:
-        def __init__(self, *args, **kwargs): pass
-        def isOpened(self): return True
-        def read(self):
-            frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
-            return True, frame
-        def set(self, prop, val): return True
-        def release(self): pass
-    monkeypatch.setattr("cv2.VideoCapture", FakeCapture)
-
-# test_roundtrip.py
-from hypothesis import given, strategies as st
-
-@given(data=st.binary(min_size=1, max_size=50000))
-def test_encode_decode_roundtrip(data):
-    frames = encode_to_frames(data)
-    recovered = decode_from_frames(frames)
-    assert recovered == data
-```
-
-## Alternatives Considered
-
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| pygame-ce (SDL2) | ModernGL 5.12.0 + glfw 2.10.0 | If pygame's `blit_array` becomes a bottleneck. ModernGL + PBO double-buffering is the fastest GPU texture upload path. Adds ~200 lines of boilerplate (shader, texture, PBO management). |
-| pygame-ce (SDL2) | cv2.imshow (current) | Never for production. Only for quick debugging. |
-| OpenCV CAP_V4L2 | v4l2py 3.1+ | If OpenCV cannot sustain 240fps on Linux. v4l2py uses mmap for zero-copy frames. More complex API. |
-| OpenCV CAP_V4L2 | ffmpegcv | If you need GPU-accelerated decode (NVIDIA). Drop-in replacement for cv2.VideoCapture API. |
-| Custom LT codes + Numba | lt-code (PyPI) | If starting from scratch with no browser sender to maintain. Provides a clean stream API. |
-| Custom LT codes + Numba | RaptorQ (RFC 6330) | If patent concerns are resolved and a Python binding exists. ~0.5% overhead vs LT's ~5-10%. |
-| Numba @njit | Cython | If Numba's JIT warmup time is unacceptable (first call compiles). Cython AOT-compiles but requires .pyx files and a build step. |
-| NumPy bit ops | bitarray 3.8.0 | If you need variable-length prefix codes or bit-level indexing beyond pack/unpack. For standard pack/unpack, NumPy is faster and already a dependency. |
-
-## What NOT to Use
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| DXcam / BetterCam | Screen capture library (Desktop Duplication API). Captures what's on screen. Does NOT interface with USB capture cards. Wrong tool for receiver. | OpenCV CAP_V4L2 / CAP_DSHOW for capture card input |
-| PyQt / Tkinter for sender display | Heavyweight GUI frameworks with event loops not designed for 240fps rendering | pygame-ce with SDL2 |
-| Original `pygame` (not `-ce`) | Development stalled; single-maintainer governance; slower to get bug fixes | `pygame-ce` (Community Edition) |
-| `setup.py` / `setup.cfg` | Legacy packaging. PEP 621 standardized `pyproject.toml` | `pyproject.toml` with hatchling backend |
-| `black` + `flake8` + `isort` (separately) | Three tools to install, configure, and keep in sync | `ruff` (single tool, 100x faster, configurable in pyproject.toml) |
-| Pure Python XOR loops | O(n) per symbol in CPython interpreter. With 4KB symbols and 1000 chunks, this is the throughput bottleneck | Numba `@njit` or NumPy vectorized `np.bitwise_xor` |
-| `pip` | Slow resolver, no lockfiles | `uv` (Rust-based, 10-100x faster) |
-| `cv2.CAP_DSHOW` on Linux | DirectShow is Windows-only. Code will crash on Linux. | `cv2.CAP_V4L2` on Linux, `cv2.CAP_DSHOW` on Windows (platform-detect) |
-
-## Stack Patterns by Variant
-
-**If sender runs on Windows (primary use case):**
-- Use pygame-ce with SDL2 backend (works on Windows)
-- ctypes.windll for monitor detection (already implemented)
-- OpenCV with CAP_DSHOW for any Windows-side capture testing
-
-**If sender runs on Linux:**
-- Use pygame-ce with SDL2 backend (works on Linux)
-- Use `xrandr` or `pygame.display.get_desktop_sizes()` for monitor detection
-- Replace ctypes.windll monitor detection with cross-platform alternative
-
-**If receiver runs on Linux (likely -- your dev machine is Kali Linux):**
-- OpenCV with CAP_V4L2 backend
-- Set MJPG fourcc for bandwidth efficiency at 240fps
-- May need `uvcvideo` kernel module options for Elgato: `modprobe uvcvideo quirks=0x80`
-- Fallback: v4l2py with mmap if OpenCV can't sustain frame rate
-
-**If targeting max throughput (research path):**
-- 2-bit-per-channel encoding (4 levels) doubles payload vs 1-bit (binary)
-- Smaller block size (4x4 instead of 8x8) quadruples blocks but needs cleaner signal
-- BLOCK_SIZE and LEVELS should be configurable, not hardcoded
-- Pre-compute all frames into a ring buffer before transmission starts
-
-## Version Compatibility
-
-| Package A | Compatible With | Notes |
-|-----------|-----------------|-------|
-| numba >=0.61 | numpy >=2.1, <2.5 | Numba pins NumPy upper bound. Check `numba.np.numpy_support` for dtype support. |
-| pygame-ce >=2.5.6 | Python 3.9-3.13 | SDL2 bundled. Incompatible with `pygame` (cannot install both). |
-| opencv-python-headless >=4.10 | numpy >=2.0 | Use `-headless` to avoid GUI backend conflicts with pygame-ce. |
-| hypothesis >=6.100 | pytest >=8.0 | Native integration, no adapter needed. |
-| ruff >=0.9 | pyproject.toml | Configure via `[tool.ruff]` section. |
-| mypy >=1.14 | Python 3.13 | Full 3.13 support including PEP 695 type aliases. |
-
-## Throughput Projections
-
-Based on the Elgato 4K X specifications and encoding parameters:
-
-| Config | Bits/Frame | Bytes/Frame | @ 60fps | @ 120fps | @ 240fps |
-|--------|-----------|-------------|---------|----------|----------|
-| 8x8 blocks, 1-bit/channel (current) | 32,400 * 3 = 97,200 | ~12 KB | ~720 KB/s (5.6 Mbps) | ~1.4 MB/s (11.2 Mbps) | ~2.8 MB/s (22.5 Mbps) |
-| 8x8 blocks, 2-bit/channel | 32,400 * 6 = 194,400 | ~24 KB | ~1.4 MB/s | ~2.8 MB/s | ~5.7 MB/s (45 Mbps) |
-| 4x4 blocks, 1-bit/channel | 129,600 * 3 = 388,800 | ~48 KB | ~2.8 MB/s | ~5.7 MB/s | ~11.4 MB/s (90 Mbps) |
-| 4x4 blocks, 2-bit/channel | 129,600 * 6 = 777,600 | ~97 KB | ~5.7 MB/s | ~11.4 MB/s | ~22.8 MB/s (180 Mbps) |
-
-Note: Fountain code overhead adds ~5-15% redundancy. Actual throughput will be lower due to frame drops, capture latency, and decode time. The 240fps capture on the Elgato 4K X uses NV12 (4:2:0 chroma subsampling) which affects color channel fidelity -- may limit multi-bit-per-channel encoding reliability.
+**MEDIUM risk for monorepo restructure.** Moving files from `src/` flat layout to `src/hdmi_exfil/core|sender|receiver/` changes all import paths. Every `from hdmi_exfil.protocols import ...` becomes `from hdmi_exfil.core.protocols import ...`. This is a one-time migration but touches every file and every test. Must be done in a single commit with comprehensive test validation.
 
 ## Sources
 
-- [Elgato 4K X Supported Resolutions](https://help.elgato.com/hc/en-us/articles/23479175821069) -- 1080p240 NV12/YUY2 capture confirmed (MEDIUM confidence, specs page was 403 but multiple secondary sources agree)
-- [Elgato 4K X Linux CLI tool](https://github.com/13bm/elgato4k-linux) -- Linux V4L2/UVC support status
-- [DXcam GitHub](https://github.com/ra1nty/DXcam) -- confirmed this is screen capture only, not capture card input
-- [pygame-ce PyPI](https://pypi.org/project/pygame-ce/) -- v2.5.6, Oct 2025
-- [pygame-ce Performance Wiki](https://github.com/pygame-community/pygame-ce/wiki/Performance-Comparisons-Against-Upstream-Pygame) -- perf improvements over upstream
-- [ModernGL PyPI](https://pypi.org/project/moderngl/) -- v5.12.0, texture.write() API
-- [ModernGL Texture Docs](https://moderngl.readthedocs.io/en/latest/reference/texture.html) -- NumPy buffer protocol support
-- [NumPy 2.4.2 PyPI](https://pypi.org/project/numpy/) -- latest stable, Jan 2026
-- [numpy.packbits docs](https://numpy.org/doc/stable/reference/generated/numpy.packbits.html) -- bit packing API
-- [bitarray GitHub](https://github.com/ilanschnell/bitarray) -- v3.8.0, C-implemented
-- [Numba performance tips](https://numba.readthedocs.io/en/stable/user/performance-tips.html) -- @njit, parallel, SIMD
-- [Spriteware/lt-codes-python](https://github.com/Spriteware/lt-codes-python) -- LT codes reference implementation
-- [lt-code PyPI](https://pypi.org/project/lt-code/) -- alternative LT library
-- [Raptor codes Wikipedia](https://en.wikipedia.org/wiki/Raptor_code) -- patent concerns noted
-- [v4l2py GitHub](https://github.com/tiagocoutinho/v4l2py) -- direct V4L2 Python binding
-- [PyV4L2Cam GitHub](https://github.com/okawo80085/PyV4L2Cam) -- high FPS V4L2
-- [opencv_v4l2 GitHub](https://github.com/econsystems/opencv_v4l2) -- high FPS OpenCV V4L2 helper
-- [Hypothesis docs](https://hypothesis.readthedocs.io/) -- property-based testing
-- [ruff PyPI](https://pypi.org/project/ruff/) -- linter/formatter
-- [pyproject.toml guide](https://pydevtools.com/handbook/reference/pyproject/) -- modern Python project config
+- InquirerPy GitHub: https://github.com/kazhala/InquirerPy (training data, not live-verified)
+- InquirerPy docs: https://inquirerpy.readthedocs.io/ (training data)
+- questionary GitHub: https://github.com/tmbo/questionary (training data)
+- simple-term-menu GitHub: https://github.com/IngoMeyer441/simple-term-menu (training data)
+- prompt_toolkit docs: https://python-prompt-toolkit.readthedocs.io/ (training data)
+- PEP 621 (pyproject.toml metadata): https://peps.python.org/pep-0621/ (training data)
+- setuptools extras documentation: https://setuptools.pypa.io/en/latest/userguide/dependency_management.html (training data)
+
+**NOTE:** All sources are from training data (knowledge cutoff May 2025). WebSearch, WebFetch, and Bash were unavailable during this research session. Version numbers and maintenance status should be verified before implementation. In particular, confirm `InquirerPy>=0.3.4` is still the latest on PyPI by running `pip index versions InquirerPy`.
 
 ---
-*Stack research for: HDMI data exfiltration via capture card*
-*Researched: 2026-02-16*
+*Stack research for: HDMI Exfil v1.1 Interactive CLI & Monorepo Restructure*
+*Researched: 2026-03-02*
+*Verification status: Training data only -- live verification unavailable*
