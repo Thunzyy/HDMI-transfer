@@ -12,60 +12,67 @@ Maximum throughput data transfer over HDMI without leaving any trace on the sour
 
 ### Validated
 
-- ✓ Sequential frame encoding (1-bit per RGB channel, 3 bits/block) — existing (`sender.py` / `receiver.py`)
-- ✓ Fountain code encoding (LT codes with belief propagation decoder) — existing (`sender.html` / `receiver_fountain.py`)
-- ✓ Browser-based sender with zero install — existing (`sender.html`)
-- ✓ Python CLI sender with monitor detection — existing (`sender.py`)
-- ✓ Python CLI receivers for both modes — existing (`receiver.py`, `receiver_fountain.py`)
-- ✓ Shared configuration constants — existing (`common.py`)
-- ✓ Metadata embedding (filename preservation) — existing
-- ✓ Directory transfer via auto-zip — existing (`sender.py`)
+- ✓ Sequential frame encoding (3 bits/block, RGB binary) — Phase 1-2
+- ✓ Fountain code encoding (LT codes, RSD, GE fallback) — Phase 2, 5
+- ✓ Browser-based sender with zero install (sender.html) — Phase 3
+- ✓ Python CLI sender/receiver with monitor detection — Phase 3, 6
+- ✓ Shared constants.json (single source of truth) — Phase 3
+- ✓ Metadata embedding (filename, SHA-256) — Phase 2
+- ✓ Directory transfer via auto-zip — Phase 3
+- ✓ Frame sync with magic numbers (0xDA7A seq, 0xF0C0 fountain) — Phase 2
+- ✓ CRC32 per-frame integrity — Phase 2
+- ✓ SHA-256 end-to-end file verification — Phase 2
+- ✓ 3bpp RGB encoding (3x throughput vs 1bpp) — Phase 4
+- ✓ Numba JIT XOR acceleration — Phase 4
+- ✓ pygame-ce SDL2 high-FPS rendering — Phase 4
+- ✓ Threaded capture with ring buffer — Phase 4
+- ✓ Robust Soliton Distribution (<10% overhead) — Phase 5
+- ✓ Gaussian elimination fallback decoder — Phase 5
+- ✓ Resolution profiles (speed/balanced/quality) — Phase 6
+- ✓ Calibration mode (SNR measurement) — Phase 6
+- ✓ Benchmark mode (in-memory throughput) — Phase 6
+- ✓ Progress reporting (speed, ETA, %) — Phase 6
+- ✓ ~300 unit tests + property-based tests — Phase 1
+- ✓ Hardware loopback validated (SNR 60dB, 110 KB/s) — Phase 1
 
 ### Active
 
-- [ ] Maximize transfer speed — push toward theoretical HDMI bandwidth limits
-- [ ] Multi-resolution support — 4K@30fps, 1080p@60fps, 1080p@240fps modes with benchmarks
-- [ ] Professional project architecture — clean module structure, separation of concerns
-- [ ] 3-level test strategy — unit tests (encode/decode in memory), loopback (Elgato on same PC), hardware (2 PCs)
-- [ ] Fountain code optimization — tune degree distribution, chunk size, PRNG for max throughput
-- [ ] Cross-platform sender — remove Windows-only dependencies (ctypes.windll)
-- [ ] Robust frame synchronization — reliable start/end detection, calibration frames
-- [ ] Progress reporting — real-time speed, ETA, completion percentage
-- [ ] File integrity verification — checksum validation after transfer
+- [ ] Interactive CLI console for sender (arrow-key menu)
+- [ ] Interactive CLI console for receiver (arrow-key menu)
+- [ ] Monorepo restructure with pip extras (`[sender]`, `[receiver]`)
+- [ ] Clean sender/receiver/core module separation
+- [ ] Project structure review and cleanup
 
 ### Out of Scope
 
-- Encryption — HDMI is a physical channel, not needed for v1
+- Encryption — HDMI is a physical channel, not needed
 - Network communication — the entire point is zero network activity
-- GUI application — CLI + browser sender is sufficient
+- Full GUI application — interactive CLI menus are sufficient
 - Steganography / hiding data in normal video — data is encoded as visible pixel blocks, not hidden
 - Mobile device support — desktop-only tool
 - Multi-file queue / batch transfers — one transfer at a time
+- Web server for sender — sender.html stays standalone, CLI just opens it in browser
+
+## Current Milestone: v1.1 Console Interactive & Restructure
+
+**Goal:** Transform the CLI into interactive menu-driven consoles for sender and receiver, and restructure the monorepo so sender/receiver can be installed independently via pip extras.
+
+**Target features:**
+- Interactive sender console (InquirerPy arrow-key menu): send Python, send web (opens browser), calibrate, detect hardware, benchmark, settings
+- Interactive receiver console: receive file, calibrate signal, detect capture card, last transfer stats, settings
+- Monorepo with `pip install hdmi-exfil[sender]` / `[receiver]` / `[all]`
+- Clean `src/core/`, `src/sender/`, `src/receiver/` separation
+- Project structure review and cleanup
 
 ## Context
 
-**Existing codebase:** Working prototype with two encoding modes (sequential and fountain). The fountain mode (sender.html + receiver_fountain.py) is the more advanced path — rateless erasure coding means the sender doesn't need acknowledgment from the receiver, which is perfect for the one-way HDMI channel.
+**v1.0 shipped:** Full working pipeline — sequential + fountain protocols, 3bpp RGB encoding, Numba JIT, pygame-ce renderer, threaded capture, RSD fountain codes, calibration, benchmarks, progress reporting. ~300 tests. Hardware-validated at 110 KB/s (balanced profile, SNR 60 dB).
 
-**Hardware:** Elgato 4K X capture card. Supports up to 4K@30fps passthrough and 1080p@240fps capture. Higher framerate = more data throughput since each frame carries a fixed payload. The sweet spot needs benchmarking.
+**Current structure (flat src/):** All modules live under `src/` with pyproject.toml `package-dir` mapping `hdmi_exfil = "src"`. Works but mixes sender-only, receiver-only, and shared code.
 
-**Theoretical bandwidth:**
-- 1080p@240fps: 1920×1080 pixels × 240 frames = ~497M pixels/sec
-- With 8×8 blocks, 3 bits/block: ~2.8M blocks/frame × 3 bits = ~1.05 MB/frame → ~252 MB/s raw
-- With 1 bit/block (fountain mode): ~350 KB/frame → ~84 MB/s raw
-- Actual throughput depends on: capture card processing, frame loss rate, fountain code overhead, sync headers
+**Hardware:** Elgato 4K X capture card. Tested in single-PC loopback (screen 2 duplicated to Elgato). Elgato at DirectShow index 1.
 
-**Current limitations identified:**
-- Windows-only (`ctypes.windll`, `cv2.CAP_DSHOW`)
-- No test framework — manual `print()`-based verification
-- Duplicated constants between `common.py` and `sender.html`
-- No checksums on transferred data
-- Bare `except Exception: pass` in fountain receiver
-- sender.html fountain code uses 1 bit/block vs sender.py using 3 bits/block (potential 3x throughput improvement)
-
-**Testing approach (3 levels):**
-1. **Unit tests** — encode/decode in pure memory, no hardware needed. Validate bit packing, fountain encode/decode, metadata handling.
-2. **Loopback tests** — Elgato plugged into same PC (HDMI out → capture card in). Tests full pipeline including capture card behavior.
-3. **Hardware tests** — Real 2-PC setup. Validates end-to-end in production conditions.
+**Testing:** ~300 unit tests (pytest + hypothesis). 1 known failure (`test_xor_ops::test_fountain_decoder_with_numba`). 1 Node.js path issue on Windows (`test_rsd_cross_language`).
 
 ## Constraints
 
@@ -78,11 +85,14 @@ Maximum throughput data transfer over HDMI without leaving any trace on the sour
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Fountain codes for error correction | One-way HDMI channel has no back-channel for retries; fountain codes are rateless and work perfectly one-way | — Pending |
-| Dual sender (browser + Python) | Browser = zero install on source; Python = max performance | — Pending |
-| No encryption | Physical HDMI channel, security through air-gap | — Pending |
-| 3-level test strategy | Unit → Loopback → Hardware allows development without 2-PC setup | — Pending |
-| Multiple resolution modes | Different speed/reliability tradeoffs; benchmark to find optimal | — Pending |
+| Fountain codes for error correction | One-way HDMI channel has no back-channel for retries; fountain codes are rateless and work perfectly one-way | ✓ Good |
+| Dual sender (browser + Python) | Browser = zero install on source; Python = max performance | ✓ Good |
+| No encryption | Physical HDMI channel, security through air-gap | ✓ Good |
+| 3-level test strategy | Unit → Loopback → Hardware allows development without 2-PC setup | ✓ Good |
+| Multiple resolution modes | Different speed/reliability tradeoffs; benchmark to find optimal | ✓ Good |
+| Monorepo + pip extras | Single repo with `[sender]`/`[receiver]` extras for independent install | — Pending |
+| InquirerPy for interactive CLI | Arrow-key menus, minimal dependencies, good UX | — Pending |
+| Core/sender/receiver split | Shared protocol code in core, UI-specific code in sender/receiver | — Pending |
 
 ---
-*Last updated: 2026-02-16 after initialization*
+*Last updated: 2026-03-02 after milestone v1.1 start*
