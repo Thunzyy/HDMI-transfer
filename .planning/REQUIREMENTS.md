@@ -66,34 +66,34 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STRUCT-01 | — | Pending |
-| STRUCT-02 | — | Pending |
-| STRUCT-03 | — | Pending |
-| STRUCT-04 | — | Pending |
-| STRUCT-05 | — | Pending |
-| STRUCT-06 | — | Pending |
-| STRUCT-07 | — | Pending |
-| SEND-01 | — | Pending |
-| SEND-02 | — | Pending |
-| SEND-03 | — | Pending |
-| SEND-04 | — | Pending |
-| SEND-05 | — | Pending |
-| SEND-06 | — | Pending |
-| SEND-07 | — | Pending |
-| SEND-08 | — | Pending |
-| RECV-01 | — | Pending |
-| RECV-02 | — | Pending |
-| RECV-03 | — | Pending |
-| RECV-04 | — | Pending |
-| RECV-05 | — | Pending |
-| RECV-06 | — | Pending |
-| RECV-07 | — | Pending |
+| STRUCT-01 | Phase 7 | Pending |
+| STRUCT-02 | Phase 7 | Pending |
+| STRUCT-03 | Phase 7 | Pending |
+| STRUCT-04 | Phase 7 | Pending |
+| STRUCT-05 | Phase 7 | Pending |
+| STRUCT-06 | Phase 7 | Pending |
+| STRUCT-07 | Phase 7 | Pending |
+| SEND-01 | Phase 8 | Pending |
+| SEND-02 | Phase 8 | Pending |
+| SEND-03 | Phase 8 | Pending |
+| SEND-04 | Phase 8 | Pending |
+| SEND-05 | Phase 8 | Pending |
+| SEND-06 | Phase 8 | Pending |
+| SEND-07 | Phase 8 | Pending |
+| SEND-08 | Phase 8 | Pending |
+| RECV-01 | Phase 9 | Pending |
+| RECV-02 | Phase 9 | Pending |
+| RECV-03 | Phase 9 | Pending |
+| RECV-04 | Phase 9 | Pending |
+| RECV-05 | Phase 9 | Pending |
+| RECV-06 | Phase 9 | Pending |
+| RECV-07 | Phase 9 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 22 total
-- Mapped to phases: 0
-- Unmapped: 22
+- Mapped to phases: 22
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-02 after initial definition*
+*Last updated: 2026-03-02 -- traceability updated with phase mappings*

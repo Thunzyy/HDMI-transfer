@@ -4,6 +4,11 @@
 
 Transform the working HDMI data exfiltration prototype into a robust, high-performance tool. The journey starts by establishing a test safety net around the existing code, then adds protocol integrity (sync, checksums), restructures the architecture for clean module boundaries, unlocks maximum throughput via Numba JIT and pygame-ce, optimizes fountain code math for minimal overhead, and finishes with user-facing polish (profiles, calibration, progress). Each phase builds on the previous -- strict sequential dependency chain because tests gate refactoring, protocol gates architecture, architecture gates performance, and performance gates fountain tuning.
 
+## Milestones
+
+- Shipped **v1.0 MVP** - Phases 1-6 (shipped 2026-02-17)
+- Active **v1.1 Console Interactive & Restructure** - Phases 7-9 (in progress)
+
 ## Phases
 
 **Phase Numbering:**
@@ -12,6 +17,9 @@ Transform the working HDMI data exfiltration prototype into a robust, high-perfo
 
 Decimal phases appear between their surrounding integers in numeric order.
 
+<details>
+<summary>Shipped v1.0 MVP (Phases 1-6) - SHIPPED 2026-02-17</summary>
+
 - [x] **Phase 1: Test Foundation** - Establish test safety net around existing working prototype
 - [x] **Phase 2: Protocol Foundation** - Add frame synchronization, integrity verification, and transfer lifecycle
 - [x] **Phase 3: Architecture Refactor** - Restructure into clean src-layout package with protocol abstraction
@@ -19,7 +27,18 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Fountain Code Optimization** - Tune fountain code math for minimal decoding overhead
 - [x] **Phase 6: UX & Polish** - Resolution profiles, calibration mode, benchmarking, and progress reporting
 
+</details>
+
+### v1.1 Console Interactive & Restructure
+
+- [ ] **Phase 7: Monorepo Restructure** - Reorganize into core/sender/receiver subpackages with pip extras for independent installation
+- [ ] **Phase 8: Interactive Sender Console** - Arrow-key menu-driven sender with file picker, profile/mode/monitor selection
+- [ ] **Phase 9: Interactive Receiver Console** - Arrow-key menu-driven receiver with device selection, output config, and transfer stats
+
 ## Phase Details
+
+<details>
+<summary>Shipped v1.0 MVP (Phases 1-6) - SHIPPED 2026-02-17</summary>
 
 ### Phase 1: Test Foundation
 **Goal**: Developers can verify encode/decode correctness and PRNG synchronization without manual testing or hardware
@@ -131,20 +150,64 @@ Plans:
 - [x] 06-03-PLAN.md -- CLI --profile flag + ProgressTracker + progress reporting (UX-01 CLI, UX-04)
 - [x] 06-04-PLAN.md -- Calibration + benchmarking CLI modes (UX-02, UX-03)
 
+</details>
+
+### Phase 7: Monorepo Restructure
+**Goal**: The codebase is reorganized into core/sender/receiver subpackages so sender and receiver can be installed independently with minimal dependencies
+**Depends on**: Phase 6 (v1.0 complete)
+**Requirements**: STRUCT-01, STRUCT-02, STRUCT-03, STRUCT-04, STRUCT-05, STRUCT-06, STRUCT-07
+**Success Criteria** (what must be TRUE):
+  1. Source tree is organized as `src/hdmi_exfil/core/`, `src/hdmi_exfil/sender/`, `src/hdmi_exfil/receiver/` with core containing only shared protocol, encoding, and file handling code -- no hardware dependencies in core
+  2. Running `pip install hdmi-exfil[sender]` in a clean virtualenv installs pygame-ce and screeninfo but not opencv-python, and the sender CLI commands work
+  3. Running `pip install hdmi-exfil[receiver]` in a clean virtualenv installs opencv-python but not pygame-ce, and the receiver CLI commands work
+  4. Running `pip install hdmi-exfil` or `hdmi-exfil[all]` installs all dependencies and all CLI commands work
+  5. All four existing CLI commands (`hdmi-send`, `hdmi-recv`, `hdmi-calibrate`, `hdmi-bench`) produce identical behavior after the restructure -- no user-visible changes
+  6. All existing tests pass after the restructure with zero regressions
+**Plans**: TBD
+
+### Phase 8: Interactive Sender Console
+**Goal**: Users can operate the sender through an interactive arrow-key menu instead of memorizing CLI flags -- the menu collects all parameters and delegates to the existing send pipeline
+**Depends on**: Phase 7
+**Requirements**: SEND-01, SEND-02, SEND-03, SEND-04, SEND-05, SEND-06, SEND-07, SEND-08
+**Success Criteria** (what must be TRUE):
+  1. Running `hdmi-sender` launches an interactive console with an arrow-key navigable main menu listing all sender actions (Send Python, Send Browser, Calibrate, Detect hardware, Benchmark, Quit)
+  2. User can select a file to send via interactive file path prompt with tab-completion, choose a resolution profile, encoding mode, and target monitor -- all via arrow-key selection from detected options
+  3. After any action completes (send, calibrate, benchmark, detect), the user returns to the main menu and can pick another action without restarting
+  4. Pressing Ctrl-C at any prompt or during any action exits cleanly without a Python traceback
+  5. The interactive console delegates to the same send/calibrate/benchmark functions as the existing CLI commands -- no duplicated encoding or display logic
+**Plans**: TBD
+
+### Phase 9: Interactive Receiver Console
+**Goal**: Users can operate the receiver through an interactive arrow-key menu instead of memorizing CLI flags -- the menu collects all parameters and delegates to the existing receive pipeline
+**Depends on**: Phase 7 (restructure); Phase 8 (pattern established)
+**Requirements**: RECV-01, RECV-02, RECV-03, RECV-04, RECV-05, RECV-06, RECV-07
+**Success Criteria** (what must be TRUE):
+  1. Running `hdmi-receiver` launches an interactive console with an arrow-key navigable main menu listing all receiver actions (Receive file, Calibrate signal, Detect capture card, Last transfer stats, Settings, Quit)
+  2. User can select a capture device from detected devices via arrow-key prompt, choose a resolution profile, and configure the output directory -- all interactively
+  3. After any action completes (receive, calibrate, detect), the user returns to the main menu and can pick another action without restarting
+  4. Pressing Ctrl-C at any prompt or during any action exits cleanly without a Python traceback
+  5. The interactive console delegates to the same receive/calibrate functions as the existing CLI commands -- no duplicated capture or decode logic
+
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
+Phases execute in numeric order: 7 -> 8 -> 9
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Test Foundation | 3/3 | Complete | 2026-02-16 |
-| 2. Protocol Foundation | 5/5 | Complete | 2026-02-16 |
-| 3. Architecture Refactor | 7/7 | Complete | 2026-02-16 |
-| 4. Performance Optimization | 5/5 | Complete | 2026-02-16 |
-| 5. Fountain Code Optimization | 4/4 | Complete | 2026-02-17 |
-| 6. UX & Polish | 4/4 | Complete | 2026-02-17 |
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Test Foundation | v1.0 | 3/3 | Complete | 2026-02-16 |
+| 2. Protocol Foundation | v1.0 | 5/5 | Complete | 2026-02-16 |
+| 3. Architecture Refactor | v1.0 | 7/7 | Complete | 2026-02-16 |
+| 4. Performance Optimization | v1.0 | 5/5 | Complete | 2026-02-16 |
+| 5. Fountain Code Optimization | v1.0 | 4/4 | Complete | 2026-02-17 |
+| 6. UX & Polish | v1.0 | 4/4 | Complete | 2026-02-17 |
+| 7. Monorepo Restructure | v1.1 | 0/? | Not started | - |
+| 8. Interactive Sender Console | v1.1 | 0/? | Not started | - |
+| 9. Interactive Receiver Console | v1.1 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-02-16*
-*Last updated: 2026-02-17 -- Phase 6 complete (all phases done)*
+*v1.1 phases added: 2026-03-02*
+*Last updated: 2026-03-02 -- v1.1 roadmap created (Phases 7-9)*
