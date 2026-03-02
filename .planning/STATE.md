@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Console Interactive & Restructure
 status: executing
-last_updated: "2026-03-02T20:55:00Z"
+last_updated: "2026-03-02T21:04:00Z"
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 31
-  completed_plans: 30
+  completed_plans: 31
 ---
 
 # Project State
@@ -18,17 +18,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Maximum throughput data transfer over HDMI without leaving any trace on the source machine.
-**Current focus:** Milestone v1.1 -- Phase 7 (Monorepo Restructure)
+**Current focus:** Milestone v1.1 -- Phase 7 Complete. Ready for Phase 8 (Sender Console)
 
 ## Current Position
 
-Phase: 7 of 9 (Monorepo Restructure)
-Plan: 2 of 3 complete
-Status: Executing
-Last activity: 2026-03-02 -- Completed 07-02 (monorepo directory restructure with shims)
+Phase: 7 of 9 (Monorepo Restructure) -- COMPLETE
+Plan: 3 of 3 complete
+Status: Phase 7 Complete
+Last activity: 2026-03-02 -- Completed 07-03 (pyproject.toml extras split)
 
-Progress (v1.1): [######__________________________] 2/3 phase 7 (67%)
-Progress (all):  [████████████████████████████████] 28/28 + 2/? v1.1
+Progress (v1.1): [################################] 3/3 phase 7 (100%)
+Progress (all):  [████████████████████████████████] 28/28 + 3/3 v1.1
 
 ## v1.0 Metrics
 
@@ -39,9 +39,9 @@ Total execution time: 149min
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 28
+- Total plans completed: 31
 - Average duration: 5min
-- Total execution time: 149min
+- Total execution time: 178min
 
 **By Phase:**
 
@@ -54,15 +54,16 @@ Total execution time: 149min
 | 05-fountain-code-optimization | 4/4 | 35min | 9min |
 | 06-ux-polish | 4/4 | 14min | 4min |
 
-| 07-monorepo-restructure | 2/3 | 26min | 13min |
+| 07-monorepo-restructure | 3/3 | 29min | 10min |
 
 **Recent Trend:**
-- Last 5 plans: 06-01 (4min), 06-03 (4min), 06-04 (4min), 07-01 (5min), 07-02 (21min)
-- Trend: v1.1 monorepo restructure progressing. Directory restructure was most complex plan so far.
+- Last 5 plans: 06-03 (4min), 06-04 (4min), 07-01 (5min), 07-02 (21min), 07-03 (3min)
+- Trend: Phase 7 monorepo restructure complete. Extras split was straightforward after directory restructure.
 
 *Updated after each plan completion*
 | Phase 07 P01 | 5min | 2 tasks | 4 files |
 | Phase 07 P02 | 21min | 2 tasks | 60 files |
+| Phase 07 P03 | 3min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,8 @@ Recent decisions affecting current work:
 - [07-02]: Used wildcard re-export shims at old paths instead of updating test imports -- safer, zero-disruption approach
 - [07-02]: Used setuptools auto-discovery (find) instead of manual package list -- avoids missing subpackages
 - [07-02]: Updated importlib.resources path from files('hdmi_exfil') to files('hdmi_exfil.core') for constants.json
+- [07-03]: Core deps reduced to numpy+numba only; pygame-ce/screeninfo/opencv-python moved to pip extras
+- [07-03]: Self-referential extras: hdmi-exfil[all] = [sender] + [receiver]; [dev] = [all] + test tools
 
 ### Pending Todos
 
@@ -93,5 +96,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 07-02-PLAN.md (monorepo directory restructure). Next: 07-03 (pyproject.toml extras split)
+Stopped at: Completed 07-03-PLAN.md (pyproject.toml extras split). Phase 7 fully complete. Next: Phase 8 (Sender Console)
 Resume file: None

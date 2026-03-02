@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### v1.1 Console Interactive & Restructure
 
-- [ ] **Phase 7: Monorepo Restructure** - Reorganize into core/sender/receiver subpackages with pip extras for independent installation
+- [x] **Phase 7: Monorepo Restructure** - Reorganize into core/sender/receiver subpackages with pip extras for independent installation
 - [ ] **Phase 8: Interactive Sender Console** - Arrow-key menu-driven sender with file picker, profile/mode/monitor selection
 - [ ] **Phase 9: Interactive Receiver Console** - Arrow-key menu-driven receiver with device selection, output config, and transfer stats
 
@@ -168,7 +168,7 @@ Plans:
 Plans:
 - [x] 07-01-PLAN.md -- Replace cv2.resize with np.repeat in protocol encoding (STRUCT-06)
 - [x] 07-02-PLAN.md -- Move files into core/sender/receiver subpackages with shims (STRUCT-01)
-- [ ] 07-03-PLAN.md -- Update pyproject.toml with extras and verify CLI/tests (STRUCT-02, STRUCT-03, STRUCT-04, STRUCT-05, STRUCT-07)
+- [x] 07-03-PLAN.md -- Update pyproject.toml with extras and verify CLI/tests (STRUCT-02, STRUCT-03, STRUCT-04, STRUCT-05, STRUCT-07)
 
 ### Phase 8: Interactive Sender Console
 **Goal**: Users can operate the sender through an interactive arrow-key menu instead of memorizing CLI flags -- the menu collects all parameters and delegates to the existing send pipeline
@@ -208,11 +208,11 @@ Phases execute in numeric order: 7 -> 8 -> 9
 | 4. Performance Optimization | v1.0 | 5/5 | Complete | 2026-02-16 |
 | 5. Fountain Code Optimization | v1.0 | 4/4 | Complete | 2026-02-17 |
 | 6. UX & Polish | v1.0 | 4/4 | Complete | 2026-02-17 |
-| 7. Monorepo Restructure | v1.1 | 2/3 | In progress | - |
+| 7. Monorepo Restructure | v1.1 | 3/3 | Complete | 2026-03-02 |
 | 8. Interactive Sender Console | v1.1 | 0/? | Not started | - |
 | 9. Interactive Receiver Console | v1.1 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-02-16*
 *v1.1 phases added: 2026-03-02*
-*Last updated: 2026-03-02 -- Phase 7 plan 2/3 complete (monorepo restructure with shims)*
+*Last updated: 2026-03-02 -- Phase 7 complete (3/3 plans). Ready for Phase 8 (Sender Console)*
