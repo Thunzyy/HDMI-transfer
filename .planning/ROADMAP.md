@@ -180,7 +180,11 @@ Plans:
   3. After any action completes (send, calibrate, benchmark, detect), the user returns to the main menu and can pick another action without restarting
   4. Pressing Ctrl-C at any prompt or during any action exits cleanly without a Python traceback
   5. The interactive console delegates to the same send/calibrate/benchmark functions as the existing CLI commands -- no duplicated encoding or display logic
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 08-01-PLAN.md -- Extract run_send() from send.py + add InquirerPy dependency (SEND-01, SEND-05)
+- [ ] 08-02-PLAN.md -- Interactive console module with menu, prompts, dispatch, tests (SEND-01 through SEND-08)
 
 ### Phase 9: Interactive Receiver Console
 **Goal**: Users can operate the receiver through an interactive arrow-key menu instead of memorizing CLI flags -- the menu collects all parameters and delegates to the existing receive pipeline
@@ -209,7 +213,7 @@ Phases execute in numeric order: 7 -> 8 -> 9
 | 5. Fountain Code Optimization | v1.0 | 4/4 | Complete | 2026-02-17 |
 | 6. UX & Polish | v1.0 | 4/4 | Complete | 2026-02-17 |
 | 7. Monorepo Restructure | v1.1 | 3/3 | Complete | 2026-03-02 |
-| 8. Interactive Sender Console | v1.1 | 0/? | Not started | - |
+| 8. Interactive Sender Console | v1.1 | 0/2 | Planned | - |
 | 9. Interactive Receiver Console | v1.1 | 0/? | Not started | - |
 
 ---
