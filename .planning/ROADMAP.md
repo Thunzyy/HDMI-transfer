@@ -166,8 +166,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 07-01-PLAN.md -- Replace cv2.resize with np.repeat in protocol encoding (STRUCT-06)
-- [ ] 07-02-PLAN.md -- Move files into core/sender/receiver subpackages with shims (STRUCT-01)
+- [x] 07-01-PLAN.md -- Replace cv2.resize with np.repeat in protocol encoding (STRUCT-06)
+- [x] 07-02-PLAN.md -- Move files into core/sender/receiver subpackages with shims (STRUCT-01)
 - [ ] 07-03-PLAN.md -- Update pyproject.toml with extras and verify CLI/tests (STRUCT-02, STRUCT-03, STRUCT-04, STRUCT-05, STRUCT-07)
 
 ### Phase 8: Interactive Sender Console
@@ -208,11 +208,11 @@ Phases execute in numeric order: 7 -> 8 -> 9
 | 4. Performance Optimization | v1.0 | 5/5 | Complete | 2026-02-16 |
 | 5. Fountain Code Optimization | v1.0 | 4/4 | Complete | 2026-02-17 |
 | 6. UX & Polish | v1.0 | 4/4 | Complete | 2026-02-17 |
-| 7. Monorepo Restructure | v1.1 | 0/3 | Planning complete | - |
+| 7. Monorepo Restructure | v1.1 | 2/3 | In progress | - |
 | 8. Interactive Sender Console | v1.1 | 0/? | Not started | - |
 | 9. Interactive Receiver Console | v1.1 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-02-16*
 *v1.1 phases added: 2026-03-02*
-*Last updated: 2026-03-02 -- Phase 7 planned (3 plans in 3 waves)*
+*Last updated: 2026-03-02 -- Phase 7 plan 2/3 complete (monorepo restructure with shims)*

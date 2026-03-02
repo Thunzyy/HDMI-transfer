@@ -9,7 +9,7 @@ Requirements for milestone v1.1: Interactive CLI Consoles & Monorepo Restructure
 
 ### Monorepo Structure
 
-- [ ] **STRUCT-01**: Code is organized into core/, sender/, receiver/ subpackages within src/hdmi_exfil/
+- [x] **STRUCT-01**: Code is organized into core/, sender/, receiver/ subpackages within src/hdmi_exfil/
 - [ ] **STRUCT-02**: User can install sender-only via `pip install hdmi-exfil[sender]` (pygame-ce, screeninfo)
 - [ ] **STRUCT-03**: User can install receiver-only via `pip install hdmi-exfil[receiver]` (opencv-python)
 - [ ] **STRUCT-04**: User can install everything via `pip install hdmi-exfil` or `hdmi-exfil[all]`
@@ -66,7 +66,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STRUCT-01 | Phase 7 | Pending |
+| STRUCT-01 | Phase 7 | Complete |
 | STRUCT-02 | Phase 7 | Pending |
 | STRUCT-03 | Phase 7 | Pending |
 | STRUCT-04 | Phase 7 | Pending |

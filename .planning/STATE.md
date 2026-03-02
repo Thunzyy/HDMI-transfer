@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Console Interactive & Restructure
-status: unknown
-last_updated: "2026-03-02T20:31:02.477Z"
+status: executing
+last_updated: "2026-03-02T20:55:00Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 31
-  completed_plans: 29
+  completed_plans: 30
 ---
 
 # Project State
@@ -23,12 +23,12 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 7 of 9 (Monorepo Restructure)
-Plan: 1 of 3 complete
+Plan: 2 of 3 complete
 Status: Executing
-Last activity: 2026-03-02 -- Completed 07-01 (cv2 removal from protocols/sampler)
+Last activity: 2026-03-02 -- Completed 07-02 (monorepo directory restructure with shims)
 
-Progress (v1.1): [###_____________________________] 1/3 phase 7 (33%)
-Progress (all):  [████████████████████████████████] 28/28 + 1/? v1.1
+Progress (v1.1): [######__________________________] 2/3 phase 7 (67%)
+Progress (all):  [████████████████████████████████] 28/28 + 2/? v1.1
 
 ## v1.0 Metrics
 
@@ -54,14 +54,15 @@ Total execution time: 149min
 | 05-fountain-code-optimization | 4/4 | 35min | 9min |
 | 06-ux-polish | 4/4 | 14min | 4min |
 
-| 07-monorepo-restructure | 1/3 | 5min | 5min |
+| 07-monorepo-restructure | 2/3 | 26min | 13min |
 
 **Recent Trend:**
-- Last 5 plans: 06-02 (2min), 06-01 (4min), 06-03 (4min), 06-04 (4min), 07-01 (5min)
-- Trend: v1.1 monorepo restructure started. cv2 removal completed quickly.
+- Last 5 plans: 06-01 (4min), 06-03 (4min), 06-04 (4min), 07-01 (5min), 07-02 (21min)
+- Trend: v1.1 monorepo restructure progressing. Directory restructure was most complex plan so far.
 
 *Updated after each plan completion*
 | Phase 07 P01 | 5min | 2 tasks | 4 files |
+| Phase 07 P02 | 21min | 2 tasks | 60 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,9 @@ Recent decisions affecting current work:
 - [Roadmap v1.1]: UX differentiators (settings persistence, colors, confirm prompts) deferred to v1.2
 - [07-01]: Used np.repeat for block upscale (proven pattern from test_patterns.py) and np.linspace for dimension resize
 - [Phase 07]: Used np.repeat for block upscale and np.linspace for dimension resize to eliminate cv2 dependency
+- [07-02]: Used wildcard re-export shims at old paths instead of updating test imports -- safer, zero-disruption approach
+- [07-02]: Used setuptools auto-discovery (find) instead of manual package list -- avoids missing subpackages
+- [07-02]: Updated importlib.resources path from files('hdmi_exfil') to files('hdmi_exfil.core') for constants.json
 
 ### Pending Todos
 
@@ -89,5 +93,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 07-01-PLAN.md (cv2 removal). Next: 07-02 (monorepo directory restructure)
+Stopped at: Completed 07-02-PLAN.md (monorepo directory restructure). Next: 07-03 (pyproject.toml extras split)
 Resume file: None
