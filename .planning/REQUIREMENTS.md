@@ -14,7 +14,7 @@ Requirements for milestone v1.1: Interactive CLI Consoles & Monorepo Restructure
 - [ ] **STRUCT-03**: User can install receiver-only via `pip install hdmi-exfil[receiver]` (opencv-python)
 - [ ] **STRUCT-04**: User can install everything via `pip install hdmi-exfil` or `hdmi-exfil[all]`
 - [ ] **STRUCT-05**: Existing CLI commands (hdmi-send, hdmi-recv, hdmi-calibrate, hdmi-bench) work unchanged after restructure
-- [ ] **STRUCT-06**: cv2.resize in protocol encoding is replaced with np.repeat for clean core/sender dependency split
+- [x] **STRUCT-06**: cv2.resize in protocol encoding is replaced with np.repeat for clean core/sender dependency split
 - [ ] **STRUCT-07**: All existing tests pass after restructure (no regressions)
 
 ### Sender Console
@@ -71,7 +71,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STRUCT-03 | Phase 7 | Pending |
 | STRUCT-04 | Phase 7 | Pending |
 | STRUCT-05 | Phase 7 | Pending |
-| STRUCT-06 | Phase 7 | Pending |
+| STRUCT-06 | Phase 7 | Complete |
 | STRUCT-07 | Phase 7 | Pending |
 | SEND-01 | Phase 8 | Pending |
 | SEND-02 | Phase 8 | Pending |
