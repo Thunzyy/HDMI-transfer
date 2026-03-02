@@ -8,15 +8,24 @@ version = "0.1.0"
 description = "Maximum throughput data transfer over HDMI signal encoding"
 requires-python = ">= 3.11"
 dependencies = [
-    "opencv-python >= 4.0",
     "numpy >= 1.24",
-    "screeninfo >= 0.8",
-    "pygame-ce >= 2.5.0",
     "numba >= 0.60.0",
 ]
 
 [project.optional-dependencies]
+sender = [
+    "pygame-ce >= 2.5.0",
+    "screeninfo >= 0.8",
+]
+receiver = [
+    "opencv-python >= 4.0",
+]
+all = [
+    "hdmi-exfil[sender]",
+    "hdmi-exfil[receiver]",
+]
 dev = [
+    "hdmi-exfil[all]",
     "pytest >= 8.0",
     "hypothesis >= 6.0",
 ]
