@@ -87,12 +87,13 @@ def test_action_detect_no_devices(mock_detect, capsys):
 @patch("hdmi_exfil.receiver.cli.console._detect_devices")
 @patch("hdmi_exfil.receiver.cli.console.inquirer")
 def test_action_receive(mock_inq, mock_detect, mock_run_receive, mock_settings):
-    """_action_receive collects parameters and calls run_receive()."""
+    """_action_receive uses saved settings and calls run_receive()."""
     from hdmi_exfil.receiver.cli.console import _action_receive
 
-    # No saved device — force prompt
+    # No saved device — falls through to full detection
     mock_settings.load.return_value = {
-        "receiver": {"device_name": None, "profile": "speed", "mode": "auto", "output": "received_files"}
+        "receiver": {"device_name": None, "device_index": None,
+                     "profile": "speed", "mode": "auto", "output": "received_files"}
     }
     mock_settings.get.return_value = None
 
@@ -102,25 +103,18 @@ def test_action_receive(mock_inq, mock_detect, mock_run_receive, mock_settings):
         {"index": 1, "name": "Elgato 4K X", "width": 3840, "height": 2160, "fps": 30.0},
     ]
 
-    # Mock prompt responses: device, profile, mode
+    # Mock device selection prompt (only prompt — settings used for rest)
     mock_select = MagicMock()
-    mock_select.execute.side_effect = [0, "speed", "auto"]
+    mock_select.execute.return_value = 0
     mock_inq.select.return_value = mock_select
-
-    mock_text = MagicMock()
-    mock_text.execute.return_value = "output_dir"
-    mock_inq.text.return_value = mock_text
 
     _action_receive()
 
     mock_run_receive.assert_called_once()
     call_kwargs = mock_run_receive.call_args
-    if call_kwargs.kwargs:
-        assert call_kwargs.kwargs["source"] == 0
-        assert call_kwargs.kwargs["mode"] == "auto"
-        assert call_kwargs.kwargs["output"] == "output_dir"
-    else:
-        assert call_kwargs[1]["source"] == 0
+    assert call_kwargs.kwargs["source"] == 0
+    assert call_kwargs.kwargs["mode"] == "auto"
+    assert call_kwargs.kwargs["output"] == "received_files"
 
 
 # ------------------------------------------------------------------
@@ -131,36 +125,25 @@ def test_action_receive(mock_inq, mock_detect, mock_run_receive, mock_settings):
 @patch("hdmi_exfil.receiver.cli.console.settings")
 @patch("hdmi_exfil.receiver.cli.console.run_receive")
 @patch("hdmi_exfil.receiver.cli.console._detect_devices")
-@patch("hdmi_exfil.receiver.cli.console.inquirer")
-def test_action_receive_single_device(mock_inq, mock_detect, mock_run_receive, mock_settings):
-    """Single device case skips device selection prompt."""
+def test_action_receive_single_device(mock_detect, mock_run_receive, mock_settings):
+    """Single device case skips device selection prompt entirely."""
     from hdmi_exfil.receiver.cli.console import _action_receive
 
     mock_settings.load.return_value = {
-        "receiver": {"device_name": None, "profile": "speed", "mode": "auto", "output": "received_files"}
+        "receiver": {"device_name": None, "device_index": None,
+                     "profile": "speed", "mode": "auto", "output": "received_files"}
     }
     mock_settings.get.return_value = None
 
-    # Mock single device
+    # Mock single device — auto-selected, no inquirer needed
     mock_detect.return_value = [
         {"index": 0, "name": "Webcam", "width": 1920, "height": 1080, "fps": 60.0},
     ]
 
-    # Mock prompt responses: profile, output dir, mode (no device selection)
-    mock_select = MagicMock()
-    mock_select.execute.side_effect = ["speed", "auto"]
-    mock_inq.select.return_value = mock_select
-
-    mock_text = MagicMock()
-    mock_text.execute.return_value = "received_files"
-    mock_inq.text.return_value = mock_text
-
     _action_receive()
 
     mock_run_receive.assert_called_once()
-    call_kwargs = mock_run_receive.call_args
-    if call_kwargs.kwargs:
-        assert call_kwargs.kwargs["source"] == 0
+    assert mock_run_receive.call_args.kwargs["source"] == 0
 
 
 # ------------------------------------------------------------------

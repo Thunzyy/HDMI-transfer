@@ -21,6 +21,7 @@ _DEFAULTS: dict[str, Any] = {
     },
     "receiver": {
         "device_name": None,
+        "device_index": None,
         "profile": "speed",
         "mode": "auto",
         "output": "received_files",

@@ -176,13 +176,36 @@ def _action_receive() -> None:
     """Use saved settings to start receiving immediately."""
     cfg = settings.load()["receiver"]
 
-    # Detect and select capture device
-    print("Detecting capture devices...")
-    devices = _detect_devices()
-    if not devices:
-        print("No capture devices found. Connect a capture card and try again.")
-        return
-    source = _pick_device(devices)
+    # Try saved device first (skip slow full detection)
+    saved_name = cfg.get("device_name")
+    saved_index = cfg.get("device_index")
+    source = None
+
+    if saved_name and saved_index is not None:
+        import cv2
+
+        with _suppress_stderr():
+            cap = cv2.VideoCapture(
+                saved_index,
+                cv2.CAP_DSHOW if sys.platform == "win32" else saved_index,
+            )
+            if cap.isOpened():
+                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                cap.release()
+                source = saved_index
+                print(f"  Device: {saved_name} ({w}x{h} @ {fps:.0f} FPS)")
+            else:
+                print(f"  Saved device '{saved_name}' not available. Scanning...")
+
+    if source is None:
+        print("Detecting capture devices...")
+        devices = _detect_devices()
+        if not devices:
+            print("No capture devices found. Connect a capture card and try again.")
+            return
+        source = _pick_device(devices)
 
     # Use saved settings directly — no prompts
     profile_name = cfg.get("profile", "speed")
@@ -280,12 +303,18 @@ def _action_settings() -> None:
             print("No devices found.")
             return
         choices = [
-            {"name": f"{d['name']} ({d['width']}x{d['height']})", "value": d["name"]}
+            {"name": f"{d['name']} ({d['width']}x{d['height']})", "value": d}
             for d in devices
         ] + [{"name": "(none — always ask)", "value": None}]
         picked = inquirer.select(message="Default device:", choices=choices).execute()
-        settings.set_value("receiver", "device_name", picked)
-        print(f"  Saved: device_name = {picked}")
+        if picked is not None:
+            settings.set_value("receiver", "device_name", picked["name"])
+            settings.set_value("receiver", "device_index", picked["index"])
+            print(f"  Saved: {picked['name']} (index {picked['index']})")
+        else:
+            settings.set_value("receiver", "device_name", None)
+            settings.set_value("receiver", "device_index", None)
+            print("  Saved: (auto-detect)")
 
     elif action == "Change profile":
         picked = inquirer.select(

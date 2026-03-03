@@ -100,19 +100,24 @@ def _receive_sequential(
     output_dir: str,
     profile: ResolutionProfile,
 ) -> None:
-    """Run the sequential receive loop (START -> DATA -> END)."""
+    """Run the sequential receive loop (START -> DATA -> END).
+
+    Accumulates frames across multiple sender passes.  Progress is shown
+    on a single ``\\r``-overwritten line that never resets.
+    """
     expected_sha256: bytes | None = None
     expected_file_size: int | None = None
     expected_filename: str | None = None
     received_chunks: dict[int, bytes] = {}
     total_frames_expected: int | None = None
     start_time: float = time.time()
-    tracker: ProgressTracker | None = None
     fps_reporter = FPSReporter(report_interval_s=2.0)
     capture_fps_str = ""
     got_start = False
+    bytes_received = 0
+    pass_count = 0
 
-    print("Sequential mode: capturing frames (no need to wait for START)...")
+    print("Sequential mode: capturing frames...")
 
     while True:
         ret, frame = cap.read()
@@ -144,37 +149,45 @@ def _receive_sequential(
                         expected_file_size = file_size
                         expected_filename = filename
                         total_frames_expected = total
-                        start_time = time.time()
-                        tracker = ProgressTracker(total, file_size)
                         got_start = True
-                        print(f"START received: '{filename}' ({file_size} bytes)")
-                        print(f"Expected SHA-256: {sha256_hash.hex()}")
-                        print(f"Expecting {total_frames_expected} DATA frames.")
+                        print(f"  File: '{filename}' ({file_size} bytes, {total} frames)")
 
             elif ftype == FRAME_TYPE_DATA:
-                # Accept DATA frames even before START (use total from header)
+                # Accept DATA frames even before START
                 if total_frames_expected is None and total is not None and total > 0:
                     total_frames_expected = total
-                    tracker = ProgressTracker(total, total * profile.seq_bytes_per_frame)
 
                 if idx not in received_chunks:
                     received_chunks[idx] = data
-                    if tracker is not None:
-                        tracker.update(1, len(data))
-                        sys.stdout.write(tracker.format_line(capture_fps_str))
-                    elif total_frames_expected:
-                        progress = len(received_chunks) / total_frames_expected
-                        sys.stdout.write(
-                            f"\rReceiving: {progress:.1%} "
-                            f"({len(received_chunks)}/{total_frames_expected})"
-                            f"{capture_fps_str}"
-                        )
+                    bytes_received += len(data)
+
+                # Single cumulative progress line (\r only, never \n)
+                if total_frames_expected:
+                    count = len(received_chunks)
+                    pct = count / total_frames_expected
+                    elapsed = time.time() - start_time
+                    if elapsed > 2.0 and bytes_received > 0:
+                        speed = bytes_received / elapsed
+                        avg_chunk = bytes_received / count if count else 1
+                        remaining = (total_frames_expected - count) * avg_chunk
+                        eta = remaining / speed if speed > 0 else float("inf")
+                        speed_str = f"{speed / 1024:.1f} KB/s"
+                        eta_str = ProgressTracker._format_eta(eta)
+                    else:
+                        speed_str = "-- KB/s"
+                        eta_str = "--:--"
+                    pass_str = f" | Pass {pass_count + 1}" if pass_count > 0 else ""
+                    sys.stdout.write(
+                        f"\rFrames: {count}/{total_frames_expected} "
+                        f"({pct:.1%}) | {speed_str} | ETA: {eta_str}"
+                        f"{pass_str}{capture_fps_str}    "
+                    )
                     sys.stdout.flush()
 
             elif ftype == FRAME_TYPE_END:
+                pass_count += 1
                 if total_frames_expected and len(received_chunks) >= total_frames_expected:
-                    # All frames collected — finalize
-                    print("\nAll frames received. Reassembling...")
+                    print("\n\nAll frames received. Reassembling...")
                     _finalize_sequential(
                         received_chunks, total_frames_expected,
                         expected_file_size, expected_sha256,
@@ -183,11 +196,7 @@ def _receive_sequential(
                     )
                     _print_capture_stats(cap)
                     break
-                else:
-                    # Missing frames — keep receiving across next sender pass
-                    missing = total_frames_expected - len(received_chunks) if total_frames_expected else "?"
-                    print(f"\nEND received but {missing} frames missing. "
-                          "Waiting for next pass...")
+                # Missing frames — progress line keeps updating silently
 
         # Debug window
         debug_frame = frame.copy()
@@ -199,9 +208,8 @@ def _receive_sequential(
         )
         cv2.imshow("Receiver View", debug_frame)
         if cv2.waitKey(1) & 0xFF == 27:
-            # ESC pressed — save what we have
             if received_chunks and total_frames_expected:
-                print("\nESC pressed. Saving partial transfer...")
+                print("\n\nESC pressed. Saving partial transfer...")
                 _finalize_sequential(
                     received_chunks, total_frames_expected,
                     expected_file_size, expected_sha256,
