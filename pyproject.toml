@@ -16,6 +16,7 @@ dependencies = [
 sender = [
     "pygame-ce >= 2.5.0",
     "screeninfo >= 0.8",
+    "InquirerPy >= 0.3.4",
 ]
 receiver = [
     "opencv-python >= 4.0",
@@ -35,6 +36,7 @@ hdmi-send = "hdmi_exfil.cli.send:main"
 hdmi-recv = "hdmi_exfil.cli.receive:main"
 hdmi-calibrate = "hdmi_exfil.cli.calibrate:main"
 hdmi-bench = "hdmi_exfil.cli.benchmark:main"
+hdmi-sender = "hdmi_exfil.sender.cli.console:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
