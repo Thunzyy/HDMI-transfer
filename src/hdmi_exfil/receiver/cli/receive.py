@@ -464,37 +464,56 @@ def _print_capture_stats(cap: object) -> None:
 
 def _run_receiver(
     source: object,
-    args: argparse.Namespace,
+    mode: str,
+    output: str,
     profile: ResolutionProfile,
 ) -> None:
     """Dispatch to the appropriate receive mode."""
-    if args.mode == "auto":
-        _receive_auto(source, args.output, profile)
-    elif args.mode == "sequential":
+    if mode == "auto":
+        _receive_auto(source, output, profile)
+    elif mode == "sequential":
         seq = get_protocol("sequential", profile=profile)
-        _receive_sequential(seq, source, args.output, profile)
+        _receive_sequential(seq, source, output, profile)
     else:
         fount = get_protocol("fountain", profile=profile)
-        _receive_fountain(fount, source, args.output, profile)
+        _receive_fountain(fount, source, output, profile)
 
 
 # ------------------------------------------------------------------
-# main
+# run_receive -- primary API
 # ------------------------------------------------------------------
 
-def main() -> None:
-    """Entry point for ``hdmi-recv`` CLI command."""
-    parser = _build_parser()
-    args = parser.parse_args()
+def run_receive(
+    source: int | str,
+    mode: str = "auto",
+    profile: ResolutionProfile | None = None,
+    output: str = "received_files",
+    threaded: bool = True,
+    buffer_size: int = 16,
+) -> None:
+    """Execute the full receive pipeline with explicit parameters.
 
-    # Resolve profile
-    if args.profile:
-        profile = PROFILES[args.profile]
-    else:
-        profile = DEFAULT_PROFILE
+    This is the primary API for receiving files over HDMI.  Called by both
+    the ``hdmi-recv`` CLI and the interactive ``hdmi-receiver`` console.
+
+    Parameters
+    ----------
+    source:
+        Camera index (int) or video file path (str).
+    mode:
+        Decoding protocol: ``"auto"``, ``"sequential"``, or ``"fountain"``.
+    profile:
+        Resolution profile.  Defaults to *DEFAULT_PROFILE* if ``None``.
+    output:
+        Directory to save received files.
+    threaded:
+        Use threaded capture with ring buffer.
+    buffer_size:
+        Ring buffer size for threaded capture.
+    """
+    profile = profile or DEFAULT_PROFILE
 
     # Parse source: numeric string -> camera index
-    source: int | str = args.source
     if isinstance(source, str) and source.isdigit():
         source = int(source)
 
@@ -507,7 +526,7 @@ def main() -> None:
         )
     except RuntimeError as exc:
         print(f"Error: {exc}")
-        sys.exit(1)
+        return  # Return to caller (menu or CLI), don't sys.exit()
 
     print(
         f"Camera: {cap.actual_width}x{cap.actual_height} "
@@ -515,15 +534,32 @@ def main() -> None:
     )
 
     with cap:
-        if args.threaded:
-            tcap = ThreadedCapture(cap, buffer_size=args.buffer_size)
+        if threaded:
+            tcap = ThreadedCapture(cap, buffer_size=buffer_size)
             with tcap:
-                print(
-                    f"Threaded capture: buffer_size={args.buffer_size} frames"
-                )
-                _run_receiver(tcap, args, profile)
+                print(f"Threaded capture: buffer_size={buffer_size} frames")
+                _run_receiver(tcap, mode, output, profile)
         else:
-            _run_receiver(cap, args, profile)
+            _run_receiver(cap, mode, output, profile)
+
+
+# ------------------------------------------------------------------
+# main -- thin CLI wrapper
+# ------------------------------------------------------------------
+
+def main() -> None:
+    """Entry point for ``hdmi-recv`` CLI command."""
+    parser = _build_parser()
+    args = parser.parse_args()
+
+    run_receive(
+        source=args.source,
+        mode=args.mode,
+        profile=PROFILES[args.profile] if args.profile else None,
+        output=args.output,
+        threaded=args.threaded,
+        buffer_size=args.buffer_size,
+    )
 
 
 if __name__ == "__main__":
