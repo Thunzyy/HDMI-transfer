@@ -173,10 +173,10 @@ def _show_main_menu() -> str:
 
 
 def _action_receive() -> None:
-    """Collect receive parameters via prompts and delegate to run_receive()."""
+    """Use saved settings to start receiving immediately."""
     cfg = settings.load()["receiver"]
 
-    # 1. Detect and select capture device (RECV-03)
+    # Detect and select capture device
     print("Detecting capture devices...")
     devices = _detect_devices()
     if not devices:
@@ -184,36 +184,15 @@ def _action_receive() -> None:
         return
     source = _pick_device(devices)
 
-    # 2. Resolution profile (RECV-04)
-    default_profile = cfg.get("profile", "speed")
-    profile_choices = [
-        {"name": "speed (1080p @ 240fps)", "value": "speed"},
-        {"name": "balanced (1080p @ 60fps)", "value": "balanced"},
-        {"name": "quality (4K @ 30fps)", "value": "quality"},
-    ]
-    profile_name = inquirer.select(
-        message="Resolution profile:",
-        choices=profile_choices,
-        default=default_profile,
-    ).execute()
+    # Use saved settings directly — no prompts
+    profile_name = cfg.get("profile", "speed")
     profile = PROFILES[profile_name]
+    output = cfg.get("output", "received_files")
+    mode = cfg.get("mode", "auto")
 
-    # 3. Output directory (RECV-05)
-    default_output = cfg.get("output", "received_files")
-    output = inquirer.text(
-        message="Output directory:",
-        default=default_output,
-    ).execute()
+    print(f"  Profile: {profile_name} | Mode: {mode} | Output: {output}")
+    print()
 
-    # 4. Receive mode
-    default_mode = cfg.get("mode", "auto")
-    mode = inquirer.select(
-        message="Receive mode:",
-        choices=["auto", "sequential", "fountain"],
-        default=default_mode,
-    ).execute()
-
-    # Delegate to extracted run_receive()
     run_receive(
         source=source,
         mode=mode,

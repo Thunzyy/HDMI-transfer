@@ -101,23 +101,23 @@ def _receive_sequential(
     profile: ResolutionProfile,
 ) -> None:
     """Run the sequential receive loop (START -> DATA -> END)."""
-    state = TransferState.START_PENDING
     expected_sha256: bytes | None = None
     expected_file_size: int | None = None
     expected_filename: str | None = None
     received_chunks: dict[int, bytes] = {}
     total_frames_expected: int | None = None
-    start_time: float | None = None
+    start_time: float = time.time()
     tracker: ProgressTracker | None = None
     fps_reporter = FPSReporter(report_interval_s=2.0)
     capture_fps_str = ""
+    got_start = False
 
-    print("Sequential mode: waiting for START frame...")
+    print("Sequential mode: capturing frames (no need to wait for START)...")
 
     while True:
         ret, frame = cap.read()
         if not ret:
-            time.sleep(0.001)  # avoid CPU spin when buffer is empty
+            time.sleep(0.001)
             continue
 
         fps = fps_reporter.tick()
@@ -136,32 +136,34 @@ def _receive_sequential(
             total = result.total_frames
             idx = result.frame_index
 
-            if ftype == FRAME_TYPE_START and state == TransferState.START_PENDING:
-                file_size, sha256_hash, filename = parse_start_metadata(data)
-                if file_size is not None:
-                    expected_sha256 = sha256_hash
-                    expected_file_size = file_size
-                    expected_filename = filename
-                    total_frames_expected = total
-                    state = TransferState.RECEIVING
-                    start_time = time.time()
-                    tracker = ProgressTracker(total, file_size)
-                    print(f"START received: '{filename}' ({file_size} bytes)")
-                    print(f"Expected SHA-256: {sha256_hash.hex()}")
-                    print(f"Expecting {total_frames_expected} DATA frames.")
+            if ftype == FRAME_TYPE_START:
+                if not got_start:
+                    file_size, sha256_hash, filename = parse_start_metadata(data)
+                    if file_size is not None:
+                        expected_sha256 = sha256_hash
+                        expected_file_size = file_size
+                        expected_filename = filename
+                        total_frames_expected = total
+                        start_time = time.time()
+                        tracker = ProgressTracker(total, file_size)
+                        got_start = True
+                        print(f"START received: '{filename}' ({file_size} bytes)")
+                        print(f"Expected SHA-256: {sha256_hash.hex()}")
+                        print(f"Expecting {total_frames_expected} DATA frames.")
 
-            elif ftype == FRAME_TYPE_DATA and state == TransferState.RECEIVING:
+            elif ftype == FRAME_TYPE_DATA:
+                # Accept DATA frames even before START (use total from header)
+                if total_frames_expected is None and total is not None and total > 0:
+                    total_frames_expected = total
+                    tracker = ProgressTracker(total, total * profile.seq_bytes_per_frame)
+
                 if idx not in received_chunks:
                     received_chunks[idx] = data
                     if tracker is not None:
                         tracker.update(1, len(data))
                         sys.stdout.write(tracker.format_line(capture_fps_str))
-                    else:
-                        progress = (
-                            len(received_chunks) / total_frames_expected
-                            if total_frames_expected
-                            else 0
-                        )
+                    elif total_frames_expected:
+                        progress = len(received_chunks) / total_frames_expected
                         sys.stdout.write(
                             f"\rReceiving: {progress:.1%} "
                             f"({len(received_chunks)}/{total_frames_expected})"
@@ -169,16 +171,23 @@ def _receive_sequential(
                         )
                     sys.stdout.flush()
 
-            elif ftype == FRAME_TYPE_END and state == TransferState.RECEIVING:
-                print("\nEND frame received. Reassembling...")
-                _finalize_sequential(
-                    received_chunks, total_frames_expected,
-                    expected_file_size, expected_sha256,
-                    expected_filename, output_dir, start_time,
-                    bytes_per_frame=profile.seq_bytes_per_frame,
-                )
-                _print_capture_stats(cap)
-                break
+            elif ftype == FRAME_TYPE_END:
+                if total_frames_expected and len(received_chunks) >= total_frames_expected:
+                    # All frames collected — finalize
+                    print("\nAll frames received. Reassembling...")
+                    _finalize_sequential(
+                        received_chunks, total_frames_expected,
+                        expected_file_size, expected_sha256,
+                        expected_filename, output_dir, start_time,
+                        bytes_per_frame=profile.seq_bytes_per_frame,
+                    )
+                    _print_capture_stats(cap)
+                    break
+                else:
+                    # Missing frames — keep receiving across next sender pass
+                    missing = total_frames_expected - len(received_chunks) if total_frames_expected else "?"
+                    print(f"\nEND received but {missing} frames missing. "
+                          "Waiting for next pass...")
 
         # Debug window
         debug_frame = frame.copy()
@@ -190,6 +199,15 @@ def _receive_sequential(
         )
         cv2.imshow("Receiver View", debug_frame)
         if cv2.waitKey(1) & 0xFF == 27:
+            # ESC pressed — save what we have
+            if received_chunks and total_frames_expected:
+                print("\nESC pressed. Saving partial transfer...")
+                _finalize_sequential(
+                    received_chunks, total_frames_expected,
+                    expected_file_size, expected_sha256,
+                    expected_filename, output_dir, start_time,
+                    bytes_per_frame=profile.seq_bytes_per_frame,
+                )
             break
 
     cv2.destroyAllWindows()
