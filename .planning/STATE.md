@@ -2,26 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Console Interactive & Restructure
-status: unknown
-last_updated: "2026-03-03T13:06:19.925Z"
-progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 33
-  completed_plans: 33
----
-
----
-gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Console Interactive & Restructure
 status: executing
-last_updated: "2026-03-03T13:00:01Z"
+last_updated: "2026-03-03T13:56:19Z"
 progress:
   total_phases: 9
   completed_phases: 8
-  total_plans: 33
-  completed_plans: 33
+  total_plans: 35
+  completed_plans: 34
 ---
 
 # Project State
@@ -31,17 +18,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Maximum throughput data transfer over HDMI without leaving any trace on the source machine.
-**Current focus:** Milestone v1.1 -- Phase 8 COMPLETE, Phase 9 next (Interactive Receiver Console)
+**Current focus:** Milestone v1.1 -- Phase 9 in progress (Interactive Receiver Console)
 
 ## Current Position
 
-Phase: 8 of 9 (Interactive Sender Console) -- COMPLETE
-Plan: 2 of 2 complete
-Status: Phase 8 complete. Ready for Phase 9.
-Last activity: 2026-03-03 -- Completed 08-02 (Interactive sender console UI + tests)
+Phase: 9 of 9 (Interactive Receiver Console)
+Plan: 1 of 2 complete
+Status: Executing Phase 9. Plan 01 complete (CLI receive extraction). Plan 02 next (console UI).
+Last activity: 2026-03-03 -- Completed 09-01 (CLI receive extraction + InquirerPy setup)
 
-Progress (v1.1): [################################] 2/2 phase 8 (100%)
-Progress (all):  [████████████████████████████████] 28/28 + 5/5 v1.1
+Progress (v1.1): [████████████████                ] 1/2 phase 9 (50%)
+Progress (all):  [████████████████████████████████] 28/28 + 6/7 v1.1
 
 ## v1.0 Metrics
 
@@ -52,9 +39,9 @@ Total execution time: 149min
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 33
+- Total plans completed: 34
 - Average duration: 5min
-- Total execution time: 184min
+- Total execution time: 186min
 
 **By Phase:**
 
@@ -68,10 +55,11 @@ Total execution time: 149min
 | 06-ux-polish | 4/4 | 14min | 4min |
 | 07-monorepo-restructure | 3/3 | 29min | 10min |
 | 08-interactive-sender-console | 2/2 | 6min | 3min |
+| 09-interactive-receiver-console | 1/2 | 2min | 2min |
 
 **Recent Trend:**
-- Last 5 plans: 07-02 (21min), 07-03 (3min), 08-01 (2min), 08-02 (4min)
-- Trend: Phase 8 completed in 6min total (2 plans). Clean dispatch pattern.
+- Last 5 plans: 07-03 (3min), 08-01 (2min), 08-02 (4min), 09-01 (2min)
+- Trend: Phase 9 Plan 01 completed in 2min. Clean extraction mirroring Phase 8.
 
 *Updated after each plan completion*
 | Phase 07 P01 | 5min | 2 tasks | 4 files |
@@ -79,6 +67,7 @@ Total execution time: 149min
 | Phase 07 P03 | 3min | 2 tasks | 1 files |
 | Phase 08 P01 | 2min | 2 tasks | 2 files |
 | Phase 08 P02 | 4min | 2 tasks | 3 files |
+| Phase 09 P01 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -102,6 +91,8 @@ Recent decisions affecting current work:
 - [08-02]: Console uses _DISPATCH dict mapping menu strings to handler functions for clean extensibility
 - [08-02]: Ctrl-C uses nested try/except: inner catches during action (returns to menu), outer catches during prompt (exits cleanly)
 - [08-02]: Single-monitor case skips monitor selection prompt for UX simplicity
+- [09-01]: run_receive() returns on error instead of sys.exit(1) so console menu loop continues
+- [09-01]: hdmi-receiver entry point declared early pointing to receiver.cli.console:main (module created in Plan 02)
 
 ### Pending Todos
 
@@ -116,5 +107,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 08-02-PLAN.md (Interactive sender console UI + tests). Phase 8 COMPLETE. Next: Phase 9.
+Stopped at: Completed 09-01-PLAN.md (CLI receive extraction + InquirerPy). Next: 09-02 (interactive receiver console UI).
 Resume file: None

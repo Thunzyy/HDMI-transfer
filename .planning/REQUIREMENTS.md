@@ -30,9 +30,9 @@ Requirements for milestone v1.1: Interactive CLI Consoles & Monorepo Restructure
 
 ### Receiver Console
 
-- [ ] **RECV-01**: User can launch `hdmi-receiver` to get an interactive arrow-key menu
+- [x] **RECV-01**: User can launch `hdmi-receiver` to get an interactive arrow-key menu
 - [ ] **RECV-02**: Receiver menu offers: Receive file, Calibrate signal, Detect capture card, Last transfer stats, Settings, Quit
-- [ ] **RECV-03**: User can select capture device via arrow-key prompt with detected devices listed
+- [x] **RECV-03**: User can select capture device via arrow-key prompt with detected devices listed
 - [ ] **RECV-04**: User can select resolution profile (speed/balanced/quality) via arrow-key prompt
 - [ ] **RECV-05**: User can configure output directory via interactive prompt
 - [ ] **RECV-06**: After any action completes, user returns to the main menu
@@ -81,9 +81,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEND-06 | Phase 8 | Complete |
 | SEND-07 | Phase 8 | Complete |
 | SEND-08 | Phase 8 | Complete |
-| RECV-01 | Phase 9 | Pending |
+| RECV-01 | Phase 9 | Complete |
 | RECV-02 | Phase 9 | Pending |
-| RECV-03 | Phase 9 | Pending |
+| RECV-03 | Phase 9 | Complete |
 | RECV-04 | Phase 9 | Pending |
 | RECV-05 | Phase 9 | Pending |
 | RECV-06 | Phase 9 | Pending |

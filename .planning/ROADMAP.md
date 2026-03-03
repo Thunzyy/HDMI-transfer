@@ -197,7 +197,11 @@ Plans:
   4. Pressing Ctrl-C at any prompt or during any action exits cleanly without a Python traceback
   5. The interactive console delegates to the same receive/calibrate functions as the existing CLI commands -- no duplicated capture or decode logic
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 09-01-PLAN.md -- Extract run_receive() from receive.py + add InquirerPy to receiver extras (RECV-01, RECV-03)
+- [ ] 09-02-PLAN.md -- Interactive console module with menu, device detection, prompts, dispatch, tests (RECV-01 through RECV-07)
 
 ## Progress
 
@@ -214,7 +218,7 @@ Phases execute in numeric order: 7 -> 8 -> 9
 | 6. UX & Polish | v1.0 | 4/4 | Complete | 2026-02-17 |
 | 7. Monorepo Restructure | v1.1 | 3/3 | Complete | 2026-03-02 |
 | 8. Interactive Sender Console | v1.1 | 1/2 | In Progress | - |
-| 9. Interactive Receiver Console | v1.1 | 0/? | Not started | - |
+| 9. Interactive Receiver Console | v1.1 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-16*
