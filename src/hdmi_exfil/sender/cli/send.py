@@ -140,8 +140,8 @@ def _show_end_screen(
         renderer.show(end_img, delay_ms=0)  # waitKey(0) = wait forever
     else:
         end_img = _solid_frame(_DONE_COLOR, profile)
-        print("DONE")
-        renderer.show(end_img, delay_ms=5000)
+        print("Stopped. Press any key to exit.")
+        renderer.show(end_img, delay_ms=0)
 
 
 # ------------------------------------------------------------------
@@ -157,64 +157,94 @@ def _send_sequential(
     redundancy: int,
     profile: ResolutionProfile,
 ) -> None:
-    """Run the sequential send loop (START -> DATA -> END)."""
+    """Run the sequential send loop, looping until user stops.
+
+    Each pass sends START -> DATA -> END, then loops back.  The sender
+    cannot know when the receiver is done, so it keeps transmitting
+    until the user presses ESC and quits.
+    """
     bytes_per_frame = profile.seq_bytes_per_frame
     total_frames = math.ceil(len(file_data) / bytes_per_frame)
-    print(f"Total DATA frames needed: {total_frames}")
+    print(f"Total DATA frames per pass: {total_frames}")
+    print("Looping until you stop (ESC -> quit). Stop when receiver confirms.")
 
     start_time = time.time()
-    interrupted = False
-    paused = False
+    pass_number = 0
+    total_frames_sent = 0
+    stopped = False
 
-    # Phase 1: START frame
-    start_frame = protocol.encode_start_frame(filename, file_data, total_frames)
-    for _ in range(redundancy):
-        key = renderer.show(start_frame, delay_ms=delay)
-        if key == 27:
-            paused = True
+    while not stopped:
+        paused = False
+
+        # Phase 1: START frame
+        start_frame = protocol.encode_start_frame(filename, file_data, total_frames)
+        for _ in range(redundancy):
+            key = renderer.show(start_frame, delay_ms=delay)
+            if key == 27:
+                paused = True
+                break
+
+        # Phase 2: DATA frames
+        i = 0
+        while i < total_frames:
+            if paused:
+                action = _show_pause_screen(renderer, profile)
+                if action == "quit":
+                    stopped = True
+                    break
+                paused = False
+                print("\nResuming transmission...")
+                continue
+
+            start_byte = i * bytes_per_frame
+            end_byte = min((i + 1) * bytes_per_frame, len(file_data))
+            chunk = file_data[start_byte:end_byte]
+
+            frame = protocol.encode_frame(chunk, i, total_frames)
+
+            for _ in range(redundancy):
+                key = renderer.show(frame, delay_ms=delay)
+                if key == 27:
+                    paused = True
+                    print(f"\nPaused at frame {i}/{total_frames}")
+                    break
+
+            if paused:
+                continue
+            i += 1
+
+            progress = i / total_frames
+            pass_label = f"Pass {pass_number + 1}" if pass_number > 0 else "Pass 1"
+            sys.stdout.write(
+                f"\r{pass_label}: {progress:.1%} ({i}/{total_frames})"
+            )
+            sys.stdout.flush()
+
+        if stopped:
+            total_frames_sent += i
             break
 
-    # Phase 2: DATA frames
-    i = 0
-    while i < total_frames:
+        # Phase 3: END frame
+        end_frame = protocol.encode_end_frame(total_frames)
+        for _ in range(redundancy):
+            key = renderer.show(end_frame, delay_ms=delay)
+            if key == 27:
+                paused = True
+                break
+
+        pass_number += 1
+        total_frames_sent += total_frames
+        print(f"\nPass {pass_number} complete ({total_frames_sent} frames total). "
+              "Looping... (ESC to stop)")
+
+        # Handle pause between passes
         if paused:
             action = _show_pause_screen(renderer, profile)
             if action == "quit":
-                interrupted = True
-                break
-            paused = False
-            print("\nResuming transmission...")
-            continue
-
-        start_byte = i * bytes_per_frame
-        end_byte = min((i + 1) * bytes_per_frame, len(file_data))
-        chunk = file_data[start_byte:end_byte]
-
-        frame = protocol.encode_frame(chunk, i, total_frames)
-
-        for _ in range(redundancy):
-            key = renderer.show(frame, delay_ms=delay)
-            if key == 27:
-                paused = True
-                print(f"\nPaused at frame {i}/{total_frames}")
                 break
 
-        if paused:
-            continue
-        i += 1
-
-        progress = (i) / total_frames
-        sys.stdout.write(f"\rProgress: {progress:.1%} ({i}/{total_frames})")
-        sys.stdout.flush()
-
-    # Phase 3: END frame
-    if not interrupted:
-        end_frame = protocol.encode_end_frame(total_frames)
-        for _ in range(redundancy):
-            renderer.show(end_frame, delay_ms=delay)
-
-    _print_stats(len(file_data), start_time, interrupted, i, total_frames)
-    _show_end_screen(renderer, interrupted, profile)
+    _print_stats(len(file_data), start_time, False, total_frames_sent, None)
+    _show_end_screen(renderer, False, profile)
 
 
 # ------------------------------------------------------------------
@@ -343,7 +373,7 @@ def _print_stats(
             msg += f" ({frames_sent}/{total_frames})"
         print(msg)
     else:
-        print("Transmission complete.")
+        print(f"Transmission stopped. {frames_sent} frames sent.")
 
     print(f"Time: {duration:.2f}s")
     print(f"Average Speed: {speed:.2f} Mbps")
