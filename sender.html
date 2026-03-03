@@ -11,16 +11,14 @@
       --accent: #00d5ff;
       --text: #e6f9ff;
     }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: radial-gradient(circle at 25% 25%, #0a0a0a, #000);
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
       color: var(--text);
       font-family: "JetBrains Mono", Consolas, monospace;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
     #controls {
       position: fixed;
@@ -70,8 +68,11 @@
     #hint { margin-top: 8px; color: #f5d67b; }
     canvas {
       display: block;
-      width: 1920px;
-      height: 1080px;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
       background: #000;
@@ -91,7 +92,7 @@
     </div>
     <div id="status">Charge un fichier pour armer l'envoi.</div>
     <div id="stats"></div>
-    <div id="hint">F11 pour plein ecran. Cache l'UI pendant l'envoi pour ne pas polluer l'image.</div>
+    <div id="hint">Demarrer = plein ecran auto. ESC ou Espace pour arreter.</div>
   </div>
 
   <canvas id="canvas" width="1920" height="1080"></canvas>
@@ -336,6 +337,8 @@
       function stopSending() {
         state.running = false;
         if (state.raf) cancelAnimationFrame(state.raf);
+        // Exit fullscreen
+        if (document.fullscreenElement) document.exitFullscreen();
         controls.classList.remove("hidden");
         startBtn.disabled = !state.chunks.length;
         stopBtn.disabled = true;
@@ -411,8 +414,10 @@
         state.frame = 0;
         startBtn.disabled = true;
         stopBtn.disabled = false;
-        controls.classList.add("hidden"); // evite d'ecrire sur le canvas
-        setStatus("Envoi en cours... (Espace pour pause)");
+        controls.classList.add("hidden");
+        setStatus("Envoi en cours... (ESC pour arreter)");
+        // Enter fullscreen on the document body (covers entire screen)
+        document.documentElement.requestFullscreen().catch(() => {});
         renderLoop();
       });
 
@@ -423,7 +428,10 @@
       });
 
       document.addEventListener("keydown", (e) => {
-        if (e.key === " ") {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          if (state.running) stopSending();
+        } else if (e.key === " ") {
           e.preventDefault();
           if (state.running) {
             stopSending();

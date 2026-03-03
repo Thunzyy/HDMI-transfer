@@ -83,28 +83,48 @@ def _get_device_names_wmi() -> list[str] | None:
 def _detect_devices(max_index: int = 10) -> list[dict]:
     """Probe capture device indices and return available devices with names.
 
-    Tries ffmpeg DirectShow enumeration first (exact index mapping), then
-    PowerShell/WMI as fallback. Suppresses noisy driver logs during probing.
+    Tries backends in priority order (MSMF → DSHOW → CAP_ANY on Windows).
+    Uses the first backend where at least one device passes validation
+    (correct resolution and non-empty frames).
+
+    When the winning backend is not DSHOW the device-name ordering from
+    ffmpeg/WMI may not match.  In that case we fall back to generic
+    ``Device N`` labels.
+
     Returns a list of dicts with keys: index, name, width, height, fps.
     """
     import cv2
 
-    names = _get_device_names_ffmpeg() or _get_device_names_wmi() or []
-    devices = []
-    with _suppress_stderr():
-        for i in range(max_index):
-            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW if sys.platform == "win32" else i)
-            if cap.isOpened():
+    from hdmi_exfil.receiver.capture.source import _get_backends, _try_open
+
+    backends = _get_backends()
+    # Pre-fetch names once (cheap subprocess calls)
+    dshow_names = _get_device_names_ffmpeg() or _get_device_names_wmi() or []
+
+    for backend in backends:
+        is_dshow = backend == cv2.CAP_DSHOW
+        devices = []
+        with _suppress_stderr():
+            for i in range(max_index):
+                cap = _try_open(i, backend, 1920, 1080, 60)
+                if cap is None:
+                    continue
                 w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                 h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                 fps = cap.get(cv2.CAP_PROP_FPS)
-                name = names[i] if i < len(names) else f"Device {i}"
+                cap.release()
+                if is_dshow and i < len(dshow_names):
+                    name = dshow_names[i]
+                else:
+                    name = f"Device {i}"
                 devices.append({
                     "index": i, "name": name,
                     "width": w, "height": h, "fps": fps,
                 })
-                cap.release()
-    return devices
+        if devices:
+            return devices
+
+    return []
 
 
 # ------------------------------------------------------------------
@@ -176,35 +196,27 @@ def _action_receive() -> None:
     """Use saved settings to start receiving immediately."""
     cfg = settings.load()["receiver"]
 
-    # Try saved device first (skip slow full detection)
+    # Detect devices (uses backend chain with resolution validation)
+    print("Detecting capture devices...")
+    devices = _detect_devices()
+    if not devices:
+        print("No capture devices found. Connect a capture card and try again.")
+        return
+
+    # Try to match saved device by name first, then fall back to picker
     saved_name = cfg.get("device_name")
-    saved_index = cfg.get("device_index")
     source = None
-
-    if saved_name and saved_index is not None:
-        import cv2
-
-        with _suppress_stderr():
-            cap = cv2.VideoCapture(
-                saved_index,
-                cv2.CAP_DSHOW if sys.platform == "win32" else saved_index,
-            )
-            if cap.isOpened():
-                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                cap.release()
-                source = saved_index
-                print(f"  Device: {saved_name} ({w}x{h} @ {fps:.0f} FPS)")
-            else:
-                print(f"  Saved device '{saved_name}' not available. Scanning...")
+    if saved_name:
+        for d in devices:
+            if d["name"] == saved_name:
+                source = d["index"]
+                print(f"  Device: {d['name']} ({d['width']}x{d['height']}"
+                      f" @ {d['fps']:.0f} FPS)")
+                break
+        if source is None:
+            print(f"  Saved device '{saved_name}' not found. Pick from detected:")
 
     if source is None:
-        print("Detecting capture devices...")
-        devices = _detect_devices()
-        if not devices:
-            print("No capture devices found. Connect a capture card and try again.")
-            return
         source = _pick_device(devices)
 
     # Use saved settings directly — no prompts

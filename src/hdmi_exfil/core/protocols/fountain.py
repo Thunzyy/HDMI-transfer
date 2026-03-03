@@ -370,7 +370,8 @@ class FountainProtocol(EncodingProtocol):
         )
         # Safety trim to exact profile dimensions
         frame_img = frame_img[: self._profile.height, : self._profile.width, :]
-        return frame_img
+        # Flip RGB→BGR for OpenCV/pygame display (they expect BGR channel order)
+        return frame_img[..., ::-1]
 
     # -- decode --------------------------------------------------------------
 
@@ -384,7 +385,9 @@ class FountainProtocol(EncodingProtocol):
           4. Verify CRC32
         """
         # Flatten and threshold all 3 channels: > 128 => bit=1 (3bpp)
-        flat = sampled_grid.reshape(-1, 3)
+        # OpenCV captures in BGR order; flip to RGB to match the sender's
+        # bit packing (R channel = first bit, G = second, B = third).
+        flat = sampled_grid[..., ::-1].reshape(-1, 3)
         bits = (flat > 128).astype(np.uint8)
         flat_bits = bits.reshape(-1)
         raw_bytes = np.packbits(flat_bits).tobytes()

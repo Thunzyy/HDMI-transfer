@@ -131,8 +131,8 @@ class SequentialProtocol(EncodingProtocol):
         )
         # Safety trim to exact profile dimensions
         img = img[: self._profile.height, : self._profile.width, :]
-
-        return img
+        # Flip RGB→BGR for OpenCV/pygame display (they expect BGR channel order)
+        return img[..., ::-1]
 
     def decode_frame(self, sampled_grid: np.ndarray) -> FrameResult:
         """Decode a sampled block grid into a :class:`FrameResult`.
@@ -140,7 +140,9 @@ class SequentialProtocol(EncodingProtocol):
         Logic mirrors ``receiver.py:decode_frame_full`` (lines 97-134)
         with threshold ``> 128``.
         """
-        flat_pixels = sampled_grid.reshape(-1, 3)
+        # OpenCV captures in BGR order; flip to RGB to match the sender's
+        # bit packing (R channel = first bit, G = second, B = third).
+        flat_pixels = sampled_grid[..., ::-1].reshape(-1, 3)
 
         # Threshold: > 128 is 1, else 0
         bits = (flat_pixels > 128).astype(np.uint8)
