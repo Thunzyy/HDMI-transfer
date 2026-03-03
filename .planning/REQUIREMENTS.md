@@ -20,13 +20,13 @@ Requirements for milestone v1.1: Interactive CLI Consoles & Monorepo Restructure
 ### Sender Console
 
 - [x] **SEND-01**: User can launch `hdmi-sender` to get an interactive arrow-key menu
-- [ ] **SEND-02**: Sender menu offers: Send file (Python), Send file (Browser), Calibrate, Detect hardware, Benchmark, Quit
-- [ ] **SEND-03**: User can select file to send via interactive file path prompt with autocomplete
-- [ ] **SEND-04**: User can select resolution profile (speed/balanced/quality) via arrow-key prompt
+- [x] **SEND-02**: Sender menu offers: Send file (Python), Send file (Browser), Calibrate, Detect hardware, Benchmark, Quit
+- [x] **SEND-03**: User can select file to send via interactive file path prompt with autocomplete
+- [x] **SEND-04**: User can select resolution profile (speed/balanced/quality) via arrow-key prompt
 - [x] **SEND-05**: User can select encoding mode (sequential/fountain) via arrow-key prompt
-- [ ] **SEND-06**: User can select target monitor via arrow-key prompt with detected monitors listed
-- [ ] **SEND-07**: After any action completes, user returns to the main menu
-- [ ] **SEND-08**: Ctrl-C cleanly exits at any prompt without traceback
+- [x] **SEND-06**: User can select target monitor via arrow-key prompt with detected monitors listed
+- [x] **SEND-07**: After any action completes, user returns to the main menu
+- [x] **SEND-08**: Ctrl-C cleanly exits at any prompt without traceback
 
 ### Receiver Console
 
@@ -74,13 +74,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STRUCT-06 | Phase 7 | Complete |
 | STRUCT-07 | Phase 7 | Complete |
 | SEND-01 | Phase 8 | Complete |
-| SEND-02 | Phase 8 | Pending |
-| SEND-03 | Phase 8 | Pending |
-| SEND-04 | Phase 8 | Pending |
+| SEND-02 | Phase 8 | Complete |
+| SEND-03 | Phase 8 | Complete |
+| SEND-04 | Phase 8 | Complete |
 | SEND-05 | Phase 8 | Complete |
-| SEND-06 | Phase 8 | Pending |
-| SEND-07 | Phase 8 | Pending |
-| SEND-08 | Phase 8 | Pending |
+| SEND-06 | Phase 8 | Complete |
+| SEND-07 | Phase 8 | Complete |
+| SEND-08 | Phase 8 | Complete |
 | RECV-01 | Phase 9 | Pending |
 | RECV-02 | Phase 9 | Pending |
 | RECV-03 | Phase 9 | Pending |

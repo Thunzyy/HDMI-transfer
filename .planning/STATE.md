@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Console Interactive & Restructure
 status: executing
-last_updated: "2026-03-03T12:52:35Z"
+last_updated: "2026-03-03T13:00:01Z"
 progress:
   total_phases: 9
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 33
-  completed_plans: 32
+  completed_plans: 33
 ---
 
 # Project State
@@ -18,17 +18,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Maximum throughput data transfer over HDMI without leaving any trace on the source machine.
-**Current focus:** Milestone v1.1 -- Phase 8 in progress (Interactive Sender Console)
+**Current focus:** Milestone v1.1 -- Phase 8 COMPLETE, Phase 9 next (Interactive Receiver Console)
 
 ## Current Position
 
-Phase: 8 of 9 (Interactive Sender Console) -- IN PROGRESS
-Plan: 1 of 2 complete
-Status: Executing Phase 8
-Last activity: 2026-03-03 -- Completed 08-01 (CLI send extraction + InquirerPy)
+Phase: 8 of 9 (Interactive Sender Console) -- COMPLETE
+Plan: 2 of 2 complete
+Status: Phase 8 complete. Ready for Phase 9.
+Last activity: 2026-03-03 -- Completed 08-02 (Interactive sender console UI + tests)
 
-Progress (v1.1): [################----------------] 1/2 phase 8 (50%)
-Progress (all):  [████████████████████████████████] 28/28 + 4/5 v1.1
+Progress (v1.1): [################################] 2/2 phase 8 (100%)
+Progress (all):  [████████████████████████████████] 28/28 + 5/5 v1.1
 
 ## v1.0 Metrics
 
@@ -39,9 +39,9 @@ Total execution time: 149min
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 32
+- Total plans completed: 33
 - Average duration: 5min
-- Total execution time: 180min
+- Total execution time: 184min
 
 **By Phase:**
 
@@ -54,17 +54,18 @@ Total execution time: 149min
 | 05-fountain-code-optimization | 4/4 | 35min | 9min |
 | 06-ux-polish | 4/4 | 14min | 4min |
 | 07-monorepo-restructure | 3/3 | 29min | 10min |
-| 08-interactive-sender-console | 1/2 | 2min | 2min |
+| 08-interactive-sender-console | 2/2 | 6min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 07-01 (5min), 07-02 (21min), 07-03 (3min), 08-01 (2min)
-- Trend: Phase 8 send extraction was clean refactor -- 2min.
+- Last 5 plans: 07-02 (21min), 07-03 (3min), 08-01 (2min), 08-02 (4min)
+- Trend: Phase 8 completed in 6min total (2 plans). Clean dispatch pattern.
 
 *Updated after each plan completion*
 | Phase 07 P01 | 5min | 2 tasks | 4 files |
 | Phase 07 P02 | 21min | 2 tasks | 60 files |
 | Phase 07 P03 | 3min | 2 tasks | 1 files |
 | Phase 08 P01 | 2min | 2 tasks | 2 files |
+| Phase 08 P02 | 4min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,9 @@ Recent decisions affecting current work:
 - [07-03]: Self-referential extras: hdmi-exfil[all] = [sender] + [receiver]; [dev] = [all] + test tools
 - [08-01]: run_send() uses explicit parameters matching argparse defaults for clean API
 - [08-01]: hdmi-sender entry point declared early pointing to console:main (module created in Plan 02)
+- [08-02]: Console uses _DISPATCH dict mapping menu strings to handler functions for clean extensibility
+- [08-02]: Ctrl-C uses nested try/except: inner catches during action (returns to menu), outer catches during prompt (exits cleanly)
+- [08-02]: Single-monitor case skips monitor selection prompt for UX simplicity
 
 ### Pending Todos
 
@@ -94,10 +98,10 @@ None.
 
 - Pre-existing test failure in test_xor_ops.py::test_fountain_decoder_with_numba (not introduced by Phase 5).
 - ~~cv2.resize in protocol encoding must be replaced with np.repeat before extras split is meaningful (STRUCT-06).~~ RESOLVED in 07-01.
-- InquirerPy + pygame/cv2 event loop conflict must be validated empirically in Phase 8 first prototype.
+- ~~InquirerPy + pygame/cv2 event loop conflict must be validated empirically in Phase 8 first prototype.~~ RESOLVED in 08-02: sequential (menu then send), no conflict.
 
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 08-01-PLAN.md (CLI send extraction + InquirerPy). Next: 08-02 (Interactive console UI)
+Stopped at: Completed 08-02-PLAN.md (Interactive sender console UI + tests). Phase 8 COMPLETE. Next: Phase 9.
 Resume file: None
