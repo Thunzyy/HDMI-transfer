@@ -46,16 +46,28 @@ Nécessite **Python >= 3.11**.
 ```bash
 git clone git@github.com:Thunzyy/HDMI_exfil.git
 cd HDMI_exfil
-pip install -e ".[dev]"
 ```
 
-**Important :** le package `opencv-python` (avec GUI) est nécessaire pour l'affichage des fenêtres debug. Si `cv2.imshow` échoue, remplacer le headless :
+Le package est découpé en extras -- installer uniquement ce dont vous avez besoin :
+
+| Commande | Ce qu'elle installe | Quand l'utiliser |
+|----------|---------------------|------------------|
+| `pip install -e ".[sender]"` | numpy, numba, pygame-ce, screeninfo | PC qui **envoie** les fichiers |
+| `pip install -e ".[receiver]"` | numpy, numba, opencv-python | PC qui **reçoit** les fichiers |
+| `pip install -e ".[all]"` | sender + receiver | Un seul PC (loopback) |
+| `pip install -e ".[dev]"` | all + pytest, hypothesis | Développement et tests |
+
+**Loopback sur un seul PC (cas le plus courant) :**
+
+```bash
+pip install -e ".[all]"
+```
+
+**Important :** le package `opencv-python` (avec GUI) est nécessaire pour l'affichage des fenêtres debug. Si `cv2.imshow` échoue :
 
 ```bash
 pip install opencv-python --force-reinstall
 ```
-
-Dépendances : numpy, opencv-python, pygame-ce, numba, screeninfo, pytest, hypothesis.
 
 ## Démarrage rapide (test loopback un seul PC)
 
@@ -97,7 +109,7 @@ Retenir l'index de l'Elgato (ex: `1`).
 
 ```bash
 python -c "
-from hdmi_exfil.display.monitors import get_monitors
+from hdmi_exfil.sender.display.monitors import get_monitors
 for i, m in enumerate(get_monitors()):
     print(f'  Monitor {i}: {m[\"width\"]}x{m[\"height\"]} at ({m[\"left\"]}, {m[\"top\"]})')
 "
@@ -283,38 +295,50 @@ Les headers consomment 17 octets (sequential) ou 12 octets (fountain), laissant 
 
 ## Architecture
 
+Le code est organisé en trois sous-packages : **core** (pas de dépendance hardware), **sender** (pygame-ce) et **receiver** (opencv-python).
+
 ```
 src/hdmi_exfil/
-  config.py            Constantes, ResolutionProfile, PROFILES
-  constants.json       Source de vérité partagée (Python + JS)
-  prng.py              SplitMix32 PRNG (déterministe cross-language)
-  protocols/
-    base.py            EncodingProtocol ABC
-    sequential.py      Protocole séquentiel (START/DATA/END)
-    fountain.py        Fountain LT codes + FountainDecoder
-    degree.py          Robust Soliton Distribution
-  capture/
-    source.py          CaptureSource (DirectShow / V4L2 / AVFoundation)
-    threaded.py        ThreadedCapture avec ring buffer
-    sampler.py         Frame -> grille de blocs
-  display/
-    renderer.py        FrameRenderer (cv2), PygameRenderer (SDL2)
-    test_patterns.py   Patterns de calibration + analyse SNR
-    monitors.py        Détection multi-moniteur
-  file_handling/
-    reader.py          Lecture fichier/dossier (auto-zip)
-    writer.py          Écriture fichier de sortie
-    metadata.py        Nom, taille, SHA-256
-    integrity.py       Vérification SHA-256
-  cli/
-    send.py            Point d'entrée hdmi-send
-    receive.py         Point d'entrée hdmi-recv
-    calibrate.py       Point d'entrée hdmi-calibrate
-    benchmark.py       Point d'entrée hdmi-bench
-    progress.py        ProgressTracker (vitesse, ETA)
+  core/                  Partagé -- numpy + numba uniquement
+    config.py            Constantes, ResolutionProfile, PROFILES
+    constants.json       Source de vérité partagée (Python + JS)
+    prng.py              SplitMix32 PRNG (déterministe cross-language)
+    protocols/
+      base.py            EncodingProtocol ABC
+      sequential.py      Protocole séquentiel (START/DATA/END)
+      fountain.py        Fountain LT codes + FountainDecoder
+      degree.py          Robust Soliton Distribution
+      xor_ops.py         Opérations XOR optimisées
+    capture/
+      sampler.py         Frame -> grille de blocs
+      threaded.py        ThreadedCapture avec ring buffer
+    file_handling/
+      reader.py          Lecture fichier/dossier (auto-zip)
+      writer.py          Écriture fichier de sortie
+      metadata.py        Nom, taille, SHA-256
+    cli/
+      progress.py        ProgressTracker (vitesse, ETA)
+      benchmark.py       Point d'entrée hdmi-bench
 
-sender.html            Sender navigateur fountain (zéro installation)
+  sender/                Dépend de pygame-ce, screeninfo
+    display/
+      renderer.py        PygameRenderer (SDL2)
+      test_patterns.py   Patterns de calibration + analyse SNR
+      monitors.py        Détection multi-moniteur
+    cli/
+      send.py            Point d'entrée hdmi-send
+
+  receiver/              Dépend de opencv-python
+    capture/
+      source.py          CaptureSource (DirectShow / V4L2 / AVFoundation)
+    cli/
+      receive.py         Point d'entrée hdmi-recv
+      calibrate.py       Point d'entrée hdmi-calibrate
+
+sender.html              Sender navigateur fountain (zéro installation)
 ```
+
+Les anciens chemins d'import (`hdmi_exfil.protocols`, `hdmi_exfil.config`, etc.) restent fonctionnels via des shims de compatibilité.
 
 ## Dépannage
 
@@ -339,7 +363,8 @@ sender.html            Sender navigateur fountain (zéro installation)
 ### Tests unitaires (pas de matériel requis)
 
 ```bash
-pytest                    # 297/301 pass
+pip install -e ".[dev]"   # installe tout + pytest + hypothesis
+pytest                    # 170 tests pass
 hdmi-bench --no-json      # benchmark en mémoire
 ```
 

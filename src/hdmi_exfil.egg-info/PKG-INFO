@@ -8,8 +8,10 @@ Requires-Dist: numba>=0.60.0
 Provides-Extra: sender
 Requires-Dist: pygame-ce>=2.5.0; extra == "sender"
 Requires-Dist: screeninfo>=0.8; extra == "sender"
+Requires-Dist: InquirerPy>=0.3.4; extra == "sender"
 Provides-Extra: receiver
 Requires-Dist: opencv-python>=4.0; extra == "receiver"
+Requires-Dist: InquirerPy>=0.3.4; extra == "receiver"
 Provides-Extra: all
 Requires-Dist: hdmi-exfil[sender]; extra == "all"
 Requires-Dist: hdmi-exfil[receiver]; extra == "all"

@@ -18,7 +18,9 @@ src/hdmi_exfil/cli/benchmark.py
 src/hdmi_exfil/cli/calibrate.py
 src/hdmi_exfil/cli/progress.py
 src/hdmi_exfil/cli/receive.py
+src/hdmi_exfil/cli/receiver_console.py
 src/hdmi_exfil/cli/send.py
+src/hdmi_exfil/cli/sender_console.py
 src/hdmi_exfil/core/__init__.py
 src/hdmi_exfil/core/config.py
 src/hdmi_exfil/core/constants.json
@@ -58,9 +60,11 @@ src/hdmi_exfil/receiver/capture/__init__.py
 src/hdmi_exfil/receiver/capture/source.py
 src/hdmi_exfil/receiver/cli/__init__.py
 src/hdmi_exfil/receiver/cli/calibrate.py
+src/hdmi_exfil/receiver/cli/console.py
 src/hdmi_exfil/receiver/cli/receive.py
 src/hdmi_exfil/sender/__init__.py
 src/hdmi_exfil/sender/cli/__init__.py
+src/hdmi_exfil/sender/cli/console.py
 src/hdmi_exfil/sender/cli/send.py
 src/hdmi_exfil/sender/display/__init__.py
 src/hdmi_exfil/sender/display/monitors.py
@@ -77,8 +81,10 @@ tests/test_prng.py
 tests/test_profiles.py
 tests/test_properties.py
 tests/test_pygame_renderer.py
+tests/test_receiver_console.py
 tests/test_rsd.py
 tests/test_rsd_cross_language.py
+tests/test_sender_console.py
 tests/test_sequential.py
 tests/test_threaded_capture.py
 tests/test_xor_ops.py

@@ -1,5 +1,7 @@
 [console_scripts]
 hdmi-bench = hdmi_exfil.cli.benchmark:main
 hdmi-calibrate = hdmi_exfil.cli.calibrate:main
+hdmi-receiver = hdmi_exfil.receiver.cli.console:main
 hdmi-recv = hdmi_exfil.cli.receive:main
 hdmi-send = hdmi_exfil.cli.send:main
+hdmi-sender = hdmi_exfil.sender.cli.console:main

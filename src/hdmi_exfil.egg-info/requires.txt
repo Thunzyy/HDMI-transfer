@@ -12,7 +12,9 @@ hypothesis>=6.0
 
 [receiver]
 opencv-python>=4.0
+InquirerPy>=0.3.4
 
 [sender]
 pygame-ce>=2.5.0
 screeninfo>=0.8
+InquirerPy>=0.3.4
