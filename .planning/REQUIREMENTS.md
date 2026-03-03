@@ -31,12 +31,12 @@ Requirements for milestone v1.1: Interactive CLI Consoles & Monorepo Restructure
 ### Receiver Console
 
 - [x] **RECV-01**: User can launch `hdmi-receiver` to get an interactive arrow-key menu
-- [ ] **RECV-02**: Receiver menu offers: Receive file, Calibrate signal, Detect capture card, Last transfer stats, Settings, Quit
+- [x] **RECV-02**: Receiver menu offers: Receive file, Calibrate signal, Detect capture card, Last transfer stats, Settings, Quit
 - [x] **RECV-03**: User can select capture device via arrow-key prompt with detected devices listed
-- [ ] **RECV-04**: User can select resolution profile (speed/balanced/quality) via arrow-key prompt
-- [ ] **RECV-05**: User can configure output directory via interactive prompt
-- [ ] **RECV-06**: After any action completes, user returns to the main menu
-- [ ] **RECV-07**: Ctrl-C cleanly exits at any prompt without traceback
+- [x] **RECV-04**: User can select resolution profile (speed/balanced/quality) via arrow-key prompt
+- [x] **RECV-05**: User can configure output directory via interactive prompt
+- [x] **RECV-06**: After any action completes, user returns to the main menu
+- [x] **RECV-07**: Ctrl-C cleanly exits at any prompt without traceback
 
 ## Future Requirements
 
@@ -82,12 +82,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEND-07 | Phase 8 | Complete |
 | SEND-08 | Phase 8 | Complete |
 | RECV-01 | Phase 9 | Complete |
-| RECV-02 | Phase 9 | Pending |
+| RECV-02 | Phase 9 | Complete |
 | RECV-03 | Phase 9 | Complete |
-| RECV-04 | Phase 9 | Pending |
-| RECV-05 | Phase 9 | Pending |
-| RECV-06 | Phase 9 | Pending |
-| RECV-07 | Phase 9 | Pending |
+| RECV-04 | Phase 9 | Complete |
+| RECV-05 | Phase 9 | Complete |
+| RECV-06 | Phase 9 | Complete |
+| RECV-07 | Phase 9 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 22 total

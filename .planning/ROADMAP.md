@@ -32,8 +32,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 ### v1.1 Console Interactive & Restructure
 
 - [x] **Phase 7: Monorepo Restructure** - Reorganize into core/sender/receiver subpackages with pip extras for independent installation
-- [ ] **Phase 8: Interactive Sender Console** - Arrow-key menu-driven sender with file picker, profile/mode/monitor selection
-- [ ] **Phase 9: Interactive Receiver Console** - Arrow-key menu-driven receiver with device selection, output config, and transfer stats
+- [x] **Phase 8: Interactive Sender Console** - Arrow-key menu-driven sender with file picker, profile/mode/monitor selection
+- [x] **Phase 9: Interactive Receiver Console** - Arrow-key menu-driven receiver with device selection, output config, and transfer stats
 
 ## Phase Details
 
@@ -184,7 +184,7 @@ Plans:
 
 Plans:
 - [x] 08-01-PLAN.md -- Extract run_send() from send.py + add InquirerPy dependency (SEND-01, SEND-05)
-- [ ] 08-02-PLAN.md -- Interactive console module with menu, prompts, dispatch, tests (SEND-01 through SEND-08)
+- [x] 08-02-PLAN.md -- Interactive console module with menu, prompts, dispatch, tests (SEND-01 through SEND-08)
 
 ### Phase 9: Interactive Receiver Console
 **Goal**: Users can operate the receiver through an interactive arrow-key menu instead of memorizing CLI flags -- the menu collects all parameters and delegates to the existing receive pipeline
@@ -200,8 +200,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 09-01-PLAN.md -- Extract run_receive() from receive.py + add InquirerPy to receiver extras (RECV-01, RECV-03)
-- [ ] 09-02-PLAN.md -- Interactive console module with menu, device detection, prompts, dispatch, tests (RECV-01 through RECV-07)
+- [x] 09-01-PLAN.md -- Extract run_receive() from receive.py + add InquirerPy to receiver extras (RECV-01, RECV-03)
+- [x] 09-02-PLAN.md -- Interactive console module with menu, device detection, prompts, dispatch, tests (RECV-01 through RECV-07)
 
 ## Progress
 
@@ -217,10 +217,10 @@ Phases execute in numeric order: 7 -> 8 -> 9
 | 5. Fountain Code Optimization | v1.0 | 4/4 | Complete | 2026-02-17 |
 | 6. UX & Polish | v1.0 | 4/4 | Complete | 2026-02-17 |
 | 7. Monorepo Restructure | v1.1 | 3/3 | Complete | 2026-03-02 |
-| 8. Interactive Sender Console | v1.1 | 1/2 | In Progress | - |
-| 9. Interactive Receiver Console | v1.1 | 0/2 | Not started | - |
+| 8. Interactive Sender Console | v1.1 | 2/2 | Complete | 2026-03-03 |
+| 9. Interactive Receiver Console | v1.1 | 2/2 | Complete | 2026-03-03 |
 
 ---
 *Roadmap created: 2026-02-16*
 *v1.1 phases added: 2026-03-02*
-*Last updated: 2026-03-03 -- Phase 8 in progress (1/2 plans). 08-01 complete (CLI send extraction + InquirerPy)*
+*Last updated: 2026-03-03 -- Milestone v1.1 COMPLETE. All 9 phases (35/35 plans) finished.*
