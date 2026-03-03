@@ -196,32 +196,41 @@ def _action_receive() -> None:
     """Use saved settings to start receiving immediately."""
     cfg = settings.load()["receiver"]
 
-    # Detect devices (uses backend chain with resolution validation)
-    print("Detecting capture devices...")
-    devices = _detect_devices()
-    if not devices:
-        print("No capture devices found. Connect a capture card and try again.")
-        return
-
-    # Try to match saved device by name first, then fall back to picker
-    saved_name = cfg.get("device_name")
+    profile_name = cfg.get("profile", "speed")
+    profile = PROFILES[profile_name]
     source = None
-    if saved_name:
-        for d in devices:
-            if d["name"] == saved_name:
-                source = d["index"]
-                print(f"  Device: {d['name']} ({d['width']}x{d['height']}"
-                      f" @ {d['fps']:.0f} FPS)")
-                break
-        if source is None:
-            print(f"  Saved device '{saved_name}' not found. Pick from detected:")
 
+    # Fast path: try saved device directly (skip full detection scan)
+    saved_name = cfg.get("device_name")
+    saved_index = cfg.get("device_index")
+    if saved_name and saved_index is not None:
+        try:
+            from hdmi_exfil.receiver.capture.source import CaptureSource
+
+            with _suppress_stderr():
+                cap = CaptureSource(
+                    saved_index,
+                    width=profile.width,
+                    height=profile.height,
+                    fps=profile.target_fps,
+                )
+            print(f"  Device: {saved_name} ({cap.actual_width}x{cap.actual_height}"
+                  f" @ {cap.actual_fps:.0f} FPS)")
+            cap.release()
+            source = saved_index
+        except Exception:
+            print(f"  Saved device '{saved_name}' not available. Detecting...")
+
+    # Slow path: full detection (no saved device, or saved device failed)
     if source is None:
+        print("Detecting capture devices...")
+        devices = _detect_devices()
+        if not devices:
+            print("No capture devices found. Connect a capture card and try again.")
+            return
         source = _pick_device(devices)
 
     # Use saved settings directly — no prompts
-    profile_name = cfg.get("profile", "speed")
-    profile = PROFILES[profile_name]
     output = cfg.get("output", "received_files")
     mode = cfg.get("mode", "auto")
 

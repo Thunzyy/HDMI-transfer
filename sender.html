@@ -29,6 +29,8 @@
       padding: 10px 12px;
       z-index: 10;
       transition: opacity 0.3s ease;
+      max-height: 90vh;
+      overflow-y: auto;
     }
     #controls.hidden {
       opacity: 0;
@@ -66,6 +68,48 @@
     #status { margin-top: 6px; }
     #stats { color: #9fe870; margin-top: 2px; }
     #hint { margin-top: 8px; color: #f5d67b; }
+    #settingsPanel {
+      margin: 8px 0;
+    }
+    #settingsPanel summary {
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--accent);
+      outline: none;
+      user-select: none;
+    }
+    #settingsPanel .settings-body {
+      border-top: 1px solid #333;
+      padding-top: 6px;
+      margin-top: 4px;
+    }
+    #settingsPanel select,
+    #settingsPanel input[type="number"] {
+      background: #111;
+      color: var(--text);
+      border: 1px solid #444;
+      padding: 2px 4px;
+      font-family: inherit;
+      font-size: 12px;
+      margin-left: 4px;
+    }
+    #settingsPanel select:focus,
+    #settingsPanel input[type="number"]:focus {
+      border-color: var(--accent);
+      outline: none;
+    }
+    #settingsPanel .s-row {
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+    #settingsPanel .s-row span {
+      min-width: 80px;
+    }
+    #detectedHz { color: #9fe870; font-size: 12px; margin-top: 4px; }
+    #derivedStats { color: #aaa; font-size: 11px; margin-top: 4px; line-height: 1.5; }
+    #configWarning { color: #ff6b6b; font-size: 12px; margin-top: 4px; display: none; }
     canvas {
       display: block;
       position: absolute;
@@ -90,6 +134,50 @@
       <button id="stopBtn" disabled>Arreter</button>
       <button id="toggleUiBtn">Afficher/Masquer UI (H)</button>
     </div>
+
+    <details id="settingsPanel">
+      <summary>Reglages</summary>
+      <div class="settings-body">
+        <div class="s-row">
+          <span>Profil</span>
+          <select id="profileSelect">
+            <option value="speed">speed (1080p @240fps)</option>
+            <option value="balanced" selected>balanced (1080p @60fps)</option>
+            <option value="quality">quality (4K @30fps)</option>
+            <option value="custom">custom</option>
+          </select>
+        </div>
+        <div class="s-row">
+          <span>Resolution</span>
+          <select id="resolutionSelect">
+            <option value="1920x1080">1920 x 1080</option>
+            <option value="3840x2160">3840 x 2160</option>
+          </select>
+        </div>
+        <div class="s-row">
+          <span>Block size</span>
+          <select id="blockSizeSelect">
+            <option value="4">4 px</option>
+            <option value="8" selected>8 px</option>
+            <option value="16">16 px</option>
+          </select>
+        </div>
+        <div class="s-row">
+          <span>FPS</span>
+          <select id="fpsModeSelect">
+            <option value="auto">auto-detect</option>
+            <option value="profile">profil par defaut</option>
+            <option value="manual">manuel</option>
+          </select>
+          <input type="number" id="manualFpsInput" min="1" max="360" value="60"
+                 style="width:55px; display:none;" />
+        </div>
+        <div id="detectedHz">Detection du refresh rate...</div>
+        <div id="configWarning"></div>
+        <div id="derivedStats"></div>
+      </div>
+    </details>
+
     <div id="status">Charge un fichier pour armer l'envoi.</div>
     <div id="stats"></div>
     <div id="hint">Demarrer = plein ecran auto. ESC ou Espace pour arreter.</div>
@@ -99,19 +187,99 @@
 
   <script>
     (() => {
-      // Parametres partages avec receiver_fountain.py
-      const WIDTH = 1920;
-      const HEIGHT = 1080;
-      const BLOCK_SIZE = 8;
-      const COLS = WIDTH / BLOCK_SIZE;
-      const ROWS = HEIGHT / BLOCK_SIZE;
-      const BITS_PER_FRAME = ROWS * COLS * 3; // 97200
-      const BYTES_PER_FRAME = BITS_PER_FRAME / 8; // 12150
+      // ---------------------------------------------------------------
+      // Protocol constants (immutable)
+      // ---------------------------------------------------------------
       const FOUNTAIN_MAGIC = 0xF0C0;
       const HEADER_LEN = 12; // magic(2) + seed(4) + K(2) + crc32(4)
-      const PAYLOAD_SIZE = BYTES_PER_FRAME - HEADER_LEN; // 12138
 
+      // ---------------------------------------------------------------
+      // Profiles (must match Python config.py PROFILES exactly)
+      // ---------------------------------------------------------------
+      const PROFILES = {
+        speed:    { name: "speed",    width: 1920, height: 1080, blockSize: 8, targetFps: 240 },
+        balanced: { name: "balanced", width: 1920, height: 1080, blockSize: 8, targetFps: 60 },
+        quality:  { name: "quality",  width: 3840, height: 2160, blockSize: 8, targetFps: 30 },
+      };
+
+      // ---------------------------------------------------------------
+      // Mutable config (recalculated by recalcDerived)
+      // ---------------------------------------------------------------
+      const config = {
+        profileName: "balanced",
+        width: 1920,
+        height: 1080,
+        blockSize: 8,
+        targetFps: 60,
+        fpsMode: "auto",       // "auto" | "profile" | "manual"
+        manualFps: 60,
+        detectedHz: null,
+        // Derived (set by recalcDerived)
+        cols: 0,
+        rows: 0,
+        bitsPerFrame: 0,
+        bytesPerFrame: 0,
+        payloadSize: 0,
+      };
+
+      function recalcDerived() {
+        config.cols = config.width / config.blockSize;
+        config.rows = config.height / config.blockSize;
+        config.bitsPerFrame = config.rows * config.cols * 3;
+        config.bytesPerFrame = config.bitsPerFrame / 8;
+        config.payloadSize = config.bytesPerFrame - HEADER_LEN;
+      }
+
+      function getEffectiveFps() {
+        const maxHz = config.detectedHz || 60;
+        let fps;
+        if (config.fpsMode === "manual") fps = config.manualFps;
+        else if (config.fpsMode === "profile") {
+          const p = PROFILES[config.profileName];
+          fps = p ? p.targetFps : 60;
+        } else {
+          fps = maxHz; // "auto"
+        }
+        return Math.min(fps, maxHz);
+      }
+
+      // ---------------------------------------------------------------
+      // Refresh rate detection via rAF timestamps
+      // ---------------------------------------------------------------
+      function detectRefreshRate() {
+        return new Promise((resolve) => {
+          const samples = [];
+          let lastTime = 0;
+          let frameCount = 0;
+          const TARGET_FRAMES = 90;
+
+          function measure(timestamp) {
+            if (lastTime > 0) {
+              samples.push(timestamp - lastTime);
+            }
+            lastTime = timestamp;
+            frameCount++;
+            if (frameCount < TARGET_FRAMES) {
+              requestAnimationFrame(measure);
+            } else {
+              const valid = samples.slice(5); // discard warmup
+              valid.sort((a, b) => a - b);
+              const median = valid[Math.floor(valid.length / 2)];
+              const hz = Math.round(1000 / median);
+              const common = [30, 60, 75, 90, 100, 120, 144, 165, 180, 240, 360];
+              const snapped = common.reduce((best, rate) =>
+                Math.abs(rate - hz) < Math.abs(best - hz) ? rate : best
+              );
+              resolve(snapped);
+            }
+          }
+          requestAnimationFrame(measure);
+        });
+      }
+
+      // ---------------------------------------------------------------
       // CRC32 lookup table (IEEE 802.3 polynomial 0xEDB88320)
+      // ---------------------------------------------------------------
       const CRC32_TABLE = new Uint32Array(256);
       for (let i = 0; i < 256; i++) {
         let c = i;
@@ -131,18 +299,18 @@
 
       async function computeSHA256(uint8Array) {
         const hashBuffer = await crypto.subtle.digest('SHA-256', uint8Array);
-        return new Uint8Array(hashBuffer);  // 32 bytes
+        return new Uint8Array(hashBuffer);
       }
 
-      const BLACK = 0xff000000;
-      const WHITE = 0xffffffff;
-
+      // ---------------------------------------------------------------
+      // DOM references
+      // ---------------------------------------------------------------
       const canvas = document.getElementById("canvas");
       const ctx = canvas.getContext("2d", { alpha: false });
       ctx.imageSmoothingEnabled = false;
 
-      const imageData = ctx.createImageData(WIDTH, HEIGHT);
-      const buf = new Uint32Array(imageData.data.buffer);
+      let imageData = ctx.createImageData(config.width, config.height);
+      let buf = new Uint32Array(imageData.data.buffer);
 
       const controls = document.getElementById("controls");
       const fileInput = document.getElementById("fileInput");
@@ -152,61 +320,195 @@
       const statusEl = document.getElementById("status");
       const statsEl = document.getElementById("stats");
 
+      const profileSelect = document.getElementById("profileSelect");
+      const resolutionSelect = document.getElementById("resolutionSelect");
+      const blockSizeSelect = document.getElementById("blockSizeSelect");
+      const fpsModeSelect = document.getElementById("fpsModeSelect");
+      const manualFpsInput = document.getElementById("manualFpsInput");
+      const detectedHzEl = document.getElementById("detectedHz");
+      const derivedStatsEl = document.getElementById("derivedStats");
+      const configWarningEl = document.getElementById("configWarning");
+
       const textEncoder = new TextEncoder();
 
+      // ---------------------------------------------------------------
+      // State
+      // ---------------------------------------------------------------
       const state = {
         chunks: [],
         K: 0,
         seed: 1,
         frame: 0,
         running: false,
-        bits: new Uint8Array(BITS_PER_FRAME),
-        raf: null
+        bits: new Uint8Array(config.bitsPerFrame),
+        raf: null,
+        rawWrapped: null,  // stored for re-slicing on config change
+        fileName: null,
+        fileSize: 0,
       };
 
+      // ---------------------------------------------------------------
+      // Config validation
+      // ---------------------------------------------------------------
+      function validateConfig() {
+        if (config.width % config.blockSize !== 0 || config.height % config.blockSize !== 0) {
+          configWarningEl.textContent =
+            `${config.width}x${config.height} non divisible par block size ${config.blockSize}`;
+          configWarningEl.style.display = "block";
+          return false;
+        }
+        configWarningEl.style.display = "none";
+        return true;
+      }
+
+      // ---------------------------------------------------------------
+      // Apply config changes
+      // ---------------------------------------------------------------
+      function applyConfig() {
+        recalcDerived();
+
+        const valid = validateConfig();
+
+        canvas.width = config.width;
+        canvas.height = config.height;
+        imageData = ctx.createImageData(config.width, config.height);
+        buf = new Uint32Array(imageData.data.buffer);
+        state.bits = new Uint8Array(config.bitsPerFrame);
+
+        // Re-slice file if loaded
+        if (state.rawWrapped) {
+          const { K, chunks } = sliceIntoChunks(state.rawWrapped);
+          state.chunks = chunks;
+          state.K = K;
+          state.seed = 1;
+          state.frame = 0;
+          startBtn.disabled = !valid;
+          setStatus(`Reconfigure: ${state.fileName} (${state.fileSize} o). K=${K}, chunk=${config.payloadSize} o.`);
+          updateStats();
+        } else {
+          startBtn.disabled = true;
+        }
+
+        updateDerivedStats();
+        saveSettings();
+        drawBits(new Uint8Array(config.bitsPerFrame));
+      }
+
+      // ---------------------------------------------------------------
+      // Settings persistence (localStorage)
+      // ---------------------------------------------------------------
+      const STORAGE_KEY = "hdmi_exfil_sender_settings";
+
+      function saveSettings() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            profileName: config.profileName,
+            width: config.width,
+            height: config.height,
+            blockSize: config.blockSize,
+            fpsMode: config.fpsMode,
+            manualFps: config.manualFps,
+          }));
+        } catch (e) { /* ignore */ }
+      }
+
+      function loadSettings() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return;
+          const d = JSON.parse(raw);
+          if (d.profileName && PROFILES[d.profileName]) {
+            const p = PROFILES[d.profileName];
+            config.profileName = d.profileName;
+            config.width = p.width;
+            config.height = p.height;
+            config.blockSize = p.blockSize;
+            config.targetFps = p.targetFps;
+          } else if (d.profileName === "custom") {
+            config.profileName = "custom";
+            if (d.width) config.width = d.width;
+            if (d.height) config.height = d.height;
+            if (d.blockSize) config.blockSize = d.blockSize;
+          }
+          if (d.fpsMode) config.fpsMode = d.fpsMode;
+          if (d.manualFps) config.manualFps = d.manualFps;
+        } catch (e) { /* ignore */ }
+      }
+
+      // ---------------------------------------------------------------
+      // Derived stats display
+      // ---------------------------------------------------------------
+      function updateDerivedStats() {
+        const fps = getEffectiveFps();
+        const throughput = config.payloadSize * fps;
+        const kbps = (throughput / 1024).toFixed(1);
+        derivedStatsEl.innerHTML = [
+          `Grille: ${config.cols} x ${config.rows} blocs`,
+          `Octets/frame: ${config.bytesPerFrame} (payload: ${config.payloadSize})`,
+          `FPS effectif: ${fps} (max: ${config.detectedHz || "?"} Hz)`,
+          `Debit: ~${kbps} KB/s`,
+        ].join("<br>");
+      }
+
+      // ---------------------------------------------------------------
+      // Lock/unlock settings during send
+      // ---------------------------------------------------------------
+      function setSettingsEnabled(enabled) {
+        profileSelect.disabled = !enabled;
+        resolutionSelect.disabled = !enabled;
+        blockSizeSelect.disabled = !enabled;
+        fpsModeSelect.disabled = !enabled;
+        manualFpsInput.disabled = !enabled;
+      }
+
+      // ---------------------------------------------------------------
+      // Core helpers
+      // ---------------------------------------------------------------
       function setStatus(msg) {
         statusEl.textContent = msg;
       }
 
       function updateStats() {
-        statsEl.textContent = `Frames envoyes: ${state.frame} | Seed: ${state.seed} | K: ${state.K} | Chunk: ${PAYLOAD_SIZE} o`;
+        statsEl.textContent = `Frames: ${state.frame} | Seed: ${state.seed} | K: ${state.K} | Chunk: ${config.payloadSize} o`;
       }
 
       function wrapWithMetadata(file, rawBytes, sha256Hash) {
         const nameBytes = textEncoder.encode((file && file.name) || "payload.bin");
-        // New format: [4B file_size][32B SHA-256][2B name_len][NB name][file_content]
         const total = 4 + 32 + 2 + nameBytes.length + rawBytes.length;
         const out = new Uint8Array(total);
         const view = new DataView(out.buffer);
 
         let offset = 0;
-        view.setUint32(offset, rawBytes.length, false);  // file_size (big-endian)
+        view.setUint32(offset, rawBytes.length, false);
         offset += 4;
-        out.set(sha256Hash, offset);                       // SHA-256 (32 bytes)
+        out.set(sha256Hash, offset);
         offset += 32;
-        view.setUint16(offset, nameBytes.length, false);   // name_len (big-endian, 2 bytes)
+        view.setUint16(offset, nameBytes.length, false);
         offset += 2;
-        out.set(nameBytes, offset);                        // filename
+        out.set(nameBytes, offset);
         offset += nameBytes.length;
-        out.set(rawBytes, offset);                         // file content
+        out.set(rawBytes, offset);
 
         return out;
       }
 
       function sliceIntoChunks(bytes) {
-        const K = Math.ceil(bytes.length / PAYLOAD_SIZE);
+        const ps = config.payloadSize;
+        const K = Math.ceil(bytes.length / ps);
         const chunks = new Array(K);
         for (let i = 0; i < K; i++) {
-          const start = i * PAYLOAD_SIZE;
-          const end = Math.min(start + PAYLOAD_SIZE, bytes.length);
-          const chunk = new Uint8Array(PAYLOAD_SIZE);
+          const start = i * ps;
+          const end = Math.min(start + ps, bytes.length);
+          const chunk = new Uint8Array(ps);
           chunk.set(bytes.subarray(start, end));
           chunks[i] = chunk;
         }
         return { K, chunks };
       }
 
-      // SplitMix32 PRNG (meme algo que receiver_fountain.py)
+      // ---------------------------------------------------------------
+      // PRNG + Robust Soliton (unchanged)
+      // ---------------------------------------------------------------
       function createPRNG(seed) {
         let a = seed >>> 0;
         return () => {
@@ -220,46 +522,32 @@
         };
       }
 
-      // ---------------------------------------------------------------
-      // Robust Soliton Distribution (RSD) -- matches degree.py exactly
-      // ---------------------------------------------------------------
       const RSD_C = 0.1;
       const RSD_DELTA = 0.05;
 
       function robustSolitonCdf(K) {
         if (K === 1) return [0.0, 1.0];
-
-        // Ideal soliton PMF
         const rho = new Array(K + 1).fill(0);
         rho[1] = 1.0 / K;
         for (let d = 2; d <= K; d++) rho[d] = 1.0 / (d * (d - 1));
-
-        // Expected ripple size
         const S = RSD_C * Math.log(K / RSD_DELTA) * Math.sqrt(K);
         const pivot = Math.max(1, Math.floor(K / S));
-
-        // Tau distribution
         const tau = new Array(K + 1).fill(0);
         for (let d = 1; d < Math.min(pivot, K + 1); d++) tau[d] = S / (K * d);
         if (pivot <= K) tau[pivot] += (S / K) * Math.log(S / RSD_DELTA);
-
-        // Normalize
         let Z = 0;
         for (let d = 1; d <= K; d++) Z += rho[d] + tau[d];
-
-        // Build CDF via cumulative sum
         const cdf = new Array(K + 1).fill(0);
         let cumulative = 0;
         for (let d = 1; d <= K; d++) {
           cumulative += (rho[d] + tau[d]) / Z;
           cdf[d] = cumulative;
         }
-        cdf[K] = 1.0; // force exact 1.0
+        cdf[K] = 1.0;
         return cdf;
       }
 
       function sampleDegree(cdf, r) {
-        // Binary search (bisect_left) matching Python bisect.bisect_left
         let lo = 1, hi = cdf.length - 1;
         while (lo < hi) {
           const mid = (lo + hi) >> 1;
@@ -272,10 +560,9 @@
       function chooseIndices(seed, K) {
         const next = createPRNG(seed);
         const cdf = robustSolitonCdf(K);
-        const r = next() / 0x100000000;  // one PRNG call for degree
+        const r = next() / 0x100000000;
         let degree = sampleDegree(cdf, r);
         degree = Math.min(degree, K);
-
         const indices = new Set();
         while (indices.size < degree) {
           indices.add(next() % K);
@@ -284,17 +571,21 @@
       }
 
       function buildDroplet(seed) {
+        const ps = config.payloadSize;
         const idxs = chooseIndices(seed, state.K);
-        const payload = new Uint8Array(PAYLOAD_SIZE);
+        const payload = new Uint8Array(ps);
         for (const idx of idxs) {
           const chunk = state.chunks[idx];
-          for (let i = 0; i < PAYLOAD_SIZE; i++) {
+          for (let i = 0; i < ps; i++) {
             payload[i] ^= chunk[i];
           }
         }
         return payload;
       }
 
+      // ---------------------------------------------------------------
+      // Encoding: bytes -> bits -> pixels
+      // ---------------------------------------------------------------
       function bytesToBits(bytes) {
         let bitPos = 0;
         for (let i = 0; i < bytes.length; i++) {
@@ -311,64 +602,55 @@
       }
 
       function drawBits(bits) {
+        const W = config.width;
+        const BS = config.blockSize;
+        const R = config.rows;
+        const C = config.cols;
         let bitIdx = 0;
-        for (let r = 0; r < ROWS; r++) {
-          const startY = r * BLOCK_SIZE;
-          for (let c = 0; c < COLS; c++) {
-            // Read 3 bits: R, G, B (matching Python np.unpackbits order)
+        for (let r = 0; r < R; r++) {
+          const startY = r * BS;
+          for (let c = 0; c < C; c++) {
             const rBit = bits[bitIdx++];
             const gBit = bits[bitIdx++];
             const bBit = bits[bitIdx++];
-            // Pack into ABGR uint32 (little-endian: 0xAABBGGRR)
+            // ABGR uint32 (little-endian: 0xAABBGGRR)
             const color = 0xFF000000
               | ((bBit ? 0xFF : 0x00) << 16)
               | ((gBit ? 0xFF : 0x00) << 8)
               | (rBit ? 0xFF : 0x00);
-            const startX = c * BLOCK_SIZE;
-            for (let y = 0; y < BLOCK_SIZE; y++) {
-              const rowOffset = (startY + y) * WIDTH + startX;
-              buf.fill(color, rowOffset, rowOffset + BLOCK_SIZE);
+            const startX = c * BS;
+            for (let y = 0; y < BS; y++) {
+              const rowOffset = (startY + y) * W + startX;
+              buf.fill(color, rowOffset, rowOffset + BS);
             }
           }
         }
         ctx.putImageData(imageData, 0, 0);
       }
 
-      function stopSending() {
-        state.running = false;
-        if (state.raf) cancelAnimationFrame(state.raf);
-        // Exit fullscreen
-        if (document.fullscreenElement) document.exitFullscreen();
-        controls.classList.remove("hidden");
-        startBtn.disabled = !state.chunks.length;
-        stopBtn.disabled = true;
-        setStatus("Envoi arrete.");
-      }
+      // ---------------------------------------------------------------
+      // Render loop with FPS throttle
+      // ---------------------------------------------------------------
+      let lastFrameTime = 0;
 
-      function renderLoop() {
-        if (!state.running) return;
-
+      function renderFrame() {
         const seed = state.seed >>> 0;
         const payload = buildDroplet(seed);
 
-        // Build protocol frame: magic(2) + seed(4) + K(2) + crc(4) + payload
-        const frameBytes = new Uint8Array(BYTES_PER_FRAME);
+        const frameBytes = new Uint8Array(config.bytesPerFrame);
         const view = new DataView(frameBytes.buffer);
 
-        // Header fields (big-endian)
-        view.setUint16(0, FOUNTAIN_MAGIC, false);  // magic
-        view.setUint32(2, seed, false);             // seed
-        view.setUint16(6, state.K, false);          // K
+        view.setUint16(0, FOUNTAIN_MAGIC, false);
+        view.setUint32(2, seed, false);
+        view.setUint16(6, state.K, false);
 
-        // Copy payload after header
         frameBytes.set(payload, HEADER_LEN);
 
-        // Compute CRC32 over header[0:8] + payload
         const crcData = new Uint8Array(8 + payload.length);
         crcData.set(frameBytes.subarray(0, 8));
         crcData.set(payload, 8);
         const crcValue = crc32(crcData);
-        view.setUint32(8, crcValue, false);  // CRC32 at offset 8
+        view.setUint32(8, crcValue, false);
 
         bytesToBits(frameBytes);
         drawBits(state.bits);
@@ -377,11 +659,46 @@
         if (state.seed === 0) state.seed = 1;
         state.frame += 1;
         if (state.frame % 30 === 0) updateStats();
+      }
+
+      function renderLoop(timestamp) {
+        if (!state.running) return;
+
+        const effectiveFps = getEffectiveFps();
+        const monitorHz = config.detectedHz || 60;
+
+        if (effectiveFps >= monitorHz) {
+          // No throttle: render every rAF
+          renderFrame();
+        } else {
+          // Skip frames if not enough time elapsed
+          const interval = 1000 / effectiveFps;
+          if (timestamp - lastFrameTime >= interval * 0.95) {
+            renderFrame();
+            lastFrameTime = timestamp;
+          }
+        }
 
         state.raf = requestAnimationFrame(renderLoop);
       }
 
-      // Gestion des evenements
+      // ---------------------------------------------------------------
+      // Start / Stop
+      // ---------------------------------------------------------------
+      function stopSending() {
+        state.running = false;
+        if (state.raf) cancelAnimationFrame(state.raf);
+        if (document.fullscreenElement) document.exitFullscreen();
+        controls.classList.remove("hidden");
+        startBtn.disabled = !state.chunks.length;
+        stopBtn.disabled = true;
+        setSettingsEnabled(true);
+        setStatus("Envoi arrete.");
+      }
+
+      // ---------------------------------------------------------------
+      // Event listeners
+      // ---------------------------------------------------------------
       fileInput.addEventListener("change", (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -389,11 +706,13 @@
         const reader = new FileReader();
         reader.onload = async () => {
           const raw = new Uint8Array(reader.result);
-
-          // Compute SHA-256 of raw file content
           const sha256Hash = await computeSHA256(raw);
-
           const wrapped = wrapWithMetadata(file, raw, sha256Hash);
+
+          state.rawWrapped = wrapped;
+          state.fileName = file.name;
+          state.fileSize = raw.length;
+
           const { K, chunks } = sliceIntoChunks(wrapped);
           state.chunks = chunks;
           state.K = K;
@@ -401,7 +720,7 @@
           state.frame = 0;
           startBtn.disabled = false;
           stopBtn.disabled = true;
-          setStatus(`Pret: ${file.name} (${raw.length} o). K=${K}, chunk=${PAYLOAD_SIZE} o. SHA-256: ${Array.from(sha256Hash.slice(0, 4)).map(b => b.toString(16).padStart(2, '0')).join('')}...`);
+          setStatus(`Pret: ${file.name} (${raw.length} o). K=${K}, chunk=${config.payloadSize} o. SHA-256: ${Array.from(sha256Hash.slice(0, 4)).map(b => b.toString(16).padStart(2, '0')).join('')}...`);
           updateStats();
         };
         reader.readAsArrayBuffer(file);
@@ -409,16 +728,18 @@
 
       startBtn.addEventListener("click", () => {
         if (!state.chunks.length) return;
+        if (!validateConfig()) return;
         state.running = true;
         state.seed = 1;
         state.frame = 0;
+        lastFrameTime = 0;
         startBtn.disabled = true;
         stopBtn.disabled = false;
+        setSettingsEnabled(false);
         controls.classList.add("hidden");
         setStatus("Envoi en cours... (ESC pour arreter)");
-        // Enter fullscreen on the document body (covers entire screen)
         document.documentElement.requestFullscreen().catch(() => {});
-        renderLoop();
+        renderLoop(0);
       });
 
       stopBtn.addEventListener("click", stopSending);
@@ -443,10 +764,101 @@
         }
       });
 
-      // Premiere image noire
-      drawBits(new Uint8Array(BITS_PER_FRAME));
+      // ---------------------------------------------------------------
+      // Settings event listeners
+      // ---------------------------------------------------------------
+      profileSelect.addEventListener("change", () => {
+        const name = profileSelect.value;
+        if (name === "custom") return;
+        const p = PROFILES[name];
+        config.profileName = name;
+        config.width = p.width;
+        config.height = p.height;
+        config.blockSize = p.blockSize;
+        config.targetFps = p.targetFps;
+        resolutionSelect.value = `${p.width}x${p.height}`;
+        blockSizeSelect.value = String(p.blockSize);
+        if (config.fpsMode === "profile") {
+          config.manualFps = p.targetFps;
+          manualFpsInput.value = p.targetFps;
+        }
+        applyConfig();
+      });
+
+      resolutionSelect.addEventListener("change", () => {
+        const [w, h] = resolutionSelect.value.split("x").map(Number);
+        config.width = w;
+        config.height = h;
+        profileSelect.value = "custom";
+        config.profileName = "custom";
+        applyConfig();
+      });
+
+      blockSizeSelect.addEventListener("change", () => {
+        config.blockSize = Number(blockSizeSelect.value);
+        profileSelect.value = "custom";
+        config.profileName = "custom";
+        applyConfig();
+      });
+
+      fpsModeSelect.addEventListener("change", () => {
+        config.fpsMode = fpsModeSelect.value;
+        manualFpsInput.style.display = config.fpsMode === "manual" ? "inline-block" : "none";
+        if (config.fpsMode === "auto") {
+          config.targetFps = config.detectedHz || 60;
+        } else if (config.fpsMode === "profile") {
+          const p = PROFILES[config.profileName];
+          config.targetFps = p ? p.targetFps : 60;
+        }
+        updateDerivedStats();
+        saveSettings();
+      });
+
+      manualFpsInput.addEventListener("change", () => {
+        const val = Math.max(1, Math.min(360, Number(manualFpsInput.value)));
+        config.manualFps = val;
+        config.targetFps = val;
+        manualFpsInput.value = val;
+        updateDerivedStats();
+        saveSettings();
+      });
+
+      // ---------------------------------------------------------------
+      // Initialization
+      // ---------------------------------------------------------------
+      loadSettings();
+      recalcDerived();
+
+      // Sync UI to loaded config
+      profileSelect.value = config.profileName;
+      resolutionSelect.value = `${config.width}x${config.height}`;
+      blockSizeSelect.value = String(config.blockSize);
+      fpsModeSelect.value = config.fpsMode;
+      manualFpsInput.value = config.manualFps;
+      manualFpsInput.style.display = config.fpsMode === "manual" ? "inline-block" : "none";
+
+      // Init canvas at config size
+      canvas.width = config.width;
+      canvas.height = config.height;
+      imageData = ctx.createImageData(config.width, config.height);
+      buf = new Uint32Array(imageData.data.buffer);
+      state.bits = new Uint8Array(config.bitsPerFrame);
+
+      validateConfig();
+      drawBits(new Uint8Array(config.bitsPerFrame));
       setStatus("Charge un fichier pour armer l'envoi.");
       updateStats();
+      updateDerivedStats();
+
+      // Detect refresh rate (async)
+      detectRefreshRate().then((hz) => {
+        config.detectedHz = hz;
+        detectedHzEl.textContent = `Moniteur: ${hz} Hz detecte`;
+        if (config.fpsMode === "auto") {
+          config.targetFps = hz;
+        }
+        updateDerivedStats();
+      });
     })();
   </script>
 </body>
