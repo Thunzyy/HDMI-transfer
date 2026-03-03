@@ -350,26 +350,54 @@ def _print_stats(
 
 
 # ------------------------------------------------------------------
-# main
+# run_send -- core send logic callable without argparse
 # ------------------------------------------------------------------
 
-def main() -> None:
-    """Entry point for ``hdmi-send`` CLI command."""
-    parser = _build_parser()
-    args = parser.parse_args()
+def run_send(
+    input_path: str,
+    mode: str = "sequential",
+    profile: ResolutionProfile | None = None,
+    renderer_type: str = "pygame",
+    screen: int = 0,
+    fps: int | None = None,
+    redundancy: int = 1,
+    fountain_redundancy: float | None = None,
+) -> None:
+    """Execute the full send pipeline with explicit parameters.
 
+    This is the core send logic extracted from ``main()`` so that both
+    the CLI (``hdmi-send``) and the interactive console (``hdmi-sender``)
+    can share the same code path.
+
+    Parameters
+    ----------
+    input_path:
+        Path to the file or directory to send.
+    mode:
+        Encoding protocol -- ``"sequential"`` or ``"fountain"``.
+    profile:
+        Resolution profile.  ``None`` falls back to ``DEFAULT_PROFILE``.
+    renderer_type:
+        Display backend -- ``"pygame"`` or ``"cv2"``.
+    screen:
+        Monitor index for display (0 = primary).
+    fps:
+        Target frames per second.  ``None`` uses ``profile.target_fps``.
+    redundancy:
+        Times to repeat each frame (sequential mode only).
+    fountain_redundancy:
+        Fountain mode: stop after ``K * fountain_redundancy`` droplets.
+        ``None`` loops forever.
+    """
     # Resolve profile
-    if args.profile:
-        profile = PROFILES[args.profile]
-    else:
-        profile = DEFAULT_PROFILE
+    profile = profile or DEFAULT_PROFILE
 
     # Individual overrides: --fps beats profile target_fps
-    target_fps = args.fps if args.fps is not None else profile.target_fps
+    target_fps = fps if fps is not None else profile.target_fps
 
     # Read input file / directory
     try:
-        filename, file_data = read_input(args.input_path)
+        filename, file_data = read_input(input_path)
     except FileNotFoundError as exc:
         print(f"Error: {exc}")
         sys.exit(1)
@@ -381,8 +409,8 @@ def main() -> None:
     print(f"SHA-256: {sha256_hex}")
     print(f"Resolution: {profile.width}x{profile.height}, Block Size: {profile.block_size}")
     print(f"Profile: {profile.name}")
-    print(f"Mode: {args.mode}")
-    print(f"Renderer: {args.renderer}")
+    print(f"Mode: {mode}")
+    print(f"Renderer: {renderer_type}")
 
     # Detect monitors
     monitors = get_monitors()
@@ -390,25 +418,25 @@ def main() -> None:
     for i, m in enumerate(monitors):
         print(f"  Monitor {i}: {m['width']}x{m['height']} at ({m['left']}, {m['top']})")
 
-    if args.screen < len(monitors):
-        target = monitors[args.screen]
+    if screen < len(monitors):
+        target = monitors[screen]
         x_offset = target["left"]
         y_offset = target["top"]
     else:
-        print(f"Warning: Screen {args.screen} out of range. Using primary.")
+        print(f"Warning: Screen {screen} out of range. Using primary.")
         x_offset = 0
         y_offset = 0
 
-    print(f"Targeting screen {args.screen} at ({x_offset}, {y_offset})")
+    print(f"Targeting screen {screen} at ({x_offset}, {y_offset})")
 
     # Instantiate protocol with profile
-    protocol = get_protocol(args.mode, profile=profile)
+    protocol = get_protocol(mode, profile=profile)
 
     delay = max(1, int(1000 / target_fps))
     print(f"Target FPS: {target_fps} (delay: {delay}ms)")
 
-    # Choose renderer based on --renderer flag
-    if args.renderer == "pygame":
+    # Choose renderer based on renderer_type
+    if renderer_type == "pygame":
         renderer_cls = PygameRenderer
         renderer_kwargs: dict = {
             "width": profile.width,
@@ -435,24 +463,44 @@ def main() -> None:
         print("Press any key to start...")
 
         # Warm up Numba JIT during calibration wait (before data transfer)
-        if args.mode == "fountain":
+        if mode == "fountain":
             warmup_numba()
 
         renderer.show(calibration, delay_ms=0)
 
         # Dispatch to mode-specific send loop
-        if args.mode == "sequential":
-            print(f"Redundancy: {args.redundancy}x")
+        if mode == "sequential":
+            print(f"Redundancy: {redundancy}x")
             _send_sequential(
                 protocol, filename, file_data, renderer,
-                delay, args.redundancy, profile,
+                delay, redundancy, profile,
             )
         else:
             _send_fountain(
                 protocol, filename, file_data, renderer, delay,
-                fountain_redundancy=args.fountain_redundancy,
+                fountain_redundancy=fountain_redundancy,
                 profile=profile,
             )
+
+
+# ------------------------------------------------------------------
+# main -- thin CLI wrapper
+# ------------------------------------------------------------------
+
+def main() -> None:
+    """Entry point for ``hdmi-send`` CLI command."""
+    parser = _build_parser()
+    args = parser.parse_args()
+    run_send(
+        input_path=args.input_path,
+        mode=args.mode,
+        profile=PROFILES[args.profile] if args.profile else None,
+        renderer_type=args.renderer,
+        screen=args.screen,
+        fps=args.fps,
+        redundancy=args.redundancy,
+        fountain_redundancy=args.fountain_redundancy,
+    )
 
 
 if __name__ == "__main__":
