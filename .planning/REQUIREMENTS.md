@@ -19,11 +19,11 @@ Requirements for milestone v1.1: Interactive CLI Consoles & Monorepo Restructure
 
 ### Sender Console
 
-- [ ] **SEND-01**: User can launch `hdmi-sender` to get an interactive arrow-key menu
+- [x] **SEND-01**: User can launch `hdmi-sender` to get an interactive arrow-key menu
 - [ ] **SEND-02**: Sender menu offers: Send file (Python), Send file (Browser), Calibrate, Detect hardware, Benchmark, Quit
 - [ ] **SEND-03**: User can select file to send via interactive file path prompt with autocomplete
 - [ ] **SEND-04**: User can select resolution profile (speed/balanced/quality) via arrow-key prompt
-- [ ] **SEND-05**: User can select encoding mode (sequential/fountain) via arrow-key prompt
+- [x] **SEND-05**: User can select encoding mode (sequential/fountain) via arrow-key prompt
 - [ ] **SEND-06**: User can select target monitor via arrow-key prompt with detected monitors listed
 - [ ] **SEND-07**: After any action completes, user returns to the main menu
 - [ ] **SEND-08**: Ctrl-C cleanly exits at any prompt without traceback
@@ -73,11 +73,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STRUCT-05 | Phase 7 | Complete |
 | STRUCT-06 | Phase 7 | Complete |
 | STRUCT-07 | Phase 7 | Complete |
-| SEND-01 | Phase 8 | Pending |
+| SEND-01 | Phase 8 | Complete |
 | SEND-02 | Phase 8 | Pending |
 | SEND-03 | Phase 8 | Pending |
 | SEND-04 | Phase 8 | Pending |
-| SEND-05 | Phase 8 | Pending |
+| SEND-05 | Phase 8 | Complete |
 | SEND-06 | Phase 8 | Pending |
 | SEND-07 | Phase 8 | Pending |
 | SEND-08 | Phase 8 | Pending |

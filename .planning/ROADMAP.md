@@ -183,7 +183,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 08-01-PLAN.md -- Extract run_send() from send.py + add InquirerPy dependency (SEND-01, SEND-05)
+- [x] 08-01-PLAN.md -- Extract run_send() from send.py + add InquirerPy dependency (SEND-01, SEND-05)
 - [ ] 08-02-PLAN.md -- Interactive console module with menu, prompts, dispatch, tests (SEND-01 through SEND-08)
 
 ### Phase 9: Interactive Receiver Console
@@ -213,10 +213,10 @@ Phases execute in numeric order: 7 -> 8 -> 9
 | 5. Fountain Code Optimization | v1.0 | 4/4 | Complete | 2026-02-17 |
 | 6. UX & Polish | v1.0 | 4/4 | Complete | 2026-02-17 |
 | 7. Monorepo Restructure | v1.1 | 3/3 | Complete | 2026-03-02 |
-| 8. Interactive Sender Console | v1.1 | 0/2 | Planned | - |
+| 8. Interactive Sender Console | v1.1 | 1/2 | In Progress | - |
 | 9. Interactive Receiver Console | v1.1 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-02-16*
 *v1.1 phases added: 2026-03-02*
-*Last updated: 2026-03-02 -- Phase 7 complete (3/3 plans). Ready for Phase 8 (Sender Console)*
+*Last updated: 2026-03-03 -- Phase 8 in progress (1/2 plans). 08-01 complete (CLI send extraction + InquirerPy)*
