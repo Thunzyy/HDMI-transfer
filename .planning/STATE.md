@@ -2,6 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Console Interactive & Restructure
+status: unknown
+last_updated: "2026-03-03T13:06:19.925Z"
+progress:
+  total_phases: 8
+  completed_phases: 8
+  total_plans: 33
+  completed_plans: 33
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.1
+milestone_name: Console Interactive & Restructure
 status: executing
 last_updated: "2026-03-03T13:00:01Z"
 progress:
