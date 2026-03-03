@@ -67,9 +67,9 @@ def _action_send_python() -> None:
     # 1. File path with tab-completion (SEND-03)
     file_path = inquirer.filepath(
         message="File to send:",
-        validate=lambda p: os.path.isfile(p),
+        validate=lambda p: os.path.isfile(p.strip('"').strip("'")),
         invalid_message="File does not exist",
-    ).execute()
+    ).execute().strip('"').strip("'")
 
     # 2. Resolution profile (SEND-04)
     default_profile = cfg.get("profile", "speed")

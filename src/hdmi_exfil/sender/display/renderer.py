@@ -122,17 +122,20 @@ class PygameRenderer:
 
         pygame.init()
 
-        # Try vsync first, fall back to no vsync
+        # Use borderless windowed mode (NOFRAME) instead of exclusive
+        # FULLSCREEN.  Exclusive fullscreen causes Windows to "dezoom/rezoom"
+        # when alt-tabbing and freezes the display output — borderless
+        # windowed avoids this while still covering the entire screen.
         try:
             self._screen = pygame.display.set_mode(
                 (width, height),
-                pygame.FULLSCREEN | pygame.NOFRAME,
+                pygame.NOFRAME,
                 vsync=1,
             )
         except pygame.error:
             self._screen = pygame.display.set_mode(
                 (width, height),
-                pygame.FULLSCREEN | pygame.NOFRAME,
+                pygame.NOFRAME,
             )
 
         self._width = width
