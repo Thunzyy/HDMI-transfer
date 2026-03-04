@@ -66,57 +66,109 @@ def create_app(output_dir: str = "received_files") -> Flask:
     app._devices: list[dict] = _load_disk_cache() or []
     app._devices_lock = threading.Lock()
 
-    # Pre-warmed capture
-    app._warm_cap: cv2.VideoCapture | None = None
-    app._warm_device_idx: int | None = None
-    app._warm_lock = threading.Lock()
-    app._warming = False  # prevents duplicate warm threads
+    # Global device-open lock: prevents _detect_devices and persistent cap
+    # open from fighting over the same MSMF device simultaneously.
+    app._device_open_lock = threading.Lock()
 
-    def _warm_device(device_idx: int, backend: int) -> None:
-        """Open a capture device in background so Start is instant."""
-        try:
+    # Persistent capture — stays open while the web app runs.
+    # Handed to the worker on START, returned on STOP. Zero open delay.
+    app._persistent_cap: cv2.VideoCapture | None = None
+    app._persistent_device_idx: int | None = None
+    app._persistent_backend: int | None = None
+    app._persistent_lock = threading.Lock()
+
+    def _open_persistent(device_idx: int, backend: int) -> None:
+        """Open a device and keep it as the persistent capture."""
+        with app._persistent_lock:
+            old = app._persistent_cap
+            app._persistent_cap = None
+            app._persistent_device_idx = None
+            app._persistent_backend = None
+        if old is not None:
+            old.release()
+
+        with app._device_open_lock:
             cap = _try_open(device_idx, backend, 1920, 1080, 60)
-            if cap is not None:
-                with app._warm_lock:
-                    if app._warm_cap is not None:
-                        app._warm_cap.release()
-                    app._warm_cap = cap
-                    app._warm_device_idx = device_idx
-                    log.info("Pre-warmed device %d", device_idx)
-        except Exception:
-            log.exception("Failed to pre-warm device %d", device_idx)
-        finally:
-            app._warming = False
+        if cap is not None:
+            with app._persistent_lock:
+                app._persistent_cap = cap
+                app._persistent_device_idx = device_idx
+                app._persistent_backend = backend
+            log.info("Persistent cap opened: device %d", device_idx)
+        else:
+            log.warning("Failed to open persistent cap for device %d", device_idx)
 
-    def _start_warm(device_idx: int) -> None:
-        """Start warming a device if not already warming."""
-        if app._warming:
-            return
-        backend = None
+    def _open_persistent_bg(device_idx: int, backend: int) -> None:
+        """Open the persistent cap in a background thread."""
+        threading.Thread(
+            target=_open_persistent,
+            args=(device_idx, backend),
+            daemon=True,
+        ).start()
+
+    def _release_persistent() -> None:
+        """Release the persistent capture."""
+        with app._persistent_lock:
+            cap = app._persistent_cap
+            app._persistent_cap = None
+            app._persistent_device_idx = None
+            app._persistent_backend = None
+        if cap is not None:
+            cap.release()
+
+    def _take_persistent(device_idx: int) -> tuple[cv2.VideoCapture | None, int | None]:
+        """Take the persistent cap if it matches the requested device.
+
+        Returns (cap, backend) or (None, None).
+        """
+        with app._persistent_lock:
+            if app._persistent_device_idx == device_idx and app._persistent_cap is not None:
+                cap = app._persistent_cap
+                backend = app._persistent_backend
+                app._persistent_cap = None
+                app._persistent_device_idx = None
+                app._persistent_backend = None
+                if cap.isOpened():
+                    return cap, backend
+                cap.release()
+        return None, None
+
+    def _return_cap(raw_cap: cv2.VideoCapture) -> None:
+        """Callback: worker returns its cap for reuse."""
+        with app._persistent_lock:
+            old = app._persistent_cap
+            app._persistent_cap = raw_cap
+            # Restore index/backend from what worker used
+            worker = app._receiver_worker
+            if worker is not None:
+                app._persistent_device_idx = worker._device
+                app._persistent_backend = worker._backend
+        if old is not None:
+            old.release()
+        log.info("Cap returned from worker — persistent again")
+
+    def _get_backend_for(device_idx: int) -> int | None:
+        """Look up the backend for a device index from the cache."""
         with app._devices_lock:
             for d in app._devices:
                 if d["index"] == device_idx:
-                    backend = d.get("backend")
-                    break
-        if backend is None:
-            return
-        app._warming = True
-        threading.Thread(target=_warm_device, args=(device_idx, backend), daemon=True).start()
-
-    def _take_warm(device_idx: int) -> cv2.VideoCapture | None:
-        with app._warm_lock:
-            if app._warm_device_idx == device_idx and app._warm_cap is not None:
-                cap = app._warm_cap
-                app._warm_cap = None
-                app._warm_device_idx = None
-                if cap.isOpened():
-                    return cap
-                cap.release()
+                    return d.get("backend")
         return None
 
-    # On startup, if we have a disk cache, pre-warm the first device
+    def _detect_and_cache() -> list[dict]:
+        """Run device detection under the device-open lock and cache results."""
+        from hdmi_exfil.receiver.cli.console import _detect_devices
+        with app._device_open_lock:
+            devices = _detect_devices()
+        with app._devices_lock:
+            app._devices = devices
+        _save_disk_cache(devices)
+        return devices
+
+    # On startup, if we have a disk cache, open persistent cap for first device
     if app._devices:
-        _start_warm(app._devices[0]["index"])
+        d0 = app._devices[0]
+        _open_persistent_bg(d0["index"], d0.get("backend", cv2.CAP_MSMF))
 
     # ── Page routes ──────────────────────────────────────────────
 
@@ -151,26 +203,30 @@ def create_app(output_dir: str = "received_files") -> Flask:
         with app._devices_lock:
             if not force and app._devices:
                 return jsonify(app._devices)
-        from hdmi_exfil.receiver.cli.console import _detect_devices
-        devices = _detect_devices()
-        with app._devices_lock:
-            app._devices = devices
-        _save_disk_cache(devices)
-        # Pre-warm first device
+
+        # Release persistent cap before detection (avoids camera contention)
+        _release_persistent()
+        devices = _detect_and_cache()
+
+        # Open persistent cap for the first device
         if devices:
-            _start_warm(devices[0]["index"])
+            d0 = devices[0]
+            _open_persistent(d0["index"], d0.get("backend", cv2.CAP_MSMF))
         return jsonify(devices)
 
     @app.route("/api/devices/warm", methods=["POST"])
     def api_warm_device():
-        """Pre-warm a specific device so Start is instant."""
+        """Switch persistent cap to a specific device."""
         data = request.get_json(force=True)
         device_idx = int(data.get("device", 0))
-        with app._warm_lock:
-            if app._warm_device_idx == device_idx:
-                return jsonify({"status": "already_warm"})
-        _start_warm(device_idx)
-        return jsonify({"status": "warming"})
+        with app._persistent_lock:
+            if app._persistent_device_idx == device_idx and app._persistent_cap is not None:
+                return jsonify({"status": "already_open"})
+        backend = _get_backend_for(device_idx)
+        if backend is None:
+            return jsonify({"status": "unknown_device"}), 400
+        _open_persistent_bg(device_idx, backend)
+        return jsonify({"status": "opening"})
 
     @app.route("/api/profiles")
     def api_profiles():
@@ -198,31 +254,25 @@ def create_app(output_dir: str = "received_files") -> Flask:
         if profile is None:
             return jsonify({"error": f"Unknown profile: {profile_name}"}), 400
 
-        backend = None
-        with app._devices_lock:
-            for d in app._devices:
-                if d["index"] == device:
-                    backend = d.get("backend")
-                    break
+        backend = _get_backend_for(device)
 
-        # If device list is empty, detect now (race condition fix)
+        # If backend unknown, detect devices now (race-condition fallback)
         if backend is None:
-            from hdmi_exfil.receiver.cli.console import _detect_devices
-            devices = _detect_devices()
-            with app._devices_lock:
-                app._devices = devices
-            _save_disk_cache(devices)
+            _release_persistent()
+            devices = _detect_and_cache()
             for d in devices:
                 if d["index"] == device:
                     backend = d.get("backend")
                     break
 
-        precap = _take_warm(device)
+        # Take the persistent cap — zero delay
+        precap, _ = _take_persistent(device)
 
         worker = ReceiverWorker(
             device=device, profile=profile,
             mode=mode, output_dir=output,
             backend=backend, precap=precap,
+            on_cap_return=_return_cap,
         )
         app._receiver_worker = worker
         worker.start()
@@ -234,8 +284,7 @@ def create_app(output_dir: str = "received_files") -> Flask:
         if worker is None or not worker.is_alive():
             return jsonify({"error": "Not receiving"}), 409
         worker.stop()
-        # Re-warm the same device for next Start
-        _start_warm(worker._device)
+        # Cap is returned via _return_cap callback automatically
         return jsonify({"status": "stopped"})
 
     @app.route("/api/receive/events")

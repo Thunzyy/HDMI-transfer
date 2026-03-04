@@ -65,6 +65,7 @@ class ReceiverWorker(threading.Thread):
         output_dir: str = "received_files",
         backend: int | None = None,
         precap: "cv2.VideoCapture | None" = None,
+        on_cap_return: "callable | None" = None,
     ) -> None:
         super().__init__(daemon=True)
         self._device = device
@@ -73,6 +74,7 @@ class ReceiverWorker(threading.Thread):
         self._output_dir = output_dir
         self._backend = backend
         self._precap = precap
+        self._on_cap_return = on_cap_return
         self._stop_event = threading.Event()
         self._subscribers: list[queue.Queue] = []
         self._lock = threading.Lock()
@@ -123,11 +125,13 @@ class ReceiverWorker(threading.Thread):
     # -- main entry ------------------------------------------------------
 
     def run(self) -> None:
+        cap = None
         try:
             self._publish("status", {
                 "state": "opening",
                 "message": "Opening capture device...",
             })
+            keep_alive = self._on_cap_return is not None
             cap = CaptureSource(
                 self._device,
                 width=self._profile.width,
@@ -135,6 +139,7 @@ class ReceiverWorker(threading.Thread):
                 fps=self._profile.target_fps,
                 backend=self._backend,
                 _precap=self._precap,
+                _keep_alive=keep_alive,
             )
             self._precap = None  # ownership transferred
             self._publish("status", {
@@ -152,10 +157,14 @@ class ReceiverWorker(threading.Thread):
                 }
                 handler = dispatch.get(self._mode, self._run_auto)
                 handler(cap)
+
+            # Return the cap to the server for reuse
+            if self._on_cap_return is not None:
+                raw = cap.detach()
+                if raw is not None and raw.isOpened():
+                    self._on_cap_return(raw)
         except Exception as exc:
-            import traceback
-            tb = traceback.format_exc()
-            self._publish("error", {"message": f"{exc}\n{tb}"})
+            self._publish("error", {"message": str(exc)})
 
     # -- fountain mode ---------------------------------------------------
 

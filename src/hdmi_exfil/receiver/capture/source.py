@@ -145,18 +145,22 @@ class CaptureSource:
         fps: int = 60,
         backend: int | None = None,
         _precap: cv2.VideoCapture | None = None,
+        _keep_alive: bool = False,
     ) -> None:
         self._cap: cv2.VideoCapture | None = None
+        self._keep_alive = _keep_alive
 
         if _precap is not None and _precap.isOpened():
             # Use pre-warmed capture — no probing needed
             self._cap = _precap
         elif backend is not None:
+            # Backend is known — open directly, skip slow fallback probing
             cap = _try_open(source, backend, width, height, fps)
             if cap is not None:
                 self._cap = cap
 
-        if self._cap is None:
+        if self._cap is None and backend is None:
+            # No backend hint — probe all (slow, ~5s on Windows)
             for b in _get_backends():
                 cap = _try_open(source, b, width, height, fps)
                 if cap is not None:
@@ -202,7 +206,15 @@ class CaptureSource:
 
     def release(self) -> None:
         """Release the underlying VideoCapture resource."""
-        self._cap.release()
+        if not self._keep_alive:
+            self._cap.release()
+
+    def detach(self) -> cv2.VideoCapture | None:
+        """Detach and return the underlying VideoCapture without releasing it."""
+        cap = self._cap
+        self._cap = None
+        self._keep_alive = True  # prevent __exit__ from releasing
+        return cap
 
     # -- Context manager -----------------------------------------------------
 
