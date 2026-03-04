@@ -72,6 +72,7 @@ class ResolutionProfile:
     height: int
     block_size: int
     target_fps: int
+    bits_per_channel: int = 1
 
     # -- derived properties --------------------------------------------------
 
@@ -92,8 +93,8 @@ class ResolutionProfile:
 
     @property
     def bits_per_frame(self) -> int:
-        """Total encoded bits per frame (3 bits per block, RGB binary)."""
-        return self.blocks_per_frame * 3
+        """Total encoded bits per frame (3 channels * bpc bits per block)."""
+        return self.blocks_per_frame * 3 * self.bits_per_channel
 
     @property
     def seq_bytes_per_frame(self) -> int:

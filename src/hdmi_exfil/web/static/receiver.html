@@ -287,6 +287,12 @@ html,body{
         <option value="fountain">fountain</option>
         <option value="sequential">sequential</option>
       </select>
+      <label class="config-label">Encoding</label>
+      <select class="config-select" id="bpcSelect">
+        <option value="1" selected>1 bpc — Safe</option>
+        <option value="2">2 bpc — Fast (2x)</option>
+        <option value="3">3 bpc — Max (3x)</option>
+      </select>
       <button class="btn-detect" id="refreshBtn">Detect devices</button>
     </div>
     <div class="sidebar-ver">v0.1.0</div>
@@ -373,6 +379,7 @@ html,body{
   const deviceSelect  = document.getElementById("deviceSelect");
   const profileSelect = document.getElementById("profileSelect");
   const modeSelect    = document.getElementById("modeSelect");
+  const bpcSelect     = document.getElementById("bpcSelect");
   const startBtn      = document.getElementById("startBtn");
   const stopBtn       = document.getElementById("stopBtn");
   const refreshBtn    = document.getElementById("refreshBtn");
@@ -533,12 +540,12 @@ html,body{
     try {
       const r = await fetch("/api/receive/start", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({device:+deviceSelect.value, profile:profileSelect.value, mode:modeSelect.value}),
+        body: JSON.stringify({device:+deviceSelect.value, profile:profileSelect.value, mode:modeSelect.value, bpc:+bpcSelect.value}),
       });
       if (!r.ok) { const e = await r.json(); statusMsg.textContent = "Error: " + (e.error||"Failed"); log("error", e.error||"Start failed"); return; }
     } catch (e) { statusMsg.textContent = "Network error: " + e.message; log("error", "Network: " + e.message); return; }
     startBtn.disabled = true; stopBtn.disabled = false;
-    deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = refreshBtn.disabled = true;
+    deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = true;
     badgeRec.style.display = "flex";
     previewIdle.classList.add("hidden");
     log("info", "Starting capture...");
@@ -602,7 +609,7 @@ html,body{
   function cleanup() {
     if (sse) { sse.close(); sse = null; }
     startBtn.disabled = !deviceSelect.value; stopBtn.disabled = true;
-    deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = refreshBtn.disabled = false;
+    deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = false;
     badgeRec.style.display = "none";
   }
 
@@ -707,8 +714,25 @@ html,body{
       }
       if (s.defaultProfile) profileSelect.value = s.defaultProfile;
       if (s.defaultMode) modeSelect.value = s.defaultMode;
+      if (s.defaultBpc) bpcSelect.value = String(s.defaultBpc);
     } catch {}
     updateBadge();
+  }
+
+  /* ── Check for active worker on page load ── */
+  async function checkActiveWorker() {
+    try {
+      const r = await fetch("/api/receive/status");
+      const d = await r.json();
+      if (d.active) {
+        log("warn", "Previous session still active — reconnecting...");
+        startBtn.disabled = true; stopBtn.disabled = false;
+        deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = true;
+        badgeRec.style.display = "flex";
+        previewIdle.classList.add("hidden");
+        connectSSE();
+      }
+    } catch {}
   }
 
   /* ── Init ───────────────────────────────── */
@@ -719,6 +743,7 @@ html,body{
   startBtn.addEventListener("click", start);
   stopBtn.addEventListener("click", stop);
   refreshBtn.addEventListener("click", () => loadDevices(true));
+  checkActiveWorker();
 })();
 </script>
 </body>

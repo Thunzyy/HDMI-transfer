@@ -343,24 +343,13 @@ class FountainProtocol(EncodingProtocol):
         if len(frame_bytes) < self._total_bytes:
             frame_bytes += b"\x00" * (self._total_bytes - len(frame_bytes))
 
-        # Convert bytes -> bits, 3 bits per block (RGB binary)
-        byte_arr = np.frombuffer(frame_bytes, dtype=np.uint8)
-        bits = np.unpackbits(byte_arr)
-
-        total_bits_needed = self._profile.blocks_per_frame * 3
-        if len(bits) < total_bits_needed:
-            bits = np.pad(bits, (0, total_bits_needed - len(bits)), "constant")
-
-        # Reshape to (blocks_per_frame, 3) -> RGB values per block
-        pixel_bits = bits[:total_bits_needed].reshape(
-            (self._profile.blocks_per_frame, 3),
+        # Convert bytes to pixel grid using multi-bpc encoding
+        from hdmi_exfil.core.protocols.encoding import bytes_to_pixels
+        blocks_grid = bytes_to_pixels(
+            frame_bytes, self._profile.blocks_per_frame,
+            self._profile.rows, self._profile.cols,
+            self._profile.bits_per_channel,
         )
-        pixel_values = pixel_bits * 255
-
-        # Reshape to (rows, cols, 3) grid
-        blocks_grid = pixel_values.reshape(
-            (self._profile.rows, self._profile.cols, 3),
-        ).astype(np.uint8)
 
         # Scale up to full resolution via nearest-neighbour (np.repeat)
         frame_img = np.repeat(
@@ -384,13 +373,11 @@ class FountainProtocol(EncodingProtocol):
           3. Parse fountain header (magic + seed + K + CRC)
           4. Verify CRC32
         """
-        # Flatten and threshold all 3 channels: > 128 => bit=1 (3bpp)
         # OpenCV captures in BGR order; flip to RGB to match the sender's
         # bit packing (R channel = first bit, G = second, B = third).
-        flat = sampled_grid[..., ::-1].reshape(-1, 3)
-        bits = (flat > 128).astype(np.uint8)
-        flat_bits = bits.reshape(-1)
-        raw_bytes = np.packbits(flat_bits).tobytes()
+        from hdmi_exfil.core.protocols.encoding import pixels_to_bytes
+        rgb_grid = sampled_grid[..., ::-1]
+        raw_bytes = pixels_to_bytes(rgb_grid, self._profile.bits_per_channel)
 
         # Need at least a full header
         if len(raw_bytes) < FOUNT_HEADER_SIZE:

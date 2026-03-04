@@ -261,10 +261,22 @@ def create_app(output_dir: str = "received_files") -> Flask:
             }
         return jsonify(out)
 
+    @app.route("/api/receive/status")
+    def api_receive_status():
+        """Return current receiver state so the UI can recover after refresh."""
+        worker = app._receiver_worker
+        if worker is not None and worker.is_alive():
+            return jsonify({"active": True})
+        return jsonify({"active": False})
+
     @app.route("/api/receive/start", methods=["POST"])
     def api_receive_start():
-        if app._receiver_worker is not None and app._receiver_worker.is_alive():
-            return jsonify({"error": "Already receiving"}), 409
+        # Auto-stop previous worker if still alive (e.g. page refresh)
+        old = app._receiver_worker
+        if old is not None and old.is_alive():
+            log.info("Auto-stopping previous worker before new START")
+            old.stop()
+            app._receiver_worker = None
 
         data = request.get_json(force=True)
         device = int(data.get("device", 0))
@@ -272,9 +284,16 @@ def create_app(output_dir: str = "received_files") -> Flask:
         mode = data.get("mode", "auto")
         output = data.get("output", app.config["OUTPUT_DIR"])
 
-        profile = PROFILES.get(profile_name)
-        if profile is None:
+        bpc = int(data.get("bpc", 1))
+        if bpc not in (1, 2, 3):
+            bpc = 1
+
+        base = PROFILES.get(profile_name)
+        if base is None:
             return jsonify({"error": f"Unknown profile: {profile_name}"}), 400
+
+        from dataclasses import replace
+        profile = replace(base, bits_per_channel=bpc)
 
         backend = _get_backend_for(device)
 

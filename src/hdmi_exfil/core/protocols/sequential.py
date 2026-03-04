@@ -104,26 +104,13 @@ class SequentialProtocol(EncodingProtocol):
 
         full_data = header_pre_crc + crc_bytes + data
 
-        # Convert bytes to bits
-        byte_arr = np.frombuffer(full_data, dtype=np.uint8)
-        bits = np.unpackbits(byte_arr)
-
-        # Pad bits to frame capacity (blocks_per_frame * 3)
-        total_bits_needed = self._profile.blocks_per_frame * 3
-        padding_needed = total_bits_needed - len(bits)
-        if padding_needed > 0:
-            bits = np.pad(bits, (0, padding_needed), "constant")
-
-        # Reshape to (blocks_per_frame, 3) -> RGB values per block
-        pixel_bits = bits.reshape((self._profile.blocks_per_frame, 3))
-
-        # Map 0 -> 0, 1 -> 255
-        pixel_values = pixel_bits * 255
-
-        # Reshape to grid (rows, cols, 3) and upscale
-        blocks_grid = pixel_values.reshape(
-            (self._profile.rows, self._profile.cols, 3),
-        ).astype(np.uint8)
+        # Convert bytes to pixel grid using multi-bpc encoding
+        from hdmi_exfil.core.protocols.encoding import bytes_to_pixels
+        blocks_grid = bytes_to_pixels(
+            full_data, self._profile.blocks_per_frame,
+            self._profile.rows, self._profile.cols,
+            self._profile.bits_per_channel,
+        )
         img = np.repeat(
             np.repeat(blocks_grid, self._profile.block_size, axis=0),
             self._profile.block_size,
@@ -142,15 +129,9 @@ class SequentialProtocol(EncodingProtocol):
         """
         # OpenCV captures in BGR order; flip to RGB to match the sender's
         # bit packing (R channel = first bit, G = second, B = third).
-        flat_pixels = sampled_grid[..., ::-1].reshape(-1, 3)
-
-        # Threshold: > 128 is 1, else 0
-        bits = (flat_pixels > 128).astype(np.uint8)
-        flat_bits = bits.reshape(-1)
-
-        # Pack bits into bytes
-        packed_bytes = np.packbits(flat_bits)
-        frame_bytes = packed_bytes.tobytes()
+        from hdmi_exfil.core.protocols.encoding import pixels_to_bytes
+        rgb_grid = sampled_grid[..., ::-1]
+        frame_bytes = pixels_to_bytes(rgb_grid, self._profile.bits_per_channel)
 
         # Need at least full header (17 bytes)
         if len(frame_bytes) < HEADER_SIZE:

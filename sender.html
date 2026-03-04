@@ -256,6 +256,15 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   </div>
 
   <div>
+    <div class="side-label">Encoding</div>
+    <select class="side-select" id="bpcSelect" style="width:100%">
+      <option value="1">1 bpc — Safe</option>
+      <option value="2">2 bpc — Fast (2x)</option>
+      <option value="3">3 bpc — Max (3x)</option>
+    </select>
+  </div>
+
+  <div>
     <div class="side-label">Profile</div>
     <select class="side-select" id="profileSelect" style="width:100%">
       <option value="speed">Speed — 1080p @240fps</option>
@@ -352,8 +361,14 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     quality:  { name: "quality",  width: 3840, height: 2160, blockSize: 8, targetFps: 30 },
   };
 
+  const BPC_LEVELS = {
+    1: [0, 255],
+    2: [0, 85, 170, 255],
+    3: [0, 36, 73, 109, 146, 182, 219, 255],
+  };
+
   const config = {
-    protocol: "fountain",
+    protocol: "fountain", bpc: 1,
     profileName: "balanced", width: 1920, height: 1080, blockSize: 8,
     targetFps: 60, fpsMode: "auto", manualFps: 60, detectedHz: null,
     cols: 0, rows: 0, bitsPerFrame: 0, bytesPerFrame: 0, payloadSize: 0,
@@ -362,7 +377,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   function recalcDerived() {
     config.cols = config.width / config.blockSize;
     config.rows = config.height / config.blockSize;
-    config.bitsPerFrame = config.rows * config.cols * 3;
+    config.bitsPerFrame = config.rows * config.cols * 3 * config.bpc;
     config.bytesPerFrame = config.bitsPerFrame / 8;
     const headerLen = config.protocol === "fountain" ? FOUNTAIN_HEADER_LEN : SEQ_HEADER_LEN;
     config.payloadSize = config.bytesPerFrame - headerLen;
@@ -438,6 +453,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   const startBtn = document.getElementById("startBtn");
   const stopBtn = document.getElementById("stopBtn");
 
+  const bpcSelect = document.getElementById("bpcSelect");
   const protocolSelect = document.getElementById("protocolSelect");
   const profileSelect = document.getElementById("profileSelect");
   const resolutionSelect = document.getElementById("resolutionSelect");
@@ -466,7 +482,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   // ── State ──────────────────────────────
   const state = {
     chunks: [], K: 0, seed: 1, frame: 0, running: false,
-    bits: new Uint8Array(config.bitsPerFrame), raf: null,
+    bits: new Uint8Array(config.rows * config.cols * 3), raf: null,
     rawWrapped: null, rawBytes: null, sha256Hash: null,
     fileName: null, fileSize: 0, startTime: 0,
     // Sequential state
@@ -492,7 +508,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     canvas.width = config.width; canvas.height = config.height;
     imageData = ctx.createImageData(config.width, config.height);
     buf = new Uint32Array(imageData.data.buffer);
-    state.bits = new Uint8Array(config.bitsPerFrame);
+    state.vals = new Uint8Array(config.rows * config.cols * 3);
     if (state.rawBytes) {
       rechunk();
       startBtn.disabled = !valid;
@@ -503,7 +519,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   const STORAGE_KEY = "hdmi_exfil_sender_settings";
   function saveSettings() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      protocol: config.protocol,
+      protocol: config.protocol, bpc: config.bpc,
       profileName: config.profileName, width: config.width, height: config.height,
       blockSize: config.blockSize, fpsMode: config.fpsMode, manualFps: config.manualFps,
     })); } catch(e) {}
@@ -513,6 +529,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
       const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return;
       const d = JSON.parse(raw);
       if (d.protocol) config.protocol = d.protocol;
+      if (d.bpc && [1,2,3].includes(d.bpc)) config.bpc = d.bpc;
       if (d.profileName && PROFILES[d.profileName]) {
         const p = PROFILES[d.profileName];
         Object.assign(config, { profileName: d.profileName, width: p.width, height: p.height, blockSize: p.blockSize, targetFps: p.targetFps });
@@ -554,7 +571,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   }
 
   function setSettingsEnabled(enabled) {
-    [protocolSelect, profileSelect, resolutionSelect, blockSizeSelect, fpsModeSelect, manualFpsInput].forEach(el => el.disabled = !enabled);
+    [bpcSelect, protocolSelect, profileSelect, resolutionSelect, blockSizeSelect, fpsModeSelect, manualFpsInput].forEach(el => el.disabled = !enabled);
   }
 
   // ── Core helpers ───────────────────────
@@ -672,21 +689,45 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   }
 
   // ── Encoding ───────────────────────────
-  function bytesToBits(bytes) {
+  function bytesToValues(bytes) {
+    const bpc = config.bpc;
     let p = 0;
-    for (let i = 0; i < bytes.length; i++) {
-      const b = bytes[i];
-      state.bits[p++]=(b>>7)&1; state.bits[p++]=(b>>6)&1; state.bits[p++]=(b>>5)&1; state.bits[p++]=(b>>4)&1;
-      state.bits[p++]=(b>>3)&1; state.bits[p++]=(b>>2)&1; state.bits[p++]=(b>>1)&1; state.bits[p++]=b&1;
+    if (bpc === 1) {
+      for (let i = 0; i < bytes.length; i++) {
+        const b = bytes[i];
+        state.vals[p++]=(b>>7)&1; state.vals[p++]=(b>>6)&1; state.vals[p++]=(b>>5)&1; state.vals[p++]=(b>>4)&1;
+        state.vals[p++]=(b>>3)&1; state.vals[p++]=(b>>2)&1; state.vals[p++]=(b>>1)&1; state.vals[p++]=b&1;
+      }
+    } else {
+      // Extract bpc-bit groups from byte stream using a bit buffer.
+      // Important: outer loop must NOT check byteIdx — after reading the
+      // last byte there are still bits in the buffer to extract.
+      let bitBuf = 0, bitsLeft = 0;
+      const mask = (1 << bpc) - 1;
+      const totalVals = config.rows * config.cols * 3;
+      let byteIdx = 0;
+      while (p < totalVals) {
+        while (bitsLeft < bpc && byteIdx < bytes.length) {
+          bitBuf = (bitBuf << 8) | bytes[byteIdx++];
+          bitsLeft += 8;
+        }
+        if (bitsLeft >= bpc) {
+          bitsLeft -= bpc;
+          state.vals[p++] = (bitBuf >> bitsLeft) & mask;
+        } else {
+          break; // no more bits available
+        }
+      }
     }
   }
-  function drawBits(bits) {
+  function drawValues(vals) {
     const W = config.width, BS = config.blockSize, R = config.rows, C = config.cols;
-    let bi = 0;
+    const levels = BPC_LEVELS[config.bpc];
+    let vi = 0;
     for (let r = 0; r < R; r++) { const sy = r*BS;
       for (let c = 0; c < C; c++) {
-        const rB=bits[bi++], gB=bits[bi++], bB=bits[bi++];
-        const color = 0xFF000000|((bB?0xFF:0)<<16)|((gB?0xFF:0)<<8)|(rB?0xFF:0);
+        const rV = levels[vals[vi++]], gV = levels[vals[vi++]], bV = levels[vals[vi++]];
+        const color = 0xFF000000|(bV<<16)|(gV<<8)|rV;
         const sx = c*BS;
         for (let y = 0; y < BS; y++) { const ro = (sy+y)*W+sx; buf.fill(color, ro, ro+BS); }
       }
@@ -709,7 +750,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     const crcData = new Uint8Array(8 + payload.length);
     crcData.set(frameBytes.subarray(0, 8)); crcData.set(payload, 8);
     view.setUint32(8, crc32(crcData), false);
-    bytesToBits(frameBytes); drawBits(state.bits);
+    bytesToValues(frameBytes); drawValues(state.vals);
     state.seed = (state.seed + 1) >>> 0; if (state.seed === 0) state.seed = 1;
   }
 
@@ -738,7 +779,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
         state.seqPhase = "start"; state.seqRepeat = 0;
       }
     }
-    bytesToBits(frameBytes); drawBits(state.bits);
+    bytesToValues(frameBytes); drawValues(state.vals);
   }
 
   function renderFrame() {
@@ -784,7 +825,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     state.running = false;
     if (state.raf) cancelAnimationFrame(state.raf);
     if (document.fullscreenElement) document.exitFullscreen();
-    drawBits(new Uint8Array(config.bitsPerFrame));
+    drawValues(new Uint8Array(config.rows * config.cols * 3));
     canvasWrap.classList.remove("active");
     hud.classList.remove("active");
     startBtn.disabled = !state.chunks.length; stopBtn.disabled = true;
@@ -883,6 +924,10 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   });
 
   // ── Settings events ────────────────────
+  bpcSelect.addEventListener("change", () => {
+    config.bpc = Number(bpcSelect.value);
+    applyConfig();
+  });
   protocolSelect.addEventListener("change", () => {
     config.protocol = protocolSelect.value;
     applyConfig();
@@ -922,6 +967,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
 
   // ── Init ───────────────────────────────
   loadSettings(); recalcDerived();
+  bpcSelect.value = String(config.bpc);
   protocolSelect.value = config.protocol;
   profileSelect.value = config.profileName;
   resolutionSelect.value = `${config.width}x${config.height}`;
@@ -932,7 +978,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   canvas.width = config.width; canvas.height = config.height;
   imageData = ctx.createImageData(config.width, config.height);
   buf = new Uint32Array(imageData.data.buffer);
-  state.bits = new Uint8Array(config.bitsPerFrame);
+  state.vals = new Uint8Array(config.rows * config.cols * 3);
   validateConfig();
   updateDerivedStats(); updateChips();
 
