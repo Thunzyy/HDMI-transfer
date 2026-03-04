@@ -22,9 +22,14 @@ receiver = [
     "opencv-python >= 4.0",
     "InquirerPy >= 0.3.4",
 ]
+web = [
+    "flask>=3.0",
+    "opencv-python>=4.0",
+]
 all = [
     "hdmi-exfil[sender]",
     "hdmi-exfil[receiver]",
+    "hdmi-exfil[web]",
 ]
 dev = [
     "hdmi-exfil[all]",
@@ -39,12 +44,14 @@ hdmi-calibrate = "hdmi_exfil.cli.calibrate:main"
 hdmi-bench = "hdmi_exfil.cli.benchmark:main"
 hdmi-sender = "hdmi_exfil.sender.cli.console:main"
 hdmi-receiver = "hdmi_exfil.receiver.cli.console:main"
+hdmi-web = "hdmi_exfil.web.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 "hdmi_exfil.core" = ["constants.json"]
+"hdmi_exfil.web" = ["static/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

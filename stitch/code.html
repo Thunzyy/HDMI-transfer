@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="fr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>HDMI Exfil : Desktop Receiver Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0df2f2",
+                        "background-light": "#f5f8f8",
+                        "background-dark": "#102222",
+                    },
+                    fontFamily: {
+                        "display": ["IBM Plex Mono", "monospace"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'IBM Plex Mono', monospace; }
+        .pattern-bg {
+            background-image: linear-gradient(rgba(13, 242, 242, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(13, 242, 242, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display min-h-screen overflow-hidden flex flex-col selection:bg-primary selection:text-background-dark">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-primary/20 px-6 py-3 bg-background-dark/80 backdrop-blur-md z-10 shrink-0">
+<div class="flex items-center gap-4 text-slate-100">
+<div class="size-6 text-primary">
+<svg fill="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M19 3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM19 19H5V5H19V19ZM17 17H7V15H17V17ZM17 13H7V11H17V13ZM17 9H7V7H17V9Z"></path>
+</svg>
+</div>
+<h2 class="text-slate-100 text-xl font-bold leading-tight tracking-tight uppercase">HDMI Exfil</h2>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/30">
+<span class="w-2.5 h-2.5 rounded-full bg-[#0bda50] shadow-[0_0_8px_#0bda50]"></span>
+<span class="text-primary text-sm font-bold tracking-widest uppercase">Lien : Actif (1.2 Gbps)</span>
+</div>
+<div class="bg-primary/20 bg-center bg-no-repeat aspect-square bg-cover rounded-full size-9 flex items-center justify-center border border-primary/30 text-primary">
+<span class="material-symbols-outlined text-sm">person</span>
+</div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<aside class="w-64 border-r border-primary/20 bg-background-dark/50 flex flex-col py-6 shrink-0 z-0">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-3">
+<div class="bg-primary/20 rounded-lg size-10 flex items-center justify-center border border-primary/30 text-primary">
+<span class="material-symbols-outlined">cast</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-slate-100 text-sm font-bold uppercase tracking-wide">RX Module</h1>
+<p class="text-primary/70 text-xs font-medium">Reconstruction</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-4 flex flex-col gap-2">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-primary/10 transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">dashboard</span>
+<span class="text-sm font-medium uppercase tracking-wide">Tableau de bord</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-primary/10 transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">upload</span>
+<span class="text-sm font-medium uppercase tracking-wide">Envoi</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary/15 border border-primary/30 text-primary" href="#">
+<span class="material-symbols-outlined">download</span>
+<span class="text-sm font-bold uppercase tracking-wide">Réception</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-primary/10 transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">tune</span>
+<span class="text-sm font-medium uppercase tracking-wide">Calibration</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-primary/10 transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">settings</span>
+<span class="text-sm font-medium uppercase tracking-wide">Paramètres</span>
+</a>
+</nav>
+<div class="px-6 mt-auto">
+<div class="text-xs text-primary/50 uppercase tracking-widest">v1.0.42-beta</div>
+</div>
+</aside>
+<main class="flex-1 flex overflow-hidden pattern-bg">
+<div class="flex-1 flex flex-col p-6 overflow-y-auto">
+<div class="mb-6 flex justify-between items-end">
+<div>
+<h2 class="text-2xl font-bold text-slate-100 uppercase tracking-tight mb-1">Vue Réception</h2>
+<p class="text-primary/70 text-sm">Aperçu en direct du flux HDMI via Elgato 4K60 Pro</p>
+</div>
+<div class="flex gap-2">
+<button class="px-4 py-2 border border-primary/30 rounded text-xs font-bold text-primary uppercase tracking-wider hover:bg-primary/10 transition-colors">
+                            Capturer
+                        </button>
+<button class="px-4 py-2 bg-primary/20 border border-primary rounded text-xs font-bold text-primary uppercase tracking-wider hover:bg-primary/30 transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">stop</span> Interrompre
+                        </button>
+</div>
+</div>
+<div class="flex-1 flex flex-col gap-6">
+<div class="flex-1 border border-primary/30 rounded-lg overflow-hidden relative bg-black/50 shadow-lg shadow-primary/5 flex flex-col">
+<div class="absolute top-4 left-4 z-10 flex gap-2">
+<span class="px-2 py-1 bg-black/60 border border-primary/50 text-primary text-xs font-bold rounded flex items-center gap-1 backdrop-blur-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span> REC
+                            </span>
+<span class="px-2 py-1 bg-black/60 border border-slate-700 text-slate-300 text-xs font-medium rounded backdrop-blur-sm">
+                                3840x2160 @ 60fps
+                            </span>
+</div>
+<div class="absolute bottom-4 right-4 z-10">
+<span class="px-2 py-1 bg-black/60 border border-slate-700 text-primary text-xs font-medium rounded backdrop-blur-sm font-mono">
+                                FRM: 42,918
+                            </span>
+</div>
+<div class="flex-1 relative w-full h-full bg-[#0a1111]" data-alt="Data pixel visualizer simulating raw HDMI stream data">
+<div class="absolute inset-0 opacity-40" style="background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(13, 242, 242, 0.1) 2px, rgba(13, 242, 242, 0.1) 4px); background-size: 100% 4px;"></div>
+<div class="absolute inset-0" style="background: radial-gradient(circle at center, transparent 0%, #0a1111 100%);"></div>
+<div aria-hidden="true" class="w-full h-full flex flex-wrap content-start p-8 gap-1 opacity-80">
+</div>
+</div>
+</div>
+<div class="h-48 border border-primary/30 rounded-lg bg-background-dark/80 backdrop-blur-md flex flex-col overflow-hidden">
+<div class="px-4 py-2 border-b border-primary/20 bg-primary/5 flex justify-between items-center">
+<span class="text-xs font-bold text-primary uppercase tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">terminal</span> Log Technique
+                            </span>
+<span class="text-xs text-slate-500">Auto-scroll ON</span>
+</div>
+<div class="p-4 overflow-y-auto text-xs font-mono text-primary/70 flex flex-col gap-1">
+<div class="flex gap-4"><span class="text-slate-500">[14:22:01.042]</span> <span class="text-slate-300">INFO</span> <span>Sync established with capture device ELGATO_4K60.</span></div>
+<div class="flex gap-4"><span class="text-slate-500">[14:22:01.105]</span> <span class="text-[#0bda50]">SUCCESS</span> <span>Carrier wave detected. SNR holding at 24.2 dB.</span></div>
+<div class="flex gap-4"><span class="text-slate-500">[14:22:01.150]</span> <span class="text-slate-300">INFO</span> <span>Initializing Fountain code decoder (RaptorQ)...</span></div>
+<div class="flex gap-4"><span class="text-slate-500">[14:22:01.200]</span> <span class="text-slate-300">INFO</span> <span>Receiving block stream chunk #0001 - #0128.</span></div>
+<div class="flex gap-4"><span class="text-slate-500">[14:22:01.450]</span> <span class="text-yellow-400">WARN</span> <span>Minor packet loss detected (0.02%). Requesting repair symbols.</span></div>
+<div class="flex gap-4"><span class="text-slate-500">[14:22:01.890]</span> <span class="text-[#0bda50]">SUCCESS</span> <span>Block group 1 recovered. Integrity verified.</span></div>
+<div class="flex gap-4"><span class="text-slate-500">[14:22:02.100]</span> <span class="text-slate-300">INFO</span> <span>Throughput stable at 1.18 Gbps.</span></div>
+<div class="flex gap-4"><span class="text-slate-500">[14:22:02.400]</span> <span class="text-slate-300">INFO</span> <span>Receiving block stream chunk #0129 - #0256...</span></div>
+</div>
+</div>
+</div>
+</div>
+<aside class="w-80 border-l border-primary/20 bg-background-dark/80 backdrop-blur-md flex flex-col shrink-0 z-10 overflow-y-auto">
+<div class="p-6 border-b border-primary/20 flex items-center gap-3 bg-primary/5">
+<span class="material-symbols-outlined text-primary">insights</span>
+<h3 class="text-sm font-bold text-slate-100 uppercase tracking-widest">Signal Intelligence</h3>
+</div>
+<div class="p-6 flex flex-col gap-8">
+<div class="flex flex-col gap-3">
+<div class="flex justify-between items-end">
+<p class="text-primary/70 text-xs font-bold uppercase tracking-wider">Signal-to-Noise Ratio</p>
+<span class="text-[#0bda50] text-xs font-bold">+0.2%</span>
+</div>
+<div class="flex items-baseline gap-2">
+<p class="text-slate-100 text-4xl font-bold tracking-tight">24.5</p>
+<span class="text-primary/50 text-sm font-bold">dB</span>
+</div>
+<div class="h-32 mt-2 relative border-b border-l border-primary/30 pb-1 pl-1">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 100 100">
+<path d="M0 80 Q 10 70, 20 75 T 40 60 T 60 50 T 80 55 T 100 40 L 100 100 L 0 100 Z" fill="rgba(13, 242, 242, 0.1)"></path>
+<path d="M0 80 Q 10 70, 20 75 T 40 60 T 60 50 T 80 55 T 100 40" fill="none" stroke="#0bda50" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<div class="absolute bottom-0 left-0 w-full flex justify-between text-[10px] text-primary/40 -mb-4 font-mono">
+<span>T-5s</span>
+<span>T-0s</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-3 pt-6 border-t border-primary/20">
+<div class="flex justify-between items-center mb-1">
+<p class="text-primary/70 text-xs font-bold uppercase tracking-wider">Fountain Blocks (RX)</p>
+<span class="text-primary text-xs font-bold">64%</span>
+</div>
+<div class="grid grid-cols-8 gap-1">
+<div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div>
+<div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div>
+<div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div>
+<div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-[#0bda50] rounded-[2px] opacity-100"></div><div class="aspect-square bg-yellow-400 rounded-[2px] opacity-100"></div><div class="aspect-square bg-yellow-400 rounded-[2px] opacity-100"></div><div class="aspect-square bg-primary/20 rounded-[2px] border border-primary/30"></div><div class="aspect-square bg-primary/20 rounded-[2px] border border-primary/30"></div>
+<div class="aspect-square bg-primary/20 rounded-[2px] border border-primary/30"></div><div class="aspect-square bg-primary/20 rounded-[2px] border border-primary/30"></div><div class="aspect-square bg-primary/20 rounded-[2px] border border-primary/30"></div><div class="aspect-square bg-primary/20 rounded-[2px] border border-primary/30"></div><div class="aspect-square bg-primary/20 rounded-[2px] border border-primary/30"></div><div class="aspect-square bg-primary/20 rounded-[2px] border border-primary/30"></div><div class="aspect-square bg-primary/20 rounded-[2px] border border-primary/30"></div><div class="aspect-square bg-primary/20 rounded-[2px] border border-primary/30"></div>
+</div>
+<div class="flex justify-between mt-1 text-[10px] text-primary/50 uppercase">
+<span>Chunks Rcvd: 4,096</span>
+<span>Target: 6,400</span>
+</div>
+</div>
+<div class="flex flex-col gap-3 pt-6 border-t border-primary/20">
+<p class="text-primary/70 text-xs font-bold uppercase tracking-wider mb-2">Métriques Fichier</p>
+<div class="flex flex-col gap-4">
+<div class="flex justify-between items-center">
+<span class="text-slate-400 text-sm">Nom</span>
+<span class="text-slate-100 font-medium text-sm">payload_alpha_v2.bin</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-slate-400 text-sm">Taille estimée</span>
+<span class="text-slate-100 font-medium text-sm">4.2 GB</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-slate-400 text-sm">Temps restant</span>
+<span class="text-primary font-bold text-sm">00:02:45</span>
+</div>
+</div>
+</div>
+</div>
+</aside>
+</main>
+</div>
+</body></html>

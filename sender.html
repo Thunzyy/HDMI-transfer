@@ -1,865 +1,834 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HDMI Exfil - Fountain Sender</title>
-  <style>
-    :root {
-      --bg: #050505;
-      --panel: rgba(0, 0, 0, 0.78);
-      --accent: #00d5ff;
-      --text: #e6f9ff;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      overflow: hidden;
-      width: 100vw;
-      height: 100vh;
-      background: #000;
-      color: var(--text);
-      font-family: "JetBrains Mono", Consolas, monospace;
-    }
-    #controls {
-      position: fixed;
-      top: 12px;
-      left: 12px;
-      background: var(--panel);
-      border: 1px solid var(--accent);
-      padding: 10px 12px;
-      z-index: 10;
-      transition: opacity 0.3s ease;
-      max-height: 90vh;
-      overflow-y: auto;
-    }
-    #controls.hidden {
-      opacity: 0;
-      pointer-events: none;
-    }
-    #controls h1 {
-      margin: 0 0 8px 0;
-      font-size: 16px;
-      color: var(--accent);
-      letter-spacing: 0.5px;
-    }
-    #controls label, #controls button, #controls small {
-      font-size: 13px;
-      display: block;
-      margin-bottom: 6px;
-    }
-    #controls input[type="file"] {
-      color: var(--text);
-      width: 240px;
-    }
-    #controls button {
-      cursor: pointer;
-      background: var(--accent);
-      color: #000;
-      border: none;
-      padding: 6px 10px;
-      font-weight: bold;
-      margin-right: 6px;
-    }
-    #controls button:disabled {
-      background: #444;
-      color: #999;
-      cursor: not-allowed;
-    }
-    #status { margin-top: 6px; }
-    #stats { color: #9fe870; margin-top: 2px; }
-    #hint { margin-top: 8px; color: #f5d67b; }
-    #settingsPanel {
-      margin: 8px 0;
-    }
-    #settingsPanel summary {
-      font-size: 13px;
-      cursor: pointer;
-      color: var(--accent);
-      outline: none;
-      user-select: none;
-    }
-    #settingsPanel .settings-body {
-      border-top: 1px solid #333;
-      padding-top: 6px;
-      margin-top: 4px;
-    }
-    #settingsPanel select,
-    #settingsPanel input[type="number"] {
-      background: #111;
-      color: var(--text);
-      border: 1px solid #444;
-      padding: 2px 4px;
-      font-family: inherit;
-      font-size: 12px;
-      margin-left: 4px;
-    }
-    #settingsPanel select:focus,
-    #settingsPanel input[type="number"]:focus {
-      border-color: var(--accent);
-      outline: none;
-    }
-    #settingsPanel .s-row {
-      font-size: 12px;
-      display: flex;
-      align-items: center;
-      margin-bottom: 5px;
-    }
-    #settingsPanel .s-row span {
-      min-width: 80px;
-    }
-    #detectedHz { color: #9fe870; font-size: 12px; margin-top: 4px; }
-    #derivedStats { color: #aaa; font-size: 11px; margin-top: 4px; line-height: 1.5; }
-    #configWarning { color: #ff6b6b; font-size: 12px; margin-top: 4px; display: none; }
-    canvas {
-      display: block;
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      image-rendering: pixelated;
-      image-rendering: crisp-edges;
-      background: #000;
-    }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>HDMI Exfil — Sender</title>
+<style>
+:root {
+  --bg:#16181e; --bg2:#0f1117;
+  --accent:#7c8aff; --accent-dim:rgba(124,138,255,0.1);
+  --accent-border:rgba(255,255,255,0.1);
+  --green:#4ade80; --yellow:#fbbf24; --red:#f87171;
+  --text:#e4e4e7; --dim:rgba(228,228,231,0.5);
+  --bright:#ffffff; --muted:#a1a1aa;
+  --font-ui:'Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'SF Mono','Cascadia Code','Fira Code','Consolas',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  width:100%;height:100vh;overflow:hidden;
+  background:var(--bg2);color:var(--text);
+  font-family:var(--font-ui);
+  font-size:14px;
+}
+body{display:flex}
+::selection{background:var(--accent);color:var(--bg2)}
+
+/* ── Two-panel layout ──────────────────── */
+#main{
+  flex:1;display:flex;flex-direction:column;
+  padding:28px 32px;gap:20px;overflow-y:auto;
+}
+#side{
+  width:280px;flex-shrink:0;
+  border-left:1px solid var(--accent-border);
+  background:var(--bg);padding:20px;
+  display:flex;flex-direction:column;gap:16px;
+  overflow-y:auto;
+}
+
+/* ── Drop zone ─────────────────────────── */
+#dropZone{
+  flex:1;min-height:160px;
+  border:2px dashed rgba(255,255,255,0.2);border-radius:10px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .2s;position:relative;gap:8px;
+}
+#dropZone:hover{border-color:rgba(255,255,255,0.3);background:rgba(255,255,255,0.025)}
+#dropZone.dragover{border-color:var(--accent);background:rgba(192,197,206,0.06)}
+#dropZone.loaded{
+  border-style:solid;border-color:rgba(255,255,255,0.1);
+  cursor:default;justify-content:flex-start;
+  padding:24px;
+}
+#dropZone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer}
+#dropZone.loaded input[type="file"]{cursor:default}
+
+/* Empty state */
+.dz-empty{display:flex;flex-direction:column;align-items:center;gap:8px}
+.dz-icon{
+  width:48px;height:48px;border-radius:12px;
+  background:rgba(255,255,255,0.04);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:4px;
+}
+.dz-icon svg{width:24px;height:24px;stroke:var(--accent);fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.dz-title{color:var(--bright);font-size:16px;font-weight:600}
+.dz-hint{color:var(--muted);font-size:12px}
+
+/* Loaded state */
+.dz-loaded{display:none;width:100%;gap:16px}
+#dropZone.loaded .dz-empty{display:none}
+#dropZone.loaded .dz-loaded{display:flex;flex-direction:column}
+.file-card{
+  display:flex;align-items:center;gap:14px;
+  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);
+  border-radius:8px;padding:16px 18px;
+}
+.file-icon{
+  width:40px;height:40px;border-radius:8px;
+  background:var(--accent-dim);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.file-icon svg{width:18px;height:18px;stroke:var(--accent);fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.file-name{font-size:15px;font-weight:600;color:var(--bright);word-break:break-all}
+.file-meta{font-size:12px;color:var(--muted);margin-top:3px;display:flex;gap:12px;font-family:var(--font-mono)}
+.file-meta span{display:flex;align-items:center;gap:4px}
+.change-btn{
+  margin-left:auto;flex-shrink:0;
+  background:none;border:1px solid rgba(255,255,255,0.15);
+  border-radius:5px;padding:7px 14px;
+  color:var(--text);font-family:inherit;font-size:12px;
+  cursor:pointer;transition:all .15s;position:relative;
+}
+.change-btn:hover{border-color:rgba(255,255,255,0.3);color:var(--bright)}
+.change-btn input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer}
+
+/* Info chips row */
+.info-row{
+  display:flex;gap:8px;flex-wrap:wrap;
+}
+.chip{
+  display:flex;align-items:center;gap:6px;
+  padding:7px 14px;border-radius:5px;
+  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);
+  font-size:12px;color:var(--text);
+}
+.chip .cv{color:var(--bright);font-weight:600;font-family:var(--font-mono)}
+
+/* ── Start bar ─────────────────────────── */
+#startBar{display:flex;gap:10px;flex-shrink:0}
+#startBtn{
+  flex:1;height:48px;border-radius:8px;
+  background:var(--accent);border:1px solid var(--accent);
+  color:#fff;font-family:inherit;font-size:14px;font-weight:700;
+  text-transform:uppercase;letter-spacing:1.5px;
+  cursor:pointer;transition:all .15s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+#startBtn:hover{background:#6b7bff;border-color:#6b7bff}
+#startBtn:disabled{opacity:.3;cursor:not-allowed}
+#startBtn:disabled:hover{background:var(--accent);border-color:var(--accent)}
+#stopBtn{
+  width:48px;height:48px;border-radius:8px;flex-shrink:0;
+  background:transparent;border:1px solid rgba(248,113,113,0.4);
+  color:var(--red);cursor:pointer;transition:all .15s;
+  display:flex;align-items:center;justify-content:center;
+}
+#stopBtn:hover{background:rgba(184,84,84,0.08);border-color:var(--red)}
+#stopBtn:disabled{opacity:.2;cursor:not-allowed}
+#stopBtn svg{width:14px;height:14px;fill:currentColor}
+.shortcut-hint{
+  text-align:center;font-size:11px;color:var(--muted);
+  letter-spacing:.5px;margin-top:6px;
+}
+
+/* ── Sidebar sections ──────────────────── */
+.side-label{
+  font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:1.5px;color:var(--accent);margin-bottom:8px;
+}
+.side-row{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:6px;
+}
+.side-row:last-child{margin-bottom:0}
+.side-key{font-size:12px;color:var(--text)}
+.side-select{
+  height:30px;padding:0 24px 0 10px;
+  background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.12);
+  border-radius:5px;color:var(--text);font-family:inherit;font-size:12px;
+  outline:none;cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 6px center;
+  transition:border-color .15s;
+}
+.side-select:focus{border-color:rgba(255,255,255,0.15)}
+.side-select:disabled{opacity:.3;cursor:not-allowed}
+.side-input{
+  height:30px;width:56px;padding:0 8px;
+  background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.12);
+  border-radius:5px;color:var(--text);font-family:var(--font-mono);font-size:12px;
+  outline:none;
+}
+.side-sep{height:1px;background:var(--accent-border);margin:4px 0}
+.side-note{font-size:11px;color:var(--muted);line-height:1.6}
+.side-note.ok{color:var(--green);opacity:1}
+.side-note.warn{color:var(--red);opacity:1}
+
+/* Side stats */
+.side-stats{display:flex;flex-direction:column;gap:8px}
+.ss{display:flex;justify-content:space-between;align-items:baseline}
+.ss-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.ss-val{font-size:15px;font-weight:700;color:var(--bright);font-variant-numeric:tabular-nums;font-family:var(--font-mono)}
+.ss-val.dim{color:var(--text);font-weight:400}
+
+/* Advanced toggle */
+.adv-toggle{
+  display:flex;align-items:center;gap:4px;
+  background:none;border:none;color:var(--text);font-family:inherit;
+  font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;
+  cursor:pointer;padding:4px 0;transition:color .15s;
+}
+.adv-toggle:hover{color:var(--text)}
+.adv-toggle .arr{display:inline-block;transition:transform .15s;font-size:8px}
+.adv-toggle.open .arr{transform:rotate(90deg)}
+.adv-body{display:none;margin-top:6px}
+.adv-body.open{display:block}
+
+/* ── Canvas (fullscreen only) ──────────── */
+#canvas-wrap{position:fixed;inset:0;z-index:9999;display:none;background:#000}
+#canvas-wrap.active{display:block}
+canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges}
+
+/* HUD */
+#hud{
+  position:fixed;top:12px;right:12px;z-index:10000;
+  background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,0.1);border-radius:6px;
+  padding:8px 14px;display:none;
+  font-size:10px;color:rgba(255,255,255,0.7);pointer-events:none;
+}
+#hud.active{display:flex;gap:14px}
+#hud .hv{color:#fff;font-weight:600}
+</style>
 </head>
 <body>
-  <div id="controls">
-    <h1>Fountain Sender (HDMI)</h1>
-    <label>Fichier a envoyer
-      <input type="file" id="fileInput" />
-    </label>
-    <div>
-      <button id="startBtn" disabled>Demarrer</button>
-      <button id="stopBtn" disabled>Arreter</button>
-      <button id="toggleUiBtn">Afficher/Masquer UI (H)</button>
-    </div>
 
-    <details id="settingsPanel">
-      <summary>Reglages</summary>
-      <div class="settings-body">
-        <div class="s-row">
-          <span>Profil</span>
-          <select id="profileSelect">
-            <option value="speed">speed (1080p @240fps)</option>
-            <option value="balanced" selected>balanced (1080p @60fps)</option>
-            <option value="quality">quality (4K @30fps)</option>
-            <option value="custom">custom</option>
-          </select>
-        </div>
-        <div class="s-row">
-          <span>Resolution</span>
-          <select id="resolutionSelect">
-            <option value="1920x1080">1920 x 1080</option>
-            <option value="3840x2160">3840 x 2160</option>
-          </select>
-        </div>
-        <div class="s-row">
-          <span>Block size</span>
-          <select id="blockSizeSelect">
-            <option value="4">4 px</option>
-            <option value="8" selected>8 px</option>
-            <option value="16">16 px</option>
-          </select>
-        </div>
-        <div class="s-row">
-          <span>FPS</span>
-          <select id="fpsModeSelect">
-            <option value="auto">auto-detect</option>
-            <option value="profile">profil par defaut</option>
-            <option value="manual">manuel</option>
-          </select>
-          <input type="number" id="manualFpsInput" min="1" max="360" value="60"
-                 style="width:55px; display:none;" />
-        </div>
-        <div id="detectedHz">Detection du refresh rate...</div>
-        <div id="configWarning"></div>
-        <div id="derivedStats"></div>
+<!-- Left: main area -->
+<div id="main">
+  <div id="dropZone">
+    <input type="file" id="fileInput"/>
+    <div class="dz-empty">
+      <div class="dz-icon">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       </div>
-    </details>
-
-    <div id="status">Charge un fichier pour armer l'envoi.</div>
-    <div id="stats"></div>
-    <div id="hint">Demarrer = plein ecran auto. ESC ou Espace pour arreter.</div>
+      <div class="dz-title">Drop a file to send</div>
+      <div class="dz-hint">or click anywhere to browse</div>
+    </div>
+    <div class="dz-loaded">
+      <div class="file-card">
+        <div class="file-icon">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div>
+          <div class="file-name" id="fileName">--</div>
+          <div class="file-meta">
+            <span id="fileSize">--</span>
+            <span id="fileChunks">--</span>
+          </div>
+        </div>
+        <div class="change-btn">
+          Change
+          <input type="file" id="fileInputAlt"/>
+        </div>
+      </div>
+      <div class="info-row" id="infoRow">
+        <div class="chip">Profile: <span class="cv" id="chipProfile">Balanced</span></div>
+        <div class="chip">Throughput: <span class="cv" id="chipSpeed">--</span></div>
+        <div class="chip">FPS: <span class="cv" id="chipFps">--</span></div>
+      </div>
+    </div>
   </div>
 
+  <div id="startBar">
+    <button id="startBtn" disabled>Start transmission</button>
+    <button id="stopBtn" disabled>
+      <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+    </button>
+  </div>
+  <div class="shortcut-hint">Space to start / stop &middot; Esc to cancel</div>
+</div>
+
+<!-- Right: settings sidebar -->
+<div id="side">
+  <div>
+    <div class="side-label">Profile</div>
+    <select class="side-select" id="profileSelect" style="width:100%">
+      <option value="speed">Speed — 1080p @240fps</option>
+      <option value="balanced" selected>Balanced — 1080p @60fps</option>
+      <option value="quality">Quality — 4K @30fps</option>
+      <option value="custom">Custom</option>
+    </select>
+  </div>
+
+  <div>
+    <button class="adv-toggle" id="advToggle">
+      <span class="arr">&#x25B6;</span> Advanced
+    </button>
+    <div class="adv-body" id="advBody">
+      <div class="side-row">
+        <span class="side-key">Resolution</span>
+        <select class="side-select" id="resolutionSelect">
+          <option value="1920x1080">1920x1080</option>
+          <option value="3840x2160">3840x2160</option>
+        </select>
+      </div>
+      <div class="side-row">
+        <span class="side-key">Block size</span>
+        <select class="side-select" id="blockSizeSelect">
+          <option value="4">4 px</option>
+          <option value="8" selected>8 px</option>
+          <option value="16">16 px</option>
+        </select>
+      </div>
+      <div class="side-row">
+        <span class="side-key">FPS mode</span>
+        <select class="side-select" id="fpsModeSelect">
+          <option value="auto">Auto-detect</option>
+          <option value="profile">Profile default</option>
+          <option value="manual">Manual</option>
+        </select>
+      </div>
+      <div class="side-row" id="manualRow" style="display:none">
+        <span class="side-key">Manual FPS</span>
+        <input type="number" class="side-input" id="manualFpsInput" min="1" max="360" value="60"/>
+      </div>
+      <div class="side-note" id="configWarning" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="side-sep"></div>
+
+  <div class="side-note ok" id="detectedHz">Detecting refresh rate...</div>
+  <div class="side-note" id="derivedStats"></div>
+
+  <div style="flex:1"></div>
+
+  <div>
+    <div class="side-label">Session</div>
+    <div class="side-stats">
+      <div class="ss"><span class="ss-label">Status</span><span class="ss-val dim" id="statusLabel">Idle</span></div>
+      <div class="ss"><span class="ss-label">Frames</span><span class="ss-val" id="headerFrames">0</span></div>
+      <div class="ss"><span class="ss-label">Chunks</span><span class="ss-val" id="headerK">--</span></div>
+      <div class="ss"><span class="ss-label">Elapsed</span><span class="ss-val" id="headerTime">00:00</span></div>
+      <div class="ss"><span class="ss-label">FPS</span><span class="ss-val dim" id="headerFps">--</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Canvas (fullscreen only) -->
+<div id="canvas-wrap">
   <canvas id="canvas" width="1920" height="1080"></canvas>
+</div>
 
-  <script>
-    (() => {
-      // ---------------------------------------------------------------
-      // Protocol constants (immutable)
-      // ---------------------------------------------------------------
-      const FOUNTAIN_MAGIC = 0xF0C0;
-      const HEADER_LEN = 12; // magic(2) + seed(4) + K(2) + crc32(4)
+<!-- HUD during fullscreen -->
+<div id="hud">
+  <span>FPS: <span class="hv" id="hudFps">--</span></span>
+  <span>Frames: <span class="hv" id="hudFrames">0</span></span>
+  <span>K: <span class="hv" id="hudK">0</span></span>
+  <span><span class="hv" id="hudTime">00:00</span></span>
+</div>
 
-      // ---------------------------------------------------------------
-      // Profiles (must match Python config.py PROFILES exactly)
-      // ---------------------------------------------------------------
-      const PROFILES = {
-        speed:    { name: "speed",    width: 1920, height: 1080, blockSize: 8, targetFps: 240 },
-        balanced: { name: "balanced", width: 1920, height: 1080, blockSize: 8, targetFps: 60 },
-        quality:  { name: "quality",  width: 3840, height: 2160, blockSize: 8, targetFps: 30 },
-      };
+<script>
+(() => {
+  const FOUNTAIN_MAGIC = 0xF0C0;
+  const HEADER_LEN = 12;
 
-      // ---------------------------------------------------------------
-      // Mutable config (recalculated by recalcDerived)
-      // ---------------------------------------------------------------
-      const config = {
-        profileName: "balanced",
-        width: 1920,
-        height: 1080,
-        blockSize: 8,
-        targetFps: 60,
-        fpsMode: "auto",       // "auto" | "profile" | "manual"
-        manualFps: 60,
-        detectedHz: null,
-        // Derived (set by recalcDerived)
-        cols: 0,
-        rows: 0,
-        bitsPerFrame: 0,
-        bytesPerFrame: 0,
-        payloadSize: 0,
-      };
+  const PROFILES = {
+    speed:    { name: "speed",    width: 1920, height: 1080, blockSize: 8, targetFps: 240 },
+    balanced: { name: "balanced", width: 1920, height: 1080, blockSize: 8, targetFps: 60 },
+    quality:  { name: "quality",  width: 3840, height: 2160, blockSize: 8, targetFps: 30 },
+  };
 
-      function recalcDerived() {
-        config.cols = config.width / config.blockSize;
-        config.rows = config.height / config.blockSize;
-        config.bitsPerFrame = config.rows * config.cols * 3;
-        config.bytesPerFrame = config.bitsPerFrame / 8;
-        config.payloadSize = config.bytesPerFrame - HEADER_LEN;
-      }
+  const config = {
+    profileName: "balanced", width: 1920, height: 1080, blockSize: 8,
+    targetFps: 60, fpsMode: "auto", manualFps: 60, detectedHz: null,
+    cols: 0, rows: 0, bitsPerFrame: 0, bytesPerFrame: 0, payloadSize: 0,
+  };
 
-      function getEffectiveFps() {
-        const maxHz = config.detectedHz || 60;
-        let fps;
-        if (config.fpsMode === "manual") fps = config.manualFps;
-        else if (config.fpsMode === "profile") {
-          const p = PROFILES[config.profileName];
-          fps = p ? p.targetFps : 60;
-        } else {
-          fps = maxHz; // "auto"
-        }
-        return Math.min(fps, maxHz);
-      }
+  function recalcDerived() {
+    config.cols = config.width / config.blockSize;
+    config.rows = config.height / config.blockSize;
+    config.bitsPerFrame = config.rows * config.cols * 3;
+    config.bytesPerFrame = config.bitsPerFrame / 8;
+    config.payloadSize = config.bytesPerFrame - HEADER_LEN;
+  }
 
-      // ---------------------------------------------------------------
-      // Refresh rate detection via rAF timestamps
-      // ---------------------------------------------------------------
-      function detectRefreshRate() {
-        return new Promise((resolve) => {
-          const samples = [];
-          let lastTime = 0;
-          let frameCount = 0;
-          const TARGET_FRAMES = 90;
+  function getEffectiveFps() {
+    const maxHz = config.detectedHz || 60;
+    let fps;
+    if (config.fpsMode === "manual") fps = config.manualFps;
+    else if (config.fpsMode === "profile") {
+      const p = PROFILES[config.profileName];
+      fps = p ? p.targetFps : 60;
+    } else fps = maxHz;
+    return Math.min(fps, maxHz);
+  }
 
-          function measure(timestamp) {
-            if (lastTime > 0) {
-              samples.push(timestamp - lastTime);
-            }
-            lastTime = timestamp;
-            frameCount++;
-            if (frameCount < TARGET_FRAMES) {
-              requestAnimationFrame(measure);
-            } else {
-              const valid = samples.slice(5); // discard warmup
-              valid.sort((a, b) => a - b);
-              const median = valid[Math.floor(valid.length / 2)];
-              const hz = Math.round(1000 / median);
-              const common = [30, 60, 75, 90, 100, 120, 144, 165, 180, 240, 360];
-              const snapped = common.reduce((best, rate) =>
-                Math.abs(rate - hz) < Math.abs(best - hz) ? rate : best
-              );
-              resolve(snapped);
-            }
-          }
-          requestAnimationFrame(measure);
-        });
-      }
-
-      // ---------------------------------------------------------------
-      // CRC32 lookup table (IEEE 802.3 polynomial 0xEDB88320)
-      // ---------------------------------------------------------------
-      const CRC32_TABLE = new Uint32Array(256);
-      for (let i = 0; i < 256; i++) {
-        let c = i;
-        for (let j = 0; j < 8; j++) {
-          c = (c & 1) ? ((c >>> 1) ^ 0xEDB88320) : (c >>> 1);
-        }
-        CRC32_TABLE[i] = c >>> 0;
-      }
-
-      function crc32(bytes) {
-        let crc = 0xFFFFFFFF;
-        for (let i = 0; i < bytes.length; i++) {
-          crc = CRC32_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
-        }
-        return (crc ^ 0xFFFFFFFF) >>> 0;
-      }
-
-      async function computeSHA256(uint8Array) {
-        const hashBuffer = await crypto.subtle.digest('SHA-256', uint8Array);
-        return new Uint8Array(hashBuffer);
-      }
-
-      // ---------------------------------------------------------------
-      // DOM references
-      // ---------------------------------------------------------------
-      const canvas = document.getElementById("canvas");
-      const ctx = canvas.getContext("2d", { alpha: false });
-      ctx.imageSmoothingEnabled = false;
-
-      let imageData = ctx.createImageData(config.width, config.height);
-      let buf = new Uint32Array(imageData.data.buffer);
-
-      const controls = document.getElementById("controls");
-      const fileInput = document.getElementById("fileInput");
-      const startBtn = document.getElementById("startBtn");
-      const stopBtn = document.getElementById("stopBtn");
-      const toggleUiBtn = document.getElementById("toggleUiBtn");
-      const statusEl = document.getElementById("status");
-      const statsEl = document.getElementById("stats");
-
-      const profileSelect = document.getElementById("profileSelect");
-      const resolutionSelect = document.getElementById("resolutionSelect");
-      const blockSizeSelect = document.getElementById("blockSizeSelect");
-      const fpsModeSelect = document.getElementById("fpsModeSelect");
-      const manualFpsInput = document.getElementById("manualFpsInput");
-      const detectedHzEl = document.getElementById("detectedHz");
-      const derivedStatsEl = document.getElementById("derivedStats");
-      const configWarningEl = document.getElementById("configWarning");
-
-      const textEncoder = new TextEncoder();
-
-      // ---------------------------------------------------------------
-      // State
-      // ---------------------------------------------------------------
-      const state = {
-        chunks: [],
-        K: 0,
-        seed: 1,
-        frame: 0,
-        running: false,
-        bits: new Uint8Array(config.bitsPerFrame),
-        raf: null,
-        rawWrapped: null,  // stored for re-slicing on config change
-        fileName: null,
-        fileSize: 0,
-      };
-
-      // ---------------------------------------------------------------
-      // Config validation
-      // ---------------------------------------------------------------
-      function validateConfig() {
-        if (config.width % config.blockSize !== 0 || config.height % config.blockSize !== 0) {
-          configWarningEl.textContent =
-            `${config.width}x${config.height} non divisible par block size ${config.blockSize}`;
-          configWarningEl.style.display = "block";
-          return false;
-        }
-        configWarningEl.style.display = "none";
-        return true;
-      }
-
-      // ---------------------------------------------------------------
-      // Apply config changes
-      // ---------------------------------------------------------------
-      function applyConfig() {
-        recalcDerived();
-
-        const valid = validateConfig();
-
-        canvas.width = config.width;
-        canvas.height = config.height;
-        imageData = ctx.createImageData(config.width, config.height);
-        buf = new Uint32Array(imageData.data.buffer);
-        state.bits = new Uint8Array(config.bitsPerFrame);
-
-        // Re-slice file if loaded
-        if (state.rawWrapped) {
-          const { K, chunks } = sliceIntoChunks(state.rawWrapped);
-          state.chunks = chunks;
-          state.K = K;
-          state.seed = 1;
-          state.frame = 0;
-          startBtn.disabled = !valid;
-          setStatus(`Reconfigure: ${state.fileName} (${state.fileSize} o). K=${K}, chunk=${config.payloadSize} o.`);
-          updateStats();
-        } else {
-          startBtn.disabled = true;
-        }
-
-        updateDerivedStats();
-        saveSettings();
-        drawBits(new Uint8Array(config.bitsPerFrame));
-      }
-
-      // ---------------------------------------------------------------
-      // Settings persistence (localStorage)
-      // ---------------------------------------------------------------
-      const STORAGE_KEY = "hdmi_exfil_sender_settings";
-
-      function saveSettings() {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            profileName: config.profileName,
-            width: config.width,
-            height: config.height,
-            blockSize: config.blockSize,
-            fpsMode: config.fpsMode,
-            manualFps: config.manualFps,
-          }));
-        } catch (e) { /* ignore */ }
-      }
-
-      function loadSettings() {
-        try {
-          const raw = localStorage.getItem(STORAGE_KEY);
-          if (!raw) return;
-          const d = JSON.parse(raw);
-          if (d.profileName && PROFILES[d.profileName]) {
-            const p = PROFILES[d.profileName];
-            config.profileName = d.profileName;
-            config.width = p.width;
-            config.height = p.height;
-            config.blockSize = p.blockSize;
-            config.targetFps = p.targetFps;
-          } else if (d.profileName === "custom") {
-            config.profileName = "custom";
-            if (d.width) config.width = d.width;
-            if (d.height) config.height = d.height;
-            if (d.blockSize) config.blockSize = d.blockSize;
-          }
-          if (d.fpsMode) config.fpsMode = d.fpsMode;
-          if (d.manualFps) config.manualFps = d.manualFps;
-        } catch (e) { /* ignore */ }
-      }
-
-      // ---------------------------------------------------------------
-      // Derived stats display
-      // ---------------------------------------------------------------
-      function updateDerivedStats() {
-        const fps = getEffectiveFps();
-        const throughput = config.payloadSize * fps;
-        const kbps = (throughput / 1024).toFixed(1);
-        derivedStatsEl.innerHTML = [
-          `Grille: ${config.cols} x ${config.rows} blocs`,
-          `Octets/frame: ${config.bytesPerFrame} (payload: ${config.payloadSize})`,
-          `FPS effectif: ${fps} (max: ${config.detectedHz || "?"} Hz)`,
-          `Debit: ~${kbps} KB/s`,
-        ].join("<br>");
-      }
-
-      // ---------------------------------------------------------------
-      // Lock/unlock settings during send
-      // ---------------------------------------------------------------
-      function setSettingsEnabled(enabled) {
-        profileSelect.disabled = !enabled;
-        resolutionSelect.disabled = !enabled;
-        blockSizeSelect.disabled = !enabled;
-        fpsModeSelect.disabled = !enabled;
-        manualFpsInput.disabled = !enabled;
-      }
-
-      // ---------------------------------------------------------------
-      // Core helpers
-      // ---------------------------------------------------------------
-      function setStatus(msg) {
-        statusEl.textContent = msg;
-      }
-
-      function updateStats() {
-        statsEl.textContent = `Frames: ${state.frame} | Seed: ${state.seed} | K: ${state.K} | Chunk: ${config.payloadSize} o`;
-      }
-
-      function wrapWithMetadata(file, rawBytes, sha256Hash) {
-        const nameBytes = textEncoder.encode((file && file.name) || "payload.bin");
-        const total = 4 + 32 + 2 + nameBytes.length + rawBytes.length;
-        const out = new Uint8Array(total);
-        const view = new DataView(out.buffer);
-
-        let offset = 0;
-        view.setUint32(offset, rawBytes.length, false);
-        offset += 4;
-        out.set(sha256Hash, offset);
-        offset += 32;
-        view.setUint16(offset, nameBytes.length, false);
-        offset += 2;
-        out.set(nameBytes, offset);
-        offset += nameBytes.length;
-        out.set(rawBytes, offset);
-
-        return out;
-      }
-
-      function sliceIntoChunks(bytes) {
-        const ps = config.payloadSize;
-        const K = Math.ceil(bytes.length / ps);
-        const chunks = new Array(K);
-        for (let i = 0; i < K; i++) {
-          const start = i * ps;
-          const end = Math.min(start + ps, bytes.length);
-          const chunk = new Uint8Array(ps);
-          chunk.set(bytes.subarray(start, end));
-          chunks[i] = chunk;
-        }
-        return { K, chunks };
-      }
-
-      // ---------------------------------------------------------------
-      // PRNG + Robust Soliton (unchanged)
-      // ---------------------------------------------------------------
-      function createPRNG(seed) {
-        let a = seed >>> 0;
-        return () => {
-          a = (a + 0x9e3779b9) >>> 0;
-          let t = a ^ (a >>> 16);
-          t = Math.imul(t, 0x21f0aaad) >>> 0;
-          t ^= t >>> 15;
-          t = Math.imul(t, 0x735a2d97) >>> 0;
-          t ^= t >>> 15;
-          return t >>> 0;
-        };
-      }
-
-      const RSD_C = 0.1;
-      const RSD_DELTA = 0.05;
-
-      function robustSolitonCdf(K) {
-        if (K === 1) return [0.0, 1.0];
-        const rho = new Array(K + 1).fill(0);
-        rho[1] = 1.0 / K;
-        for (let d = 2; d <= K; d++) rho[d] = 1.0 / (d * (d - 1));
-        const S = RSD_C * Math.log(K / RSD_DELTA) * Math.sqrt(K);
-        const pivot = Math.max(1, Math.floor(K / S));
-        const tau = new Array(K + 1).fill(0);
-        for (let d = 1; d < Math.min(pivot, K + 1); d++) tau[d] = S / (K * d);
-        if (pivot <= K) tau[pivot] += (S / K) * Math.log(S / RSD_DELTA);
-        let Z = 0;
-        for (let d = 1; d <= K; d++) Z += rho[d] + tau[d];
-        const cdf = new Array(K + 1).fill(0);
-        let cumulative = 0;
-        for (let d = 1; d <= K; d++) {
-          cumulative += (rho[d] + tau[d]) / Z;
-          cdf[d] = cumulative;
-        }
-        cdf[K] = 1.0;
-        return cdf;
-      }
-
-      function sampleDegree(cdf, r) {
-        let lo = 1, hi = cdf.length - 1;
-        while (lo < hi) {
-          const mid = (lo + hi) >> 1;
-          if (cdf[mid] < r) lo = mid + 1;
-          else hi = mid;
-        }
-        return Math.max(1, Math.min(lo, cdf.length - 1));
-      }
-
-      function chooseIndices(seed, K) {
-        const next = createPRNG(seed);
-        const cdf = robustSolitonCdf(K);
-        const r = next() / 0x100000000;
-        let degree = sampleDegree(cdf, r);
-        degree = Math.min(degree, K);
-        const indices = new Set();
-        while (indices.size < degree) {
-          indices.add(next() % K);
-        }
-        return Array.from(indices);
-      }
-
-      function buildDroplet(seed) {
-        const ps = config.payloadSize;
-        const idxs = chooseIndices(seed, state.K);
-        const payload = new Uint8Array(ps);
-        for (const idx of idxs) {
-          const chunk = state.chunks[idx];
-          for (let i = 0; i < ps; i++) {
-            payload[i] ^= chunk[i];
-          }
-        }
-        return payload;
-      }
-
-      // ---------------------------------------------------------------
-      // Encoding: bytes -> bits -> pixels
-      // ---------------------------------------------------------------
-      function bytesToBits(bytes) {
-        let bitPos = 0;
-        for (let i = 0; i < bytes.length; i++) {
-          const byte = bytes[i];
-          state.bits[bitPos++] = (byte >> 7) & 1;
-          state.bits[bitPos++] = (byte >> 6) & 1;
-          state.bits[bitPos++] = (byte >> 5) & 1;
-          state.bits[bitPos++] = (byte >> 4) & 1;
-          state.bits[bitPos++] = (byte >> 3) & 1;
-          state.bits[bitPos++] = (byte >> 2) & 1;
-          state.bits[bitPos++] = (byte >> 1) & 1;
-          state.bits[bitPos++] = byte & 1;
+  // ── Refresh rate detection ─────────────
+  function detectRefreshRate() {
+    return new Promise((resolve) => {
+      const samples = []; let lastTime = 0, frameCount = 0;
+      function measure(ts) {
+        if (lastTime > 0) samples.push(ts - lastTime);
+        lastTime = ts; frameCount++;
+        if (frameCount < 90) requestAnimationFrame(measure);
+        else {
+          const valid = samples.slice(5).sort((a, b) => a - b);
+          const median = valid[Math.floor(valid.length / 2)];
+          const hz = Math.round(1000 / median);
+          const common = [30,60,75,90,100,120,144,165,180,240,360];
+          resolve(common.reduce((b, r) => Math.abs(r - hz) < Math.abs(b - hz) ? r : b));
         }
       }
+      requestAnimationFrame(measure);
+    });
+  }
 
-      function drawBits(bits) {
-        const W = config.width;
-        const BS = config.blockSize;
-        const R = config.rows;
-        const C = config.cols;
-        let bitIdx = 0;
-        for (let r = 0; r < R; r++) {
-          const startY = r * BS;
-          for (let c = 0; c < C; c++) {
-            const rBit = bits[bitIdx++];
-            const gBit = bits[bitIdx++];
-            const bBit = bits[bitIdx++];
-            // ABGR uint32 (little-endian: 0xAABBGGRR)
-            const color = 0xFF000000
-              | ((bBit ? 0xFF : 0x00) << 16)
-              | ((gBit ? 0xFF : 0x00) << 8)
-              | (rBit ? 0xFF : 0x00);
-            const startX = c * BS;
-            for (let y = 0; y < BS; y++) {
-              const rowOffset = (startY + y) * W + startX;
-              buf.fill(color, rowOffset, rowOffset + BS);
-            }
-          }
-        }
-        ctx.putImageData(imageData, 0, 0);
-      }
+  // ── CRC32 ──────────────────────────────
+  const CRC32_TABLE = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = (c & 1) ? ((c >>> 1) ^ 0xEDB88320) : (c >>> 1);
+    CRC32_TABLE[i] = c >>> 0;
+  }
+  function crc32(bytes) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) crc = CRC32_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  async function computeSHA256(uint8Array) {
+    return new Uint8Array(await crypto.subtle.digest('SHA-256', uint8Array));
+  }
 
-      // ---------------------------------------------------------------
-      // Render loop with FPS throttle
-      // ---------------------------------------------------------------
-      let lastFrameTime = 0;
+  // ── DOM ────────────────────────────────
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  ctx.imageSmoothingEnabled = false;
+  let imageData = ctx.createImageData(config.width, config.height);
+  let buf = new Uint32Array(imageData.data.buffer);
 
-      function renderFrame() {
-        const seed = state.seed >>> 0;
-        const payload = buildDroplet(seed);
+  const canvasWrap = document.getElementById("canvas-wrap");
+  const hud = document.getElementById("hud");
 
-        const frameBytes = new Uint8Array(config.bytesPerFrame);
-        const view = new DataView(frameBytes.buffer);
+  const dropZone = document.getElementById("dropZone");
+  const fileInput = document.getElementById("fileInput");
+  const fileInputAlt = document.getElementById("fileInputAlt");
+  const fileNameEl = document.getElementById("fileName");
+  const fileSizeEl = document.getElementById("fileSize");
+  const fileChunksEl = document.getElementById("fileChunks");
+  const chipProfile = document.getElementById("chipProfile");
+  const chipSpeed = document.getElementById("chipSpeed");
+  const chipFps = document.getElementById("chipFps");
 
-        view.setUint16(0, FOUNTAIN_MAGIC, false);
-        view.setUint32(2, seed, false);
-        view.setUint16(6, state.K, false);
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn = document.getElementById("stopBtn");
 
-        frameBytes.set(payload, HEADER_LEN);
+  const profileSelect = document.getElementById("profileSelect");
+  const resolutionSelect = document.getElementById("resolutionSelect");
+  const blockSizeSelect = document.getElementById("blockSizeSelect");
+  const fpsModeSelect = document.getElementById("fpsModeSelect");
+  const manualFpsInput = document.getElementById("manualFpsInput");
+  const manualRow = document.getElementById("manualRow");
+  const detectedHzEl = document.getElementById("detectedHz");
+  const derivedStatsEl = document.getElementById("derivedStats");
+  const configWarningEl = document.getElementById("configWarning");
+  const advToggle = document.getElementById("advToggle");
+  const advBody = document.getElementById("advBody");
 
-        const crcData = new Uint8Array(8 + payload.length);
-        crcData.set(frameBytes.subarray(0, 8));
-        crcData.set(payload, 8);
-        const crcValue = crc32(crcData);
-        view.setUint32(8, crcValue, false);
+  const statusLabel = document.getElementById("statusLabel");
+  const headerFrames = document.getElementById("headerFrames");
+  const headerK = document.getElementById("headerK");
+  const headerTime = document.getElementById("headerTime");
+  const headerFps = document.getElementById("headerFps");
+  const hudFps = document.getElementById("hudFps");
+  const hudFrames = document.getElementById("hudFrames");
+  const hudK = document.getElementById("hudK");
+  const hudTime = document.getElementById("hudTime");
 
-        bytesToBits(frameBytes);
-        drawBits(state.bits);
+  const textEncoder = new TextEncoder();
 
-        state.seed = (state.seed + 1) >>> 0;
-        if (state.seed === 0) state.seed = 1;
-        state.frame += 1;
-        if (state.frame % 30 === 0) updateStats();
-      }
+  // ── State ──────────────────────────────
+  const state = {
+    chunks: [], K: 0, seed: 1, frame: 0, running: false,
+    bits: new Uint8Array(config.bitsPerFrame), raf: null,
+    rawWrapped: null, fileName: null, fileSize: 0, startTime: 0,
+  };
 
-      function renderLoop(timestamp) {
-        if (!state.running) return;
+  // ── Config ─────────────────────────────
+  function validateConfig() {
+    if (config.width % config.blockSize !== 0 || config.height % config.blockSize !== 0) {
+      configWarningEl.textContent = `${config.width}x${config.height} not divisible by block size ${config.blockSize}`;
+      configWarningEl.style.display = "block";
+      configWarningEl.className = "side-note warn";
+      return false;
+    }
+    configWarningEl.style.display = "none";
+    return true;
+  }
 
-        const effectiveFps = getEffectiveFps();
-        const monitorHz = config.detectedHz || 60;
+  function applyConfig() {
+    recalcDerived();
+    const valid = validateConfig();
+    canvas.width = config.width; canvas.height = config.height;
+    imageData = ctx.createImageData(config.width, config.height);
+    buf = new Uint32Array(imageData.data.buffer);
+    state.bits = new Uint8Array(config.bitsPerFrame);
+    if (state.rawWrapped) {
+      const { K, chunks } = sliceIntoChunks(state.rawWrapped);
+      state.chunks = chunks; state.K = K; state.seed = 1; state.frame = 0;
+      startBtn.disabled = !valid;
+      headerK.textContent = K; hudK.textContent = K;
+      fileChunksEl.textContent = K + " chunks";
+    } else { startBtn.disabled = true; }
+    updateDerivedStats(); updateChips(); saveSettings();
+  }
 
-        if (effectiveFps >= monitorHz) {
-          // No throttle: render every rAF
-          renderFrame();
-        } else {
-          // Skip frames if not enough time elapsed
-          const interval = 1000 / effectiveFps;
-          if (timestamp - lastFrameTime >= interval * 0.95) {
-            renderFrame();
-            lastFrameTime = timestamp;
-          }
-        }
-
-        state.raf = requestAnimationFrame(renderLoop);
-      }
-
-      // ---------------------------------------------------------------
-      // Start / Stop
-      // ---------------------------------------------------------------
-      function stopSending() {
-        state.running = false;
-        if (state.raf) cancelAnimationFrame(state.raf);
-        if (document.fullscreenElement) document.exitFullscreen();
-        controls.classList.remove("hidden");
-        startBtn.disabled = !state.chunks.length;
-        stopBtn.disabled = true;
-        setSettingsEnabled(true);
-        setStatus("Envoi arrete.");
-      }
-
-      // ---------------------------------------------------------------
-      // Event listeners
-      // ---------------------------------------------------------------
-      fileInput.addEventListener("change", (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const raw = new Uint8Array(reader.result);
-          const sha256Hash = await computeSHA256(raw);
-          const wrapped = wrapWithMetadata(file, raw, sha256Hash);
-
-          state.rawWrapped = wrapped;
-          state.fileName = file.name;
-          state.fileSize = raw.length;
-
-          const { K, chunks } = sliceIntoChunks(wrapped);
-          state.chunks = chunks;
-          state.K = K;
-          state.seed = 1;
-          state.frame = 0;
-          startBtn.disabled = false;
-          stopBtn.disabled = true;
-          setStatus(`Pret: ${file.name} (${raw.length} o). K=${K}, chunk=${config.payloadSize} o. SHA-256: ${Array.from(sha256Hash.slice(0, 4)).map(b => b.toString(16).padStart(2, '0')).join('')}...`);
-          updateStats();
-        };
-        reader.readAsArrayBuffer(file);
-      });
-
-      startBtn.addEventListener("click", () => {
-        if (!state.chunks.length) return;
-        if (!validateConfig()) return;
-        state.running = true;
-        state.seed = 1;
-        state.frame = 0;
-        lastFrameTime = 0;
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        setSettingsEnabled(false);
-        controls.classList.add("hidden");
-        setStatus("Envoi en cours... (ESC pour arreter)");
-        document.documentElement.requestFullscreen().catch(() => {});
-        renderLoop(0);
-      });
-
-      stopBtn.addEventListener("click", stopSending);
-
-      toggleUiBtn.addEventListener("click", () => {
-        controls.classList.toggle("hidden");
-      });
-
-      document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          if (state.running) stopSending();
-        } else if (e.key === " ") {
-          e.preventDefault();
-          if (state.running) {
-            stopSending();
-          } else if (state.chunks.length) {
-            startBtn.click();
-          }
-        } else if (e.key.toLowerCase() === "h") {
-          controls.classList.toggle("hidden");
-        }
-      });
-
-      // ---------------------------------------------------------------
-      // Settings event listeners
-      // ---------------------------------------------------------------
-      profileSelect.addEventListener("change", () => {
-        const name = profileSelect.value;
-        if (name === "custom") return;
-        const p = PROFILES[name];
-        config.profileName = name;
-        config.width = p.width;
-        config.height = p.height;
-        config.blockSize = p.blockSize;
-        config.targetFps = p.targetFps;
-        resolutionSelect.value = `${p.width}x${p.height}`;
-        blockSizeSelect.value = String(p.blockSize);
-        if (config.fpsMode === "profile") {
-          config.manualFps = p.targetFps;
-          manualFpsInput.value = p.targetFps;
-        }
-        applyConfig();
-      });
-
-      resolutionSelect.addEventListener("change", () => {
-        const [w, h] = resolutionSelect.value.split("x").map(Number);
-        config.width = w;
-        config.height = h;
-        profileSelect.value = "custom";
+  const STORAGE_KEY = "hdmi_exfil_sender_settings";
+  function saveSettings() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      profileName: config.profileName, width: config.width, height: config.height,
+      blockSize: config.blockSize, fpsMode: config.fpsMode, manualFps: config.manualFps,
+    })); } catch(e) {}
+  }
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.profileName && PROFILES[d.profileName]) {
+        const p = PROFILES[d.profileName];
+        Object.assign(config, { profileName: d.profileName, width: p.width, height: p.height, blockSize: p.blockSize, targetFps: p.targetFps });
+      } else if (d.profileName === "custom") {
         config.profileName = "custom";
-        applyConfig();
+        if (d.width) config.width = d.width; if (d.height) config.height = d.height;
+        if (d.blockSize) config.blockSize = d.blockSize;
+      }
+      if (d.fpsMode) config.fpsMode = d.fpsMode;
+      if (d.manualFps) config.manualFps = d.manualFps;
+    } catch(e) {}
+  }
+
+  function fmtSize(b) {
+    if (b < 1024) return b + " B";
+    if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
+    return (b / 1048576).toFixed(2) + " MB";
+  }
+
+  function updateDerivedStats() {
+    const fps = getEffectiveFps();
+    const kbps = (config.payloadSize * fps / 1024).toFixed(1);
+    derivedStatsEl.innerHTML =
+      `${config.cols}x${config.rows} blocks &middot; ${config.payloadSize} B/frame<br>` +
+      `~${kbps} KB/s throughput`;
+    hudFps.textContent = fps;
+    headerFps.textContent = fps;
+  }
+
+  function updateChips() {
+    const fps = getEffectiveFps();
+    const kbps = (config.payloadSize * fps / 1024).toFixed(1);
+    const names = { speed: "Speed", balanced: "Balanced", quality: "Quality", custom: "Custom" };
+    chipProfile.textContent = names[config.profileName] || config.profileName;
+    chipSpeed.textContent = "~" + kbps + " KB/s";
+    chipFps.textContent = fps + " fps";
+  }
+
+  function setSettingsEnabled(enabled) {
+    [profileSelect, resolutionSelect, blockSizeSelect, fpsModeSelect, manualFpsInput].forEach(el => el.disabled = !enabled);
+  }
+
+  // ── Core helpers ───────────────────────
+  function wrapWithMetadata(file, rawBytes, sha256Hash) {
+    const nameBytes = textEncoder.encode((file && file.name) || "payload.bin");
+    const total = 4 + 32 + 2 + nameBytes.length + rawBytes.length;
+    const out = new Uint8Array(total); const view = new DataView(out.buffer);
+    let offset = 0;
+    view.setUint32(offset, rawBytes.length, false); offset += 4;
+    out.set(sha256Hash, offset); offset += 32;
+    view.setUint16(offset, nameBytes.length, false); offset += 2;
+    out.set(nameBytes, offset); offset += nameBytes.length;
+    out.set(rawBytes, offset);
+    return out;
+  }
+
+  function sliceIntoChunks(bytes) {
+    const ps = config.payloadSize;
+    const K = Math.ceil(bytes.length / ps);
+    const chunks = new Array(K);
+    for (let i = 0; i < K; i++) {
+      const chunk = new Uint8Array(ps);
+      chunk.set(bytes.subarray(i * ps, Math.min((i + 1) * ps, bytes.length)));
+      chunks[i] = chunk;
+    }
+    return { K, chunks };
+  }
+
+  // ── PRNG + Robust Soliton ─────────────
+  function createPRNG(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x9e3779b9) >>> 0;
+      let t = a ^ (a >>> 16); t = Math.imul(t, 0x21f0aaad) >>> 0;
+      t ^= t >>> 15; t = Math.imul(t, 0x735a2d97) >>> 0; t ^= t >>> 15;
+      return t >>> 0;
+    };
+  }
+  const RSD_C = 0.1, RSD_DELTA = 0.05;
+  function robustSolitonCdf(K) {
+    if (K === 1) return [0.0, 1.0];
+    const rho = new Array(K+1).fill(0); rho[1] = 1.0/K;
+    for (let d = 2; d <= K; d++) rho[d] = 1.0/(d*(d-1));
+    const S = RSD_C * Math.log(K/RSD_DELTA) * Math.sqrt(K);
+    const pivot = Math.max(1, Math.floor(K/S));
+    const tau = new Array(K+1).fill(0);
+    for (let d = 1; d < Math.min(pivot,K+1); d++) tau[d] = S/(K*d);
+    if (pivot <= K) tau[pivot] += (S/K)*Math.log(S/RSD_DELTA);
+    let Z = 0; for (let d = 1; d <= K; d++) Z += rho[d]+tau[d];
+    const cdf = new Array(K+1).fill(0); let cum = 0;
+    for (let d = 1; d <= K; d++) { cum += (rho[d]+tau[d])/Z; cdf[d] = cum; }
+    cdf[K] = 1.0; return cdf;
+  }
+  function sampleDegree(cdf, r) {
+    let lo = 1, hi = cdf.length-1;
+    while (lo < hi) { const mid = (lo+hi)>>1; if (cdf[mid] < r) lo = mid+1; else hi = mid; }
+    return Math.max(1, Math.min(lo, cdf.length-1));
+  }
+  function chooseIndices(seed, K) {
+    const next = createPRNG(seed); const cdf = robustSolitonCdf(K);
+    let degree = Math.min(sampleDegree(cdf, next()/0x100000000), K);
+    const indices = new Set();
+    while (indices.size < degree) indices.add(next() % K);
+    return Array.from(indices);
+  }
+  function buildDroplet(seed) {
+    const ps = config.payloadSize;
+    const idxs = chooseIndices(seed, state.K);
+    const payload = new Uint8Array(ps);
+    for (const idx of idxs) { const chunk = state.chunks[idx]; for (let i = 0; i < ps; i++) payload[i] ^= chunk[i]; }
+    return payload;
+  }
+
+  // ── Encoding ───────────────────────────
+  function bytesToBits(bytes) {
+    let p = 0;
+    for (let i = 0; i < bytes.length; i++) {
+      const b = bytes[i];
+      state.bits[p++]=(b>>7)&1; state.bits[p++]=(b>>6)&1; state.bits[p++]=(b>>5)&1; state.bits[p++]=(b>>4)&1;
+      state.bits[p++]=(b>>3)&1; state.bits[p++]=(b>>2)&1; state.bits[p++]=(b>>1)&1; state.bits[p++]=b&1;
+    }
+  }
+  function drawBits(bits) {
+    const W = config.width, BS = config.blockSize, R = config.rows, C = config.cols;
+    let bi = 0;
+    for (let r = 0; r < R; r++) { const sy = r*BS;
+      for (let c = 0; c < C; c++) {
+        const rB=bits[bi++], gB=bits[bi++], bB=bits[bi++];
+        const color = 0xFF000000|((bB?0xFF:0)<<16)|((gB?0xFF:0)<<8)|(rB?0xFF:0);
+        const sx = c*BS;
+        for (let y = 0; y < BS; y++) { const ro = (sy+y)*W+sx; buf.fill(color, ro, ro+BS); }
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  // ── Render loop ────────────────────────
+  let lastFrameTime = 0;
+  function renderFrame() {
+    const seed = state.seed >>> 0;
+    const payload = buildDroplet(seed);
+    const frameBytes = new Uint8Array(config.bytesPerFrame);
+    const view = new DataView(frameBytes.buffer);
+    view.setUint16(0, FOUNTAIN_MAGIC, false);
+    view.setUint32(2, seed, false);
+    view.setUint16(6, state.K, false);
+    frameBytes.set(payload, HEADER_LEN);
+    const crcData = new Uint8Array(8 + payload.length);
+    crcData.set(frameBytes.subarray(0, 8)); crcData.set(payload, 8);
+    view.setUint32(8, crc32(crcData), false);
+    bytesToBits(frameBytes); drawBits(state.bits);
+    state.seed = (state.seed + 1) >>> 0; if (state.seed === 0) state.seed = 1;
+    state.frame += 1;
+    if (state.frame % 20 === 0) {
+      hudFrames.textContent = state.frame;
+      headerFrames.textContent = state.frame;
+      const elapsed = (performance.now() - state.startTime) / 1000;
+      const m = Math.floor(elapsed / 60), s = Math.floor(elapsed % 60);
+      const t = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      hudTime.textContent = t;
+      headerTime.textContent = t;
+    }
+  }
+  function renderLoop(timestamp) {
+    if (!state.running) return;
+    const eFps = getEffectiveFps(), mHz = config.detectedHz || 60;
+    if (eFps >= mHz) renderFrame();
+    else { const interval = 1000/eFps; if (timestamp - lastFrameTime >= interval*0.95) { renderFrame(); lastFrameTime = timestamp; } }
+    state.raf = requestAnimationFrame(renderLoop);
+  }
+
+  // ── Start / Stop ───────────────────────
+  function startSending() {
+    if (!state.chunks.length || !validateConfig()) return;
+    state.running = true; state.seed = 1; state.frame = 0;
+    state.startTime = performance.now(); lastFrameTime = 0;
+    startBtn.disabled = true; stopBtn.disabled = false;
+    setSettingsEnabled(false);
+    statusLabel.textContent = "Transmitting";
+    statusLabel.classList.remove("dim");
+    statusLabel.style.color = "var(--green)";
+    canvasWrap.classList.add("active");
+    hud.classList.add("active");
+    document.documentElement.requestFullscreen().catch(() => {});
+    renderLoop(0);
+  }
+
+  function stopSending() {
+    state.running = false;
+    if (state.raf) cancelAnimationFrame(state.raf);
+    if (document.fullscreenElement) document.exitFullscreen();
+    drawBits(new Uint8Array(config.bitsPerFrame));
+    canvasWrap.classList.remove("active");
+    hud.classList.remove("active");
+    startBtn.disabled = !state.chunks.length; stopBtn.disabled = true;
+    setSettingsEnabled(true);
+    statusLabel.textContent = "Stopped";
+    statusLabel.classList.add("dim");
+    statusLabel.style.color = "";
+    headerFrames.textContent = state.frame;
+    const elapsed = (performance.now() - state.startTime) / 1000;
+    if (state.frame > 0 && state.fileName) {
+      saveHistory({
+        type: "sent", filename: state.fileName, size: state.fileSize,
+        duration: elapsed, speed: elapsed > 0 ? state.fileSize / elapsed : 0,
+        success: true, timestamp: Date.now(),
       });
+    }
+  }
 
-      blockSizeSelect.addEventListener("change", () => {
-        config.blockSize = Number(blockSizeSelect.value);
-        profileSelect.value = "custom";
-        config.profileName = "custom";
-        applyConfig();
-      });
+  function saveHistory(entry) {
+    try {
+      const key = "hdmi_exfil_history";
+      const items = JSON.parse(localStorage.getItem(key) || "[]");
+      items.push(entry);
+      if (items.length > 200) items.splice(0, items.length - 200);
+      localStorage.setItem(key, JSON.stringify(items));
+    } catch {}
+  }
 
-      fpsModeSelect.addEventListener("change", () => {
-        config.fpsMode = fpsModeSelect.value;
-        manualFpsInput.style.display = config.fpsMode === "manual" ? "inline-block" : "none";
-        if (config.fpsMode === "auto") {
-          config.targetFps = config.detectedHz || 60;
-        } else if (config.fpsMode === "profile") {
-          const p = PROFILES[config.profileName];
-          config.targetFps = p ? p.targetFps : 60;
-        }
-        updateDerivedStats();
-        saveSettings();
-      });
+  // ── File handling ──────────────────────
+  function handleFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const raw = new Uint8Array(reader.result);
+      const sha256Hash = await computeSHA256(raw);
+      const wrapped = wrapWithMetadata(file, raw, sha256Hash);
+      state.rawWrapped = wrapped; state.fileName = file.name; state.fileSize = raw.length;
+      const { K, chunks } = sliceIntoChunks(wrapped);
+      state.chunks = chunks; state.K = K; state.seed = 1; state.frame = 0;
+      startBtn.disabled = false; stopBtn.disabled = true;
 
-      manualFpsInput.addEventListener("change", () => {
-        const val = Math.max(1, Math.min(360, Number(manualFpsInput.value)));
-        config.manualFps = val;
-        config.targetFps = val;
-        manualFpsInput.value = val;
-        updateDerivedStats();
-        saveSettings();
-      });
+      fileNameEl.textContent = file.name;
+      fileSizeEl.textContent = fmtSize(raw.length);
+      fileChunksEl.textContent = K + " chunks";
+      headerK.textContent = K; hudK.textContent = K;
+      dropZone.classList.add("loaded");
+      updateChips();
+    };
+    reader.readAsArrayBuffer(file);
+  }
 
-      // ---------------------------------------------------------------
-      // Initialization
-      // ---------------------------------------------------------------
-      loadSettings();
-      recalcDerived();
+  fileInput.addEventListener("change", (e) => handleFile(e.target.files[0]));
+  fileInputAlt.addEventListener("change", (e) => handleFile(e.target.files[0]));
 
-      // Sync UI to loaded config
-      profileSelect.value = config.profileName;
-      resolutionSelect.value = `${config.width}x${config.height}`;
-      blockSizeSelect.value = String(config.blockSize);
-      fpsModeSelect.value = config.fpsMode;
-      manualFpsInput.value = config.manualFps;
-      manualFpsInput.style.display = config.fpsMode === "manual" ? "inline-block" : "none";
+  dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("dragover"); });
+  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+  dropZone.addEventListener("drop", (e) => {
+    e.preventDefault(); dropZone.classList.remove("dragover");
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
 
-      // Init canvas at config size
-      canvas.width = config.width;
-      canvas.height = config.height;
-      imageData = ctx.createImageData(config.width, config.height);
-      buf = new Uint32Array(imageData.data.buffer);
-      state.bits = new Uint8Array(config.bitsPerFrame);
+  startBtn.addEventListener("click", startSending);
+  stopBtn.addEventListener("click", stopSending);
 
-      validateConfig();
-      drawBits(new Uint8Array(config.bitsPerFrame));
-      setStatus("Charge un fichier pour armer l'envoi.");
-      updateStats();
-      updateDerivedStats();
+  advToggle.addEventListener("click", () => {
+    advToggle.classList.toggle("open");
+    advBody.classList.toggle("open");
+  });
 
-      // Detect refresh rate (async)
-      detectRefreshRate().then((hz) => {
-        config.detectedHz = hz;
-        detectedHzEl.textContent = `Moniteur: ${hz} Hz detecte`;
-        if (config.fpsMode === "auto") {
-          config.targetFps = hz;
-        }
-        updateDerivedStats();
-      });
-    })();
-  </script>
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); if (state.running) stopSending(); }
+    else if (e.key === " " && e.target === document.body) {
+      e.preventDefault();
+      if (state.running) stopSending();
+      else if (state.chunks.length) startSending();
+    }
+  });
+
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement && state.running) stopSending();
+  });
+
+  // ── Settings events ────────────────────
+  profileSelect.addEventListener("change", () => {
+    const name = profileSelect.value; if (name === "custom") return;
+    const p = PROFILES[name];
+    Object.assign(config, { profileName: name, width: p.width, height: p.height, blockSize: p.blockSize, targetFps: p.targetFps });
+    resolutionSelect.value = `${p.width}x${p.height}`;
+    blockSizeSelect.value = String(p.blockSize);
+    if (config.fpsMode === "profile") { config.manualFps = p.targetFps; manualFpsInput.value = p.targetFps; }
+    applyConfig();
+  });
+  resolutionSelect.addEventListener("change", () => {
+    const [w, h] = resolutionSelect.value.split("x").map(Number);
+    config.width = w; config.height = h;
+    profileSelect.value = "custom"; config.profileName = "custom";
+    applyConfig();
+  });
+  blockSizeSelect.addEventListener("change", () => {
+    config.blockSize = Number(blockSizeSelect.value);
+    profileSelect.value = "custom"; config.profileName = "custom";
+    applyConfig();
+  });
+  fpsModeSelect.addEventListener("change", () => {
+    config.fpsMode = fpsModeSelect.value;
+    manualRow.style.display = config.fpsMode === "manual" ? "" : "none";
+    if (config.fpsMode === "auto") config.targetFps = config.detectedHz || 60;
+    else if (config.fpsMode === "profile") { const p = PROFILES[config.profileName]; config.targetFps = p ? p.targetFps : 60; }
+    updateDerivedStats(); updateChips(); saveSettings();
+  });
+  manualFpsInput.addEventListener("change", () => {
+    const val = Math.max(1, Math.min(360, Number(manualFpsInput.value)));
+    config.manualFps = val; config.targetFps = val; manualFpsInput.value = val;
+    updateDerivedStats(); updateChips(); saveSettings();
+  });
+
+  // ── Init ───────────────────────────────
+  loadSettings(); recalcDerived();
+  profileSelect.value = config.profileName;
+  resolutionSelect.value = `${config.width}x${config.height}`;
+  blockSizeSelect.value = String(config.blockSize);
+  fpsModeSelect.value = config.fpsMode;
+  manualFpsInput.value = config.manualFps;
+  manualRow.style.display = config.fpsMode === "manual" ? "" : "none";
+  canvas.width = config.width; canvas.height = config.height;
+  imageData = ctx.createImageData(config.width, config.height);
+  buf = new Uint32Array(imageData.data.buffer);
+  state.bits = new Uint8Array(config.bitsPerFrame);
+  validateConfig();
+  updateDerivedStats(); updateChips();
+
+  detectRefreshRate().then((hz) => {
+    config.detectedHz = hz;
+    detectedHzEl.textContent = `Monitor: ${hz} Hz detected`;
+    hudFps.textContent = getEffectiveFps();
+    headerFps.textContent = getEffectiveFps();
+    if (config.fpsMode === "auto") config.targetFps = hz;
+    updateDerivedStats(); updateChips();
+  });
+})();
+</script>
 </body>
 </html>

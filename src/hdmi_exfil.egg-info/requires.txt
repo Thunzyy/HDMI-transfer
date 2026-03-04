@@ -4,6 +4,7 @@ numba>=0.60.0
 [all]
 hdmi-exfil[sender]
 hdmi-exfil[receiver]
+hdmi-exfil[web]
 
 [dev]
 hdmi-exfil[all]
@@ -18,3 +19,7 @@ InquirerPy>=0.3.4
 pygame-ce>=2.5.0
 screeninfo>=0.8
 InquirerPy>=0.3.4
+
+[web]
+flask>=3.0
+opencv-python>=4.0

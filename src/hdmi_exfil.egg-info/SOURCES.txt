@@ -25,6 +25,7 @@ src/hdmi_exfil/core/__init__.py
 src/hdmi_exfil/core/config.py
 src/hdmi_exfil/core/constants.json
 src/hdmi_exfil/core/prng.py
+src/hdmi_exfil/core/settings.py
 src/hdmi_exfil/core/capture/__init__.py
 src/hdmi_exfil/core/capture/sampler.py
 src/hdmi_exfil/core/capture/threaded.py
@@ -70,6 +71,11 @@ src/hdmi_exfil/sender/display/__init__.py
 src/hdmi_exfil/sender/display/monitors.py
 src/hdmi_exfil/sender/display/renderer.py
 src/hdmi_exfil/sender/display/test_patterns.py
+src/hdmi_exfil/web/__init__.py
+src/hdmi_exfil/web/__main__.py
+src/hdmi_exfil/web/receiver_worker.py
+src/hdmi_exfil/web/server.py
+src/hdmi_exfil/web/static/receiver.html
 tests/test_calibration.py
 tests/test_fountain.py
 tests/test_fountain_3bpp.py
