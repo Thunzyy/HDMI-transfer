@@ -228,6 +228,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
         </div>
       </div>
       <div class="info-row" id="infoRow">
+        <div class="chip">Mode: <span class="cv" id="chipProtocol">Fountain</span></div>
         <div class="chip">Profile: <span class="cv" id="chipProfile">Balanced</span></div>
         <div class="chip">Throughput: <span class="cv" id="chipSpeed">--</span></div>
         <div class="chip">FPS: <span class="cv" id="chipFps">--</span></div>
@@ -246,6 +247,14 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
 
 <!-- Right: settings sidebar -->
 <div id="side">
+  <div>
+    <div class="side-label">Protocol</div>
+    <select class="side-select" id="protocolSelect" style="width:100%">
+      <option value="fountain" selected>Fountain (LT codes)</option>
+      <option value="sequential">Sequential</option>
+    </select>
+  </div>
+
   <div>
     <div class="side-label">Profile</div>
     <select class="side-select" id="profileSelect" style="width:100%">
@@ -327,7 +336,15 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
 <script>
 (() => {
   const FOUNTAIN_MAGIC = 0xF0C0;
-  const HEADER_LEN = 12;
+  const FOUNTAIN_HEADER_LEN = 12;
+
+  const SEQ_MAGIC = 0xDAEA;
+  const SEQ_HEADER_PRE_CRC = 13;
+  const SEQ_CRC_SIZE = 4;
+  const SEQ_HEADER_LEN = 17;
+  const FRAME_TYPE_START = 0x01;
+  const FRAME_TYPE_DATA = 0x02;
+  const FRAME_TYPE_END = 0x03;
 
   const PROFILES = {
     speed:    { name: "speed",    width: 1920, height: 1080, blockSize: 8, targetFps: 240 },
@@ -336,6 +353,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   };
 
   const config = {
+    protocol: "fountain",
     profileName: "balanced", width: 1920, height: 1080, blockSize: 8,
     targetFps: 60, fpsMode: "auto", manualFps: 60, detectedHz: null,
     cols: 0, rows: 0, bitsPerFrame: 0, bytesPerFrame: 0, payloadSize: 0,
@@ -346,7 +364,8 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     config.rows = config.height / config.blockSize;
     config.bitsPerFrame = config.rows * config.cols * 3;
     config.bytesPerFrame = config.bitsPerFrame / 8;
-    config.payloadSize = config.bytesPerFrame - HEADER_LEN;
+    const headerLen = config.protocol === "fountain" ? FOUNTAIN_HEADER_LEN : SEQ_HEADER_LEN;
+    config.payloadSize = config.bytesPerFrame - headerLen;
   }
 
   function getEffectiveFps() {
@@ -419,6 +438,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   const startBtn = document.getElementById("startBtn");
   const stopBtn = document.getElementById("stopBtn");
 
+  const protocolSelect = document.getElementById("protocolSelect");
   const profileSelect = document.getElementById("profileSelect");
   const resolutionSelect = document.getElementById("resolutionSelect");
   const blockSizeSelect = document.getElementById("blockSizeSelect");
@@ -447,7 +467,11 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   const state = {
     chunks: [], K: 0, seed: 1, frame: 0, running: false,
     bits: new Uint8Array(config.bitsPerFrame), raf: null,
-    rawWrapped: null, fileName: null, fileSize: 0, startTime: 0,
+    rawWrapped: null, rawBytes: null, sha256Hash: null,
+    fileName: null, fileSize: 0, startTime: 0,
+    // Sequential state
+    seqPhase: "start", // "start" | "data" | "end"
+    seqDataIdx: 0, seqRepeat: 0, seqRedundancy: 3,
   };
 
   // ── Config ─────────────────────────────
@@ -469,12 +493,9 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     imageData = ctx.createImageData(config.width, config.height);
     buf = new Uint32Array(imageData.data.buffer);
     state.bits = new Uint8Array(config.bitsPerFrame);
-    if (state.rawWrapped) {
-      const { K, chunks } = sliceIntoChunks(state.rawWrapped);
-      state.chunks = chunks; state.K = K; state.seed = 1; state.frame = 0;
+    if (state.rawBytes) {
+      rechunk();
       startBtn.disabled = !valid;
-      headerK.textContent = K; hudK.textContent = K;
-      fileChunksEl.textContent = K + " chunks";
     } else { startBtn.disabled = true; }
     updateDerivedStats(); updateChips(); saveSettings();
   }
@@ -482,6 +503,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   const STORAGE_KEY = "hdmi_exfil_sender_settings";
   function saveSettings() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      protocol: config.protocol,
       profileName: config.profileName, width: config.width, height: config.height,
       blockSize: config.blockSize, fpsMode: config.fpsMode, manualFps: config.manualFps,
     })); } catch(e) {}
@@ -490,6 +512,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     try {
       const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return;
       const d = JSON.parse(raw);
+      if (d.protocol) config.protocol = d.protocol;
       if (d.profileName && PROFILES[d.profileName]) {
         const p = PROFILES[d.profileName];
         Object.assign(config, { profileName: d.profileName, width: p.width, height: p.height, blockSize: p.blockSize, targetFps: p.targetFps });
@@ -523,13 +546,15 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     const fps = getEffectiveFps();
     const kbps = (config.payloadSize * fps / 1024).toFixed(1);
     const names = { speed: "Speed", balanced: "Balanced", quality: "Quality", custom: "Custom" };
+    const protoNames = { fountain: "Fountain", sequential: "Sequential" };
+    document.getElementById("chipProtocol").textContent = protoNames[config.protocol] || config.protocol;
     chipProfile.textContent = names[config.profileName] || config.profileName;
     chipSpeed.textContent = "~" + kbps + " KB/s";
     chipFps.textContent = fps + " fps";
   }
 
   function setSettingsEnabled(enabled) {
-    [profileSelect, resolutionSelect, blockSizeSelect, fpsModeSelect, manualFpsInput].forEach(el => el.disabled = !enabled);
+    [protocolSelect, profileSelect, resolutionSelect, blockSizeSelect, fpsModeSelect, manualFpsInput].forEach(el => el.disabled = !enabled);
   }
 
   // ── Core helpers ───────────────────────
@@ -603,6 +628,49 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     return payload;
   }
 
+  // ── Sequential frame builders ──────────
+  function buildSeqFrame(frameType, frameIndex, totalFrames, payload) {
+    const frameBytes = new Uint8Array(config.bytesPerFrame);
+    const view = new DataView(frameBytes.buffer);
+    // Pre-CRC header (13 bytes)
+    view.setUint16(0, SEQ_MAGIC, false);
+    view.setUint8(2, frameType);
+    view.setUint32(3, frameIndex, false);
+    view.setUint32(7, totalFrames, false);
+    view.setUint16(11, payload.length, false);
+    // CRC32 over pre-CRC header + payload
+    const crcInput = new Uint8Array(SEQ_HEADER_PRE_CRC + payload.length);
+    crcInput.set(frameBytes.subarray(0, SEQ_HEADER_PRE_CRC));
+    crcInput.set(payload, SEQ_HEADER_PRE_CRC);
+    view.setUint32(13, crc32(crcInput), false);
+    // Payload
+    frameBytes.set(payload, SEQ_HEADER_LEN);
+    return frameBytes;
+  }
+
+  function buildSeqStartPayload() {
+    const nameBytes = textEncoder.encode(state.fileName || "payload.bin");
+    const meta = new Uint8Array(4 + 32 + 2 + nameBytes.length);
+    const mv = new DataView(meta.buffer);
+    mv.setUint32(0, state.fileSize, false);
+    meta.set(state.sha256Hash, 4);
+    mv.setUint16(36, nameBytes.length, false);
+    meta.set(nameBytes, 38);
+    return meta;
+  }
+
+  function sliceSeqChunks(rawBytes) {
+    const ps = config.payloadSize;
+    const K = Math.ceil(rawBytes.length / ps);
+    const chunks = new Array(K);
+    for (let i = 0; i < K; i++) {
+      const chunk = new Uint8Array(ps);
+      chunk.set(rawBytes.subarray(i * ps, Math.min((i + 1) * ps, rawBytes.length)));
+      chunks[i] = chunk;
+    }
+    return { K, chunks };
+  }
+
   // ── Encoding ───────────────────────────
   function bytesToBits(bytes) {
     let p = 0;
@@ -628,7 +696,8 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
 
   // ── Render loop ────────────────────────
   let lastFrameTime = 0;
-  function renderFrame() {
+
+  function renderFountainFrame() {
     const seed = state.seed >>> 0;
     const payload = buildDroplet(seed);
     const frameBytes = new Uint8Array(config.bytesPerFrame);
@@ -636,12 +705,45 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     view.setUint16(0, FOUNTAIN_MAGIC, false);
     view.setUint32(2, seed, false);
     view.setUint16(6, state.K, false);
-    frameBytes.set(payload, HEADER_LEN);
+    frameBytes.set(payload, FOUNTAIN_HEADER_LEN);
     const crcData = new Uint8Array(8 + payload.length);
     crcData.set(frameBytes.subarray(0, 8)); crcData.set(payload, 8);
     view.setUint32(8, crc32(crcData), false);
     bytesToBits(frameBytes); drawBits(state.bits);
     state.seed = (state.seed + 1) >>> 0; if (state.seed === 0) state.seed = 1;
+  }
+
+  function renderSeqFrame() {
+    let frameBytes;
+    if (state.seqPhase === "start") {
+      const meta = buildSeqStartPayload();
+      frameBytes = buildSeqFrame(FRAME_TYPE_START, 0, state.K, meta);
+      state.seqRepeat++;
+      if (state.seqRepeat >= state.seqRedundancy) {
+        state.seqPhase = "data"; state.seqDataIdx = 0; state.seqRepeat = 0;
+      }
+    } else if (state.seqPhase === "data") {
+      const chunk = state.chunks[state.seqDataIdx];
+      frameBytes = buildSeqFrame(FRAME_TYPE_DATA, state.seqDataIdx, state.K, chunk);
+      state.seqRepeat++;
+      if (state.seqRepeat >= state.seqRedundancy) {
+        state.seqRepeat = 0; state.seqDataIdx++;
+        if (state.seqDataIdx >= state.K) { state.seqPhase = "end"; }
+      }
+    } else {
+      frameBytes = buildSeqFrame(FRAME_TYPE_END, state.K, state.K, new Uint8Array([0]));
+      state.seqRepeat++;
+      if (state.seqRepeat >= state.seqRedundancy) {
+        // Loop: restart transmission
+        state.seqPhase = "start"; state.seqRepeat = 0;
+      }
+    }
+    bytesToBits(frameBytes); drawBits(state.bits);
+  }
+
+  function renderFrame() {
+    if (config.protocol === "fountain") renderFountainFrame();
+    else renderSeqFrame();
     state.frame += 1;
     if (state.frame % 20 === 0) {
       hudFrames.textContent = state.frame;
@@ -665,6 +767,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   function startSending() {
     if (!state.chunks.length || !validateConfig()) return;
     state.running = true; state.seed = 1; state.frame = 0;
+    state.seqPhase = "start"; state.seqDataIdx = 0; state.seqRepeat = 0;
     state.startTime = performance.now(); lastFrameTime = 0;
     startBtn.disabled = true; stopBtn.disabled = false;
     setSettingsEnabled(false);
@@ -717,20 +820,35 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     reader.onload = async () => {
       const raw = new Uint8Array(reader.result);
       const sha256Hash = await computeSHA256(raw);
-      const wrapped = wrapWithMetadata(file, raw, sha256Hash);
-      state.rawWrapped = wrapped; state.fileName = file.name; state.fileSize = raw.length;
-      const { K, chunks } = sliceIntoChunks(wrapped);
-      state.chunks = chunks; state.K = K; state.seed = 1; state.frame = 0;
+      state.rawBytes = raw;
+      state.sha256Hash = sha256Hash;
+      state.fileName = file.name;
+      state.fileSize = raw.length;
+      rechunk();
       startBtn.disabled = false; stopBtn.disabled = true;
 
       fileNameEl.textContent = file.name;
       fileSizeEl.textContent = fmtSize(raw.length);
-      fileChunksEl.textContent = K + " chunks";
-      headerK.textContent = K; hudK.textContent = K;
       dropZone.classList.add("loaded");
-      updateChips();
     };
     reader.readAsArrayBuffer(file);
+  }
+
+  function rechunk() {
+    if (!state.rawBytes) return;
+    if (config.protocol === "fountain") {
+      const wrapped = wrapWithMetadata({ name: state.fileName }, state.rawBytes, state.sha256Hash);
+      state.rawWrapped = wrapped;
+      const { K, chunks } = sliceIntoChunks(wrapped);
+      state.chunks = chunks; state.K = K;
+    } else {
+      const { K, chunks } = sliceSeqChunks(state.rawBytes);
+      state.chunks = chunks; state.K = K;
+    }
+    state.seed = 1; state.frame = 0;
+    fileChunksEl.textContent = state.K + " chunks";
+    headerK.textContent = state.K; hudK.textContent = state.K;
+    updateChips();
   }
 
   fileInput.addEventListener("change", (e) => handleFile(e.target.files[0]));
@@ -765,6 +883,10 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   });
 
   // ── Settings events ────────────────────
+  protocolSelect.addEventListener("change", () => {
+    config.protocol = protocolSelect.value;
+    applyConfig();
+  });
   profileSelect.addEventListener("change", () => {
     const name = profileSelect.value; if (name === "custom") return;
     const p = PROFILES[name];
@@ -800,6 +922,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
 
   // ── Init ───────────────────────────────
   loadSettings(); recalcDerived();
+  protocolSelect.value = config.protocol;
   profileSelect.value = config.profileName;
   resolutionSelect.value = `${config.width}x${config.height}`;
   blockSizeSelect.value = String(config.blockSize);
