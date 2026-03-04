@@ -268,6 +268,7 @@ html,body{
       <a class="active" href="/">Receive</a>
       <a href="/sender">Send</a>
       <a href="/history">History</a>
+      <a href="/settings">Settings</a>
     </nav>
     <div class="config">
       <label class="config-label">Device</label>
@@ -442,7 +443,56 @@ html,body{
   }
 
   /* ── Devices ───────────────────────────── */
-  async function loadDevices() {
+  const DEVICE_CACHE_KEY = "hdmi_exfil_devices";
+
+  function populateDevices(devs) {
+    deviceSelect.innerHTML = "";
+    if (!devs.length) {
+      deviceSelect.innerHTML = '<option value="">No devices</option>';
+      statusMsg.textContent = "No capture devices found.";
+      return;
+    }
+    devs.forEach(d => {
+      const o = document.createElement("option");
+      o.value = d.index;
+      o.textContent = d.name + " (" + d.width + "x" + d.height + " @ " + Math.round(d.fps) + " fps)";
+      deviceSelect.appendChild(o);
+    });
+    statusMsg.textContent = devs.length + " device(s) found.";
+    startBtn.disabled = false;
+    updateBadge();
+  }
+
+  function loadCachedDevices() {
+    try {
+      const raw = sessionStorage.getItem(DEVICE_CACHE_KEY);
+      if (!raw) return false;
+      const devs = JSON.parse(raw);
+      if (!Array.isArray(devs) || !devs.length) return false;
+      if (!devs[0].backend) { sessionStorage.removeItem(DEVICE_CACHE_KEY); return false; }
+      populateDevices(devs);
+      log("info", devs.length + " cached device(s) loaded. Ready.");
+      deviceSelect.disabled = false;
+      refreshBtn.disabled = false;
+      // Ensure server has cache + pre-warms device (awaited to avoid race)
+      fetch("/api/devices").then(r => r.json()).then(serverDevs => {
+        if (serverDevs && serverDevs.length) {
+          populateDevices(serverDevs);
+          try { sessionStorage.setItem(DEVICE_CACHE_KEY, JSON.stringify(serverDevs)); } catch {}
+        }
+      }).catch(() => {});
+      return true;
+    } catch { return false; }
+  }
+
+  function warmDevice(idx) {
+    fetch("/api/devices/warm", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({device: +idx}),
+    }).catch(() => {});
+  }
+
+  async function loadDevices(force) {
     deviceSelect.innerHTML = '<option value="">Scanning...</option>';
     deviceSelect.disabled = true;
     refreshBtn.disabled = true;
@@ -450,24 +500,15 @@ html,body{
     statusMsg.textContent = "Scanning devices...";
     log("info", "Scanning capture devices...");
     try {
-      const r = await fetch("/api/devices");
+      const url = force ? "/api/devices?force=1" : "/api/devices";
+      const r = await fetch(url);
       const devs = await r.json();
-      deviceSelect.innerHTML = "";
-      if (!devs.length) {
-        deviceSelect.innerHTML = '<option value="">No devices</option>';
-        statusMsg.textContent = "No capture devices found.";
-        log("warn", "No capture devices detected.");
-      } else {
-        devs.forEach(d => {
-          const o = document.createElement("option");
-          o.value = d.index;
-          o.textContent = d.name + " (" + d.width + "x" + d.height + " @ " + Math.round(d.fps) + " fps)";
-          deviceSelect.appendChild(o);
-        });
-        statusMsg.textContent = devs.length + " device(s) found.";
+      populateDevices(devs);
+      if (devs.length) {
         log("success", devs.length + " device(s) found. Ready.");
-        startBtn.disabled = false;
-        updateBadge();
+        try { sessionStorage.setItem(DEVICE_CACHE_KEY, JSON.stringify(devs)); } catch {}
+      } else {
+        log("warn", "No capture devices detected.");
       }
     } catch (e) {
       deviceSelect.innerHTML = '<option value="">Error</option>';
@@ -483,6 +524,7 @@ html,body{
     badgeRes.textContent = m[profileSelect.value] || profileSelect.value;
   }
   profileSelect.addEventListener("change", updateBadge);
+  deviceSelect.addEventListener("change", () => warmDevice(deviceSelect.value));
 
   /* ── Start / Stop ──────────────────────── */
   async function start() {
@@ -518,6 +560,16 @@ html,body{
       setLink(d.state);
       log(d.state === "error" ? "error" : "info", d.message);
       if (d.total_chunks) { totalChunks = d.total_chunks; initGrid(Math.min(totalChunks, GRID_N)); }
+    });
+
+    sse.addEventListener("frame", e => {
+      const d = JSON.parse(e.data);
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        previewIdle.classList.add("hidden");
+      };
+      img.src = "data:image/jpeg;base64," + d.jpeg;
     });
 
     sse.addEventListener("progress", e => {
@@ -640,18 +692,33 @@ html,body{
     const set = new Set(decoded);
     for (let i = 0; i < total; i++) {
       const col = i % cols, row = Math.floor(i / cols);
-      ctx.fillStyle = set.has(i) ? "#9ca3af" : "rgba(255,255,255,0.02)";
+      ctx.fillStyle = set.has(i) ? "#7c8aff" : "rgba(255,255,255,0.02)";
       ctx.fillRect(Math.floor(col*cw)+.5, Math.floor(row*ch)+.5, Math.max(1,Math.ceil(cw)-1), Math.max(1,Math.ceil(ch)-1));
     }
   }
 
+  /* ── Saved settings ──────────────────────── */
+  function applySavedSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem("hdmi_exfil_settings") || "{}");
+      if (s.defaultDevice !== null && s.defaultDevice !== undefined) {
+        deviceSelect.value = String(s.defaultDevice);
+        warmDevice(s.defaultDevice);
+      }
+      if (s.defaultProfile) profileSelect.value = s.defaultProfile;
+      if (s.defaultMode) modeSelect.value = s.defaultMode;
+    } catch {}
+    updateBadge();
+  }
+
   /* ── Init ───────────────────────────────── */
-  log("info", "Initializing receiver...");
-  loadDevices();
-  updateBadge();
+  if (!loadCachedDevices()) {
+    loadDevices(false);
+  }
+  applySavedSettings();
   startBtn.addEventListener("click", start);
   stopBtn.addEventListener("click", stop);
-  refreshBtn.addEventListener("click", loadDevices);
+  refreshBtn.addEventListener("click", () => loadDevices(true));
 })();
 </script>
 </body>

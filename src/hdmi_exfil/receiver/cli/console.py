@@ -83,48 +83,169 @@ def _get_device_names_wmi() -> list[str] | None:
 def _detect_devices(max_index: int = 10) -> list[dict]:
     """Probe capture device indices and return available devices with names.
 
-    Tries backends in priority order (MSMF → DSHOW → CAP_ANY on Windows).
-    Uses the first backend where at least one device passes validation
-    (correct resolution and non-empty frames).
+    On Windows, DSHOW and MSMF may have different device counts and
+    ordering.  This function detects MSMF devices (used for capture),
+    then identifies each by reading a test frame and cross-referencing
+    with DSHOW names using per-device DSHOW probing.
 
-    When the winning backend is not DSHOW the device-name ordering from
-    ffmpeg/WMI may not match.  In that case we fall back to generic
-    ``Device N`` labels.
-
-    Returns a list of dicts with keys: index, name, width, height, fps.
+    Returns a list of dicts with keys: index, name, width, height, fps, backend.
     """
     import cv2
+    import numpy as np
 
     from hdmi_exfil.receiver.capture.source import _get_backends, _try_open
 
-    backends = _get_backends()
-    # Pre-fetch names once (cheap subprocess calls)
     dshow_names = _get_device_names_ffmpeg() or _get_device_names_wmi() or []
 
-    for backend in backends:
-        is_dshow = backend == cv2.CAP_DSHOW
-        devices = []
-        with _suppress_stderr():
-            for i in range(max_index):
-                cap = _try_open(i, backend, 1920, 1080, 60)
-                if cap is None:
-                    continue
-                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                cap.release()
-                if is_dshow and i < len(dshow_names):
-                    name = dshow_names[i]
-                else:
-                    name = f"Device {i}"
-                devices.append({
-                    "index": i, "name": name,
-                    "width": w, "height": h, "fps": fps,
-                })
-        if devices:
-            return devices
+    if sys.platform != "win32":
+        backends = _get_backends()
+        for backend in backends:
+            devices = []
+            with _suppress_stderr():
+                for i in range(max_index):
+                    cap = _try_open(i, backend, 1920, 1080, 60)
+                    if cap is None:
+                        continue
+                    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    fps = cap.get(cv2.CAP_PROP_FPS)
+                    cap.release()
+                    name = dshow_names[i] if i < len(dshow_names) else f"Device {i}"
+                    devices.append({
+                        "index": i, "name": name,
+                        "width": w, "height": h, "fps": fps,
+                        "backend": int(backend),
+                    })
+            if devices:
+                return devices
+        return []
 
-    return []
+    # ── Windows: DSHOW/MSMF may have different device counts & order ──
+    # Strategy: for each MSMF device, try ALL DSHOW indices to find which
+    # DSHOW device refers to the same physical hardware (by exclusion test).
+
+    # Step 1: Collect MSMF devices with frame brightness as fingerprint
+    msmf_devices = []
+    with _suppress_stderr():
+        for i in range(max_index):
+            cap = _try_open(i, cv2.CAP_MSMF, 1920, 1080, 60)
+            if cap is None:
+                continue
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            # Read several test frames (first frames may be black/buffered)
+            brightness = 0.0
+            for _ in range(10):
+                ret, frame = cap.read()
+                if ret and isinstance(frame, np.ndarray):
+                    b = float(frame.mean())
+                    if b > brightness:
+                        brightness = b
+            cap.release()
+            msmf_devices.append({
+                "msmf_index": i, "width": w, "height": h,
+                "fps": fps, "brightness": brightness,
+            })
+
+    if not msmf_devices:
+        return []
+
+    # Step 2: Match MSMF devices to DSHOW names.
+    # DSHOW and MSMF may have different device counts (e.g. NVIDIA
+    # Broadcast only in DSHOW). We match by reading a DSHOW frame for
+    # each index and comparing brightness/zero patterns to MSMF frames.
+    dshow_frames = {}  # dshow_index -> (name, brightness, is_zero)
+    with _suppress_stderr():
+        for i in range(max_index):
+            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+            if not cap.isOpened():
+                continue
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+            ret, frame = cap.read()
+            cap.release()
+            name = dshow_names[i] if i < len(dshow_names) else f"Device {i}"
+            if ret and isinstance(frame, np.ndarray):
+                b = float(frame.mean())
+                is_zero = int(frame.max()) == 0
+            else:
+                b = -1.0
+                is_zero = True
+            dshow_frames[i] = (name, b, is_zero)
+
+    # Classify DSHOW devices: zero-frame devices are candidates for
+    # capture cards (Elgato DSHOW bug) or virtual cams (NVIDIA Broadcast).
+    # Non-zero DSHOW devices are webcams we can match by brightness.
+    dshow_zero = {i: n for i, (n, b, z) in dshow_frames.items() if z}
+    dshow_nonzero = {i: (n, b) for i, (n, b, z) in dshow_frames.items() if not z}
+
+    # Match MSMF devices to DSHOW names
+    devices = []
+    used_dshow = set()
+
+    for md in msmf_devices:
+        mi = md["msmf_index"]
+        mb = md["brightness"]
+        name = None
+
+        if mb > 10:
+            # MSMF device has real signal. If it's a capture card, the
+            # DSHOW version would return all-zero frames (known Elgato bug).
+            # Find a DSHOW zero-frame device with a capture-card name.
+            for di, dn in dshow_zero.items():
+                if di in used_dshow:
+                    continue
+                nl = dn.lower()
+                if any(k in nl for k in ("elgato", "avermedia", "capture",
+                                          "hdmi", "cam link", "magewell",
+                                          "blackmagic", "4k")):
+                    name = dn
+                    used_dshow.add(di)
+                    break
+            if name is None:
+                # Could be a webcam with signal — match to non-zero DSHOW
+                best_di = None
+                best_diff = float("inf")
+                for di, (dn, db) in dshow_nonzero.items():
+                    if di in used_dshow:
+                        continue
+                    diff = abs(db - mb)
+                    if diff < best_diff:
+                        best_diff = diff
+                        best_di = di
+                if best_di is not None:
+                    name = dshow_nonzero[best_di][0]
+                    used_dshow.add(best_di)
+        else:
+            # MSMF device is dark/black — match to non-zero DSHOW webcam
+            # (webcam with lens cap appears black via MSMF but may read
+            # via DSHOW), or to remaining DSHOW devices.
+            for di, (dn, db) in dshow_nonzero.items():
+                if di in used_dshow:
+                    continue
+                name = dn
+                used_dshow.add(di)
+                break
+
+        if name is None:
+            # Use any remaining DSHOW name
+            for di, (dn, _, _) in dshow_frames.items():
+                if di not in used_dshow:
+                    name = dn
+                    used_dshow.add(di)
+                    break
+
+        if name is None:
+            name = f"Device {mi}"
+
+        devices.append({
+            "index": mi, "name": name,
+            "width": md["width"], "height": md["height"],
+            "fps": md["fps"], "backend": int(cv2.CAP_MSMF),
+        })
+
+    return devices
 
 
 # ------------------------------------------------------------------

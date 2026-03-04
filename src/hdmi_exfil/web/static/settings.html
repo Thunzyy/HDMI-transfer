@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>HDMI Exfil — Settings</title>
+<style>
+:root {
+  --bg:#16181e; --bg2:#0f1117;
+  --accent:#7c8aff; --accent-dim:rgba(124,138,255,0.1);
+  --accent-border:rgba(255,255,255,0.1);
+  --green:#4ade80; --yellow:#fbbf24; --red:#f87171;
+  --text:#e4e4e7; --bright:#ffffff; --muted:#a1a1aa;
+  --font-ui:'Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'SF Mono','Cascadia Code','Fira Code','Consolas',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  width:100%;height:100vh;overflow:hidden;
+  background:var(--bg2);color:var(--text);
+  font-family:var(--font-ui);
+  font-size:14px;display:flex;flex-direction:column;
+}
+::selection{background:var(--accent);color:var(--bg2)}
+
+#header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;height:44px;
+  background:var(--bg);border-bottom:1px solid var(--accent-border);
+  flex-shrink:0;
+}
+.h-left{display:flex;align-items:center;gap:10px}
+.h-title{color:var(--bright);font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+
+#layout{flex:1;display:flex;overflow:hidden}
+
+#sidebar{
+  width:220px;border-right:1px solid var(--accent-border);
+  background:var(--bg);display:flex;flex-direction:column;
+  flex-shrink:0;
+}
+.nav{padding:16px 12px;display:flex;flex-direction:column;gap:2px}
+.nav a{
+  display:block;padding:10px 14px;border-radius:6px;
+  color:var(--muted);text-decoration:none;
+  font-size:13px;font-weight:500;text-transform:uppercase;
+  letter-spacing:1px;transition:all .15s;
+}
+.nav a:hover{color:var(--text);background:rgba(255,255,255,0.04)}
+.nav a.active{color:var(--bright);background:rgba(255,255,255,0.07);font-weight:700}
+.sidebar-ver{
+  padding:12px 16px;font-size:11px;color:var(--muted);
+  letter-spacing:1px;opacity:.6;margin-top:auto;
+}
+
+#center{flex:1;display:flex;flex-direction:column;overflow-y:auto}
+
+.center-top{
+  padding:14px 20px 10px;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.center-top h2{
+  font-size:16px;font-weight:700;color:var(--bright);
+  text-transform:uppercase;letter-spacing:.5px;
+}
+.center-top .sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+.settings-body{padding:0 20px 20px;display:flex;flex-direction:column;gap:24px;max-width:560px}
+
+.setting-group{
+  background:var(--bg);border:1px solid var(--accent-border);
+  border-radius:8px;padding:20px;
+}
+.setting-group-title{
+  font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:1.5px;color:var(--accent);margin-bottom:16px;
+}
+.setting-row{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:14px;
+}
+.setting-row:last-child{margin-bottom:0}
+.setting-label{font-size:13px;color:var(--text)}
+.setting-hint{font-size:11px;color:var(--muted);margin-top:2px}
+.setting-select{
+  height:34px;padding:0 28px 0 12px;min-width:220px;
+  background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);
+  border-radius:5px;color:var(--text);font-family:inherit;font-size:13px;
+  outline:none;cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center;
+  transition:border-color .15s;
+}
+.setting-select:focus{border-color:var(--accent)}
+.setting-select:disabled{opacity:.35;cursor:not-allowed}
+
+.btn-save{
+  align-self:flex-start;
+  padding:10px 24px;border-radius:6px;
+  background:var(--accent);border:none;
+  color:#fff;font-family:inherit;font-size:13px;font-weight:700;
+  text-transform:uppercase;letter-spacing:1px;
+  cursor:pointer;transition:all .15s;
+}
+.btn-save:hover{background:#6b7bff}
+
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  padding:10px 20px;border-radius:6px;
+  background:var(--green);color:#000;font-size:13px;font-weight:600;
+  opacity:0;transition:opacity .3s;pointer-events:none;
+}
+.toast.show{opacity:1}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.15)}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="h-left">
+    <span class="h-title">HDMI Exfil</span>
+  </div>
+</div>
+
+<div id="layout">
+  <aside id="sidebar">
+    <nav class="nav">
+      <a href="/">Receive</a>
+      <a href="/sender">Send</a>
+      <a href="/history">History</a>
+      <a class="active" href="/settings">Settings</a>
+    </nav>
+    <div class="sidebar-ver">v0.1.0</div>
+  </aside>
+
+  <main id="center">
+    <div class="center-top">
+      <div>
+        <h2>Settings</h2>
+        <div class="sub">Persistent preferences</div>
+      </div>
+    </div>
+
+    <div class="settings-body">
+      <div class="setting-group">
+        <div class="setting-group-title">Receiver</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Default device</div>
+            <div class="setting-hint">Auto-selected when opening Receive</div>
+          </div>
+          <select class="setting-select" id="defaultDevice" disabled>
+            <option value="">Loading devices...</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Default profile</div>
+            <div class="setting-hint">Capture resolution & framerate</div>
+          </div>
+          <select class="setting-select" id="defaultProfile">
+            <option value="speed">Speed (1080p @240fps)</option>
+            <option value="balanced">Balanced (1080p @60fps)</option>
+            <option value="quality">Quality (4K @30fps)</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Default mode</div>
+            <div class="setting-hint">Protocol detection strategy</div>
+          </div>
+          <select class="setting-select" id="defaultMode">
+            <option value="auto">Auto-detect</option>
+            <option value="fountain">Fountain</option>
+            <option value="sequential">Sequential</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn-save" id="saveBtn">Save settings</button>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast">Settings saved</div>
+
+<script>
+(() => {
+  const SETTINGS_KEY = "hdmi_exfil_settings";
+  const DEVICE_CACHE_KEY = "hdmi_exfil_devices";
+
+  const defaultDevice = document.getElementById("defaultDevice");
+  const defaultProfile = document.getElementById("defaultProfile");
+  const defaultMode = document.getElementById("defaultMode");
+  const saveBtn = document.getElementById("saveBtn");
+  const toast = document.getElementById("toast");
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) return {};
+      return JSON.parse(raw);
+    } catch { return {}; }
+  }
+
+  function saveSettings(s) {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  }
+
+  function showToast() {
+    toast.classList.add("show");
+    setTimeout(() => toast.classList.remove("show"), 2000);
+  }
+
+  // Load devices into dropdown
+  async function loadDevices() {
+    try {
+      const r = await fetch("/api/devices");
+      const devs = await r.json();
+      defaultDevice.innerHTML = '<option value="">None (manual selection)</option>';
+      devs.forEach(d => {
+        const o = document.createElement("option");
+        o.value = d.index;
+        o.textContent = d.name + " (" + d.width + "x" + d.height + " @ " + Math.round(d.fps) + " fps)";
+        defaultDevice.appendChild(o);
+      });
+      defaultDevice.disabled = false;
+
+      // Apply saved setting
+      const s = loadSettings();
+      if (s.defaultDevice !== undefined) defaultDevice.value = String(s.defaultDevice);
+      if (s.defaultProfile) defaultProfile.value = s.defaultProfile;
+      if (s.defaultMode) defaultMode.value = s.defaultMode;
+    } catch {
+      defaultDevice.innerHTML = '<option value="">Error loading devices</option>';
+    }
+  }
+
+  saveBtn.addEventListener("click", () => {
+    const s = {
+      defaultDevice: defaultDevice.value ? Number(defaultDevice.value) : null,
+      defaultProfile: defaultProfile.value,
+      defaultMode: defaultMode.value,
+    };
+    saveSettings(s);
+    showToast();
+
+    // Pre-warm selected device
+    if (s.defaultDevice !== null) {
+      fetch("/api/devices/warm", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({device: s.defaultDevice}),
+      }).catch(() => {});
+    }
+  });
+
+  // Init
+  const s = loadSettings();
+  if (s.defaultProfile) defaultProfile.value = s.defaultProfile;
+  if (s.defaultMode) defaultMode.value = s.defaultMode;
+  loadDevices();
+})();
+</script>
+</body>
+</html>

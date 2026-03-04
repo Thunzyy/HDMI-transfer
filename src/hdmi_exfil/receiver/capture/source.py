@@ -80,9 +80,7 @@ def _try_open(
 
     # DSHOW-specific: if resolution jumped from a low default after set(),
     # the driver may be lying (claims 1920x1080 but delivers all-zero frames).
-    # Read several test frames to catch this.  Only applies to DSHOW because
-    # MSMF does not exhibit this behaviour and reading test frames from MSMF
-    # can leave the device in a bad state.
+    # Read several test frames to catch this.
     if backend == cv2.CAP_DSHOW and pre_w <= 640 and pre_h <= 480 and actual_w > 640:
         all_zero = True
         for _ in range(8):
@@ -93,6 +91,33 @@ def _try_open(
         if all_zero:
             cap.release()
             return None
+
+    return cap
+
+
+def _try_open_validated(
+    source: int | str,
+    backend: int,
+    width: int,
+    height: int,
+    fps: int,
+) -> cv2.VideoCapture | None:
+    """Open and validate a device can actually read frames.
+
+    Like ``_try_open`` but additionally reads a test frame to confirm
+    the device is fully functional.  Used by device detection.
+    """
+    import numpy as np
+
+    cap = _try_open(source, backend, width, height, fps)
+    if cap is None:
+        return None
+
+    # Quick validation: try to read one frame
+    ret, frame = cap.read()
+    if not ret or not isinstance(frame, np.ndarray):
+        cap.release()
+        return None
 
     return cap
 
@@ -114,18 +139,29 @@ class CaptureSource:
 
     def __init__(
         self,
-        source: int | str,
+        source: int | str = 0,
         width: int = 1920,
         height: int = 1080,
         fps: int = 60,
+        backend: int | None = None,
+        _precap: cv2.VideoCapture | None = None,
     ) -> None:
         self._cap: cv2.VideoCapture | None = None
 
-        for backend in _get_backends():
+        if _precap is not None and _precap.isOpened():
+            # Use pre-warmed capture — no probing needed
+            self._cap = _precap
+        elif backend is not None:
             cap = _try_open(source, backend, width, height, fps)
             if cap is not None:
                 self._cap = cap
-                break
+
+        if self._cap is None:
+            for b in _get_backends():
+                cap = _try_open(source, b, width, height, fps)
+                if cap is not None:
+                    self._cap = cap
+                    break
 
         if self._cap is None:
             raise RuntimeError(f"Could not open video source {source}")

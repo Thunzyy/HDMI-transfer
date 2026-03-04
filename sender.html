@@ -193,14 +193,7 @@ body{display:flex}
 canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges}
 
 /* HUD */
-#hud{
-  position:fixed;top:12px;right:12px;z-index:10000;
-  background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);
-  border:1px solid rgba(255,255,255,0.1);border-radius:6px;
-  padding:8px 14px;display:none;
-  font-size:10px;color:rgba(255,255,255,0.7);pointer-events:none;
-}
-#hud.active{display:flex;gap:14px}
+#hud{display:none!important}
 #hud .hv{color:#fff;font-weight:600}
 </style>
 </head>

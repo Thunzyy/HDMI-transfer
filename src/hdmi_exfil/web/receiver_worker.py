@@ -15,6 +15,7 @@ Events published::
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import os
 import queue
@@ -22,6 +23,7 @@ import threading
 import time
 
 import cv2
+import numpy as np
 
 from hdmi_exfil.core.capture.sampler import sample_frame
 from hdmi_exfil.core.config import (
@@ -61,12 +63,16 @@ class ReceiverWorker(threading.Thread):
         profile: ResolutionProfile,
         mode: str = "auto",
         output_dir: str = "received_files",
+        backend: int | None = None,
+        precap: "cv2.VideoCapture | None" = None,
     ) -> None:
         super().__init__(daemon=True)
         self._device = device
         self._profile = profile
         self._mode = mode
         self._output_dir = output_dir
+        self._backend = backend
+        self._precap = precap
         self._stop_event = threading.Event()
         self._subscribers: list[queue.Queue] = []
         self._lock = threading.Lock()
@@ -97,6 +103,23 @@ class ReceiverWorker(threading.Thread):
         self._stop_event.set()
         self.join(timeout=5.0)
 
+    # -- preview ---------------------------------------------------------
+
+    def _publish_preview(self, frame) -> None:
+        """Encode a frame as a small JPEG thumbnail and publish."""
+        try:
+            h, w = frame.shape[:2]
+            scale = min(320 / w, 180 / h)
+            new_w, new_h = int(w * scale), int(h * scale)
+            thumb = cv2.resize(frame, (new_w, new_h))
+            _, jpeg = cv2.imencode(
+                ".jpg", thumb, [cv2.IMWRITE_JPEG_QUALITY, 50],
+            )
+            b64 = base64.b64encode(jpeg.tobytes()).decode("ascii")
+            self._publish("frame", {"jpeg": b64})
+        except Exception:
+            pass
+
     # -- main entry ------------------------------------------------------
 
     def run(self) -> None:
@@ -110,7 +133,10 @@ class ReceiverWorker(threading.Thread):
                 width=self._profile.width,
                 height=self._profile.height,
                 fps=self._profile.target_fps,
+                backend=self._backend,
+                _precap=self._precap,
             )
+            self._precap = None  # ownership transferred
             self._publish("status", {
                 "state": "ready",
                 "message": (
@@ -118,6 +144,7 @@ class ReceiverWorker(threading.Thread):
                     f" @ {cap.actual_fps:.0f} FPS"
                 ),
             })
+
             with cap:
                 dispatch = {
                     "fountain": self._run_fountain,
@@ -126,7 +153,9 @@ class ReceiverWorker(threading.Thread):
                 handler = dispatch.get(self._mode, self._run_auto)
                 handler(cap)
         except Exception as exc:
-            self._publish("error", {"message": str(exc)})
+            import traceback
+            tb = traceback.format_exc()
+            self._publish("error", {"message": f"{exc}\n{tb}"})
 
     # -- fountain mode ---------------------------------------------------
 
@@ -150,6 +179,11 @@ class ReceiverWorker(threading.Thread):
                 continue
 
             frames_captured += 1
+
+            # Preview every ~30 frames
+            if frames_captured % 30 == 1:
+                self._publish_preview(frame)
+
             frame = self._ensure_size(frame)
             sampled = sample_frame(
                 frame, self._profile.rows,
@@ -281,6 +315,11 @@ class ReceiverWorker(threading.Thread):
                 continue
 
             frames_captured += 1
+
+            # Preview every ~30 frames
+            if frames_captured % 30 == 1:
+                self._publish_preview(frame)
+
             frame = self._ensure_size(frame)
             sampled = sample_frame(
                 frame, self._profile.rows,
@@ -387,11 +426,16 @@ class ReceiverWorker(threading.Thread):
             "message": "Auto-detecting protocol...",
         })
 
+        auto_frames = 0
         while not self._stop_event.is_set():
             ret, frame = cap.read()
             if not ret:
                 time.sleep(0.001)
                 continue
+
+            auto_frames += 1
+            if auto_frames % 30 == 1:
+                self._publish_preview(frame)
 
             frame = self._ensure_size(frame)
             sampled = sample_frame(
@@ -399,7 +443,10 @@ class ReceiverWorker(threading.Thread):
                 self._profile.cols, self._profile.block_size,
             )
 
-            if seq.decode_frame(sampled).is_valid:
+            sr = seq.decode_frame(sampled)
+            fr = fount.decode_frame(sampled)
+
+            if sr.is_valid:
                 self._publish("status", {
                     "state": "detected",
                     "message": "Sequential protocol detected",
@@ -407,7 +454,7 @@ class ReceiverWorker(threading.Thread):
                 self._run_sequential(cap)
                 return
 
-            if fount.decode_frame(sampled).is_valid:
+            if fr.is_valid:
                 self._publish("status", {
                     "state": "detected",
                     "message": "Fountain protocol detected",
