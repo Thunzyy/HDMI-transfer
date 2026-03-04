@@ -76,30 +76,40 @@ def create_app(output_dir: str = "received_files") -> Flask:
     app._persistent_device_idx: int | None = None
     app._persistent_backend: int | None = None
     app._persistent_lock = threading.Lock()
+    app._persistent_ready = threading.Event()
 
     def _open_persistent(device_idx: int, backend: int) -> None:
         """Open a device and keep it as the persistent capture."""
+        log.info("[pcap] Opening persistent cap: device=%d backend=%d", device_idx, backend)
+        app._persistent_ready.clear()
         with app._persistent_lock:
             old = app._persistent_cap
             app._persistent_cap = None
             app._persistent_device_idx = None
             app._persistent_backend = None
         if old is not None:
+            log.info("[pcap] Releasing old persistent cap")
             old.release()
 
-        with app._device_open_lock:
-            cap = _try_open(device_idx, backend, 1920, 1080, 60)
-        if cap is not None:
-            with app._persistent_lock:
-                app._persistent_cap = cap
-                app._persistent_device_idx = device_idx
-                app._persistent_backend = backend
-            log.info("Persistent cap opened: device %d", device_idx)
-        else:
-            log.warning("Failed to open persistent cap for device %d", device_idx)
+        try:
+            t0 = time.time()
+            with app._device_open_lock:
+                cap = _try_open(device_idx, backend, 1920, 1080, 60)
+            dt = time.time() - t0
+            if cap is not None:
+                with app._persistent_lock:
+                    app._persistent_cap = cap
+                    app._persistent_device_idx = device_idx
+                    app._persistent_backend = backend
+                log.info("[pcap] Persistent cap READY: device=%d (%.1fs)", device_idx, dt)
+            else:
+                log.warning("[pcap] FAILED to open persistent cap: device=%d (%.1fs)", device_idx, dt)
+        finally:
+            app._persistent_ready.set()
 
     def _open_persistent_bg(device_idx: int, backend: int) -> None:
         """Open the persistent cap in a background thread."""
+        log.info("[pcap] Starting background open: device=%d", device_idx)
         threading.Thread(
             target=_open_persistent,
             args=(device_idx, backend),
@@ -114,6 +124,7 @@ def create_app(output_dir: str = "received_files") -> Flask:
             app._persistent_device_idx = None
             app._persistent_backend = None
         if cap is not None:
+            log.info("[pcap] Releasing persistent cap")
             cap.release()
 
     def _take_persistent(device_idx: int) -> tuple[cv2.VideoCapture | None, int | None]:
@@ -122,6 +133,9 @@ def create_app(output_dir: str = "received_files") -> Flask:
         Returns (cap, backend) or (None, None).
         """
         with app._persistent_lock:
+            log.info("[pcap] _take_persistent: requested=%d, have=%s (cap=%s)",
+                     device_idx, app._persistent_device_idx,
+                     "open" if app._persistent_cap and app._persistent_cap.isOpened() else "none")
             if app._persistent_device_idx == device_idx and app._persistent_cap is not None:
                 cap = app._persistent_cap
                 backend = app._persistent_backend
@@ -129,7 +143,9 @@ def create_app(output_dir: str = "received_files") -> Flask:
                 app._persistent_device_idx = None
                 app._persistent_backend = None
                 if cap.isOpened():
+                    log.info("[pcap] TAKEN persistent cap for device %d", device_idx)
                     return cap, backend
+                log.warning("[pcap] Persistent cap was closed, releasing")
                 cap.release()
         return None, None
 
@@ -145,6 +161,7 @@ def create_app(output_dir: str = "received_files") -> Flask:
                 app._persistent_backend = worker._backend
         if old is not None:
             old.release()
+        app._persistent_ready.set()
         log.info("Cap returned from worker — persistent again")
 
     def _get_backend_for(device_idx: int) -> int | None:
@@ -200,11 +217,14 @@ def create_app(output_dir: str = "received_files") -> Flask:
     @app.route("/api/devices")
     def api_devices():
         force = request.args.get("force", "0") == "1"
+        log.info("[pcap] /api/devices called (force=%s)", force)
         with app._devices_lock:
             if not force and app._devices:
+                log.info("[pcap] /api/devices returning %d cached devices", len(app._devices))
                 return jsonify(app._devices)
 
         # Release persistent cap before detection (avoids camera contention)
+        log.info("[pcap] /api/devices: releasing persistent for detection")
         _release_persistent()
         devices = _detect_and_cache()
 
@@ -219,8 +239,10 @@ def create_app(output_dir: str = "received_files") -> Flask:
         """Switch persistent cap to a specific device."""
         data = request.get_json(force=True)
         device_idx = int(data.get("device", 0))
+        log.info("[pcap] /api/devices/warm called: device=%d", device_idx)
         with app._persistent_lock:
             if app._persistent_device_idx == device_idx and app._persistent_cap is not None:
+                log.info("[pcap] /api/devices/warm: already open for device %d", device_idx)
                 return jsonify({"status": "already_open"})
         backend = _get_backend_for(device_idx)
         if backend is None:
@@ -265,8 +287,12 @@ def create_app(output_dir: str = "received_files") -> Flask:
                     backend = d.get("backend")
                     break
 
-        # Take the persistent cap — zero delay
+        # Wait for persistent cap if it's still opening (startup race)
+        log.info("[pcap] START: waiting for persistent_ready (device=%d)...", device)
+        ready = app._persistent_ready.wait(timeout=10.0)
+        log.info("[pcap] START: persistent_ready=%s", ready)
         precap, _ = _take_persistent(device)
+        log.info("[pcap] START: precap=%s", "YES" if precap else "NO")
 
         worker = ReceiverWorker(
             device=device, profile=profile,
