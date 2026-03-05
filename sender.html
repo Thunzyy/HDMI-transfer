@@ -294,6 +294,23 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
           <option value="16">16 px</option>
         </select>
       </div>
+      <div class="side-row" id="fountainRedundancyRow">
+        <span class="side-key">Fountain xK</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-right:6px">
+          <input type="checkbox" id="fountainAutoStopInput"/>
+          Auto-stop
+        </label>
+        <input
+          type="number"
+          class="side-input"
+          id="fountainRedundancyInput"
+          min="0"
+          max="5"
+          step="0.05"
+          value="1.50"
+          title="0 = infinite stream"
+        />
+      </div>
       <div class="side-row">
         <span class="side-key">FPS mode</span>
         <select class="side-select" id="fpsModeSelect">
@@ -370,6 +387,8 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   const config = {
     protocol: "fountain", bpc: 1,
     profileName: "balanced", width: 1920, height: 1080, blockSize: 8,
+    fountainRedundancy: 1.5,
+    fountainAutoStop: false,
     targetFps: 60, fpsMode: "auto", manualFps: 60, detectedHz: null,
     cols: 0, rows: 0, bitsPerFrame: 0, bytesPerFrame: 0, payloadSize: 0,
   };
@@ -458,6 +477,9 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   const profileSelect = document.getElementById("profileSelect");
   const resolutionSelect = document.getElementById("resolutionSelect");
   const blockSizeSelect = document.getElementById("blockSizeSelect");
+  const fountainRedundancyRow = document.getElementById("fountainRedundancyRow");
+  const fountainAutoStopInput = document.getElementById("fountainAutoStopInput");
+  const fountainRedundancyInput = document.getElementById("fountainRedundancyInput");
   const fpsModeSelect = document.getElementById("fpsModeSelect");
   const manualFpsInput = document.getElementById("manualFpsInput");
   const manualRow = document.getElementById("manualRow");
@@ -482,9 +504,14 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   // ── State ──────────────────────────────
   const state = {
     chunks: [], K: 0, seed: 1, frame: 0, running: false,
-    bits: new Uint8Array(config.rows * config.cols * 3), raf: null,
+    bits: new Uint8Array(config.rows * config.cols * 3),
+    vals: new Uint8Array(config.rows * config.cols * 3),
+    raf: null,
     rawWrapped: null, rawBytes: null, sha256Hash: null,
     fileName: null, fileSize: 0, startTime: 0,
+    lastRenderAt: 0,
+    rsdCdf: null,
+    fountainTargetFrames: 0,
     // Sequential state
     seqPhase: "start", // "start" | "data" | "end"
     seqDataIdx: 0, seqRepeat: 0, seqRedundancy: 3,
@@ -522,6 +549,8 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
       protocol: config.protocol, bpc: config.bpc,
       profileName: config.profileName, width: config.width, height: config.height,
       blockSize: config.blockSize, fpsMode: config.fpsMode, manualFps: config.manualFps,
+      fountainRedundancy: config.fountainRedundancy,
+      fountainAutoStop: config.fountainAutoStop,
     })); } catch(e) {}
   }
   function loadSettings() {
@@ -540,6 +569,10 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
       }
       if (d.fpsMode) config.fpsMode = d.fpsMode;
       if (d.manualFps) config.manualFps = d.manualFps;
+      if (typeof d.fountainRedundancy === "number" && Number.isFinite(d.fountainRedundancy)) {
+        config.fountainRedundancy = Math.max(0, Math.min(5, d.fountainRedundancy));
+      }
+      if (typeof d.fountainAutoStop === "boolean") config.fountainAutoStop = d.fountainAutoStop;
     } catch(e) {}
   }
 
@@ -552,9 +585,18 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   function updateDerivedStats() {
     const fps = getEffectiveFps();
     const kbps = (config.payloadSize * fps / 1024).toFixed(1);
+    let extra = "";
+    if (config.protocol === "fountain" && state.K > 0) {
+      if (config.fountainAutoStop && state.fountainTargetFrames > 0) {
+        const target = state.fountainTargetFrames;
+        extra = `<br>Target droplets: ${target} (${config.fountainRedundancy.toFixed(2)}x K)`;
+      } else {
+        extra = "<br>Target droplets: manual stop (loop)";
+      }
+    }
     derivedStatsEl.innerHTML =
       `${config.cols}x${config.rows} blocks &middot; ${config.payloadSize} B/frame<br>` +
-      `~${kbps} KB/s throughput`;
+      `~${kbps} KB/s throughput${extra}`;
     hudFps.textContent = fps;
     headerFps.textContent = fps;
   }
@@ -571,7 +613,14 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   }
 
   function setSettingsEnabled(enabled) {
-    [bpcSelect, protocolSelect, profileSelect, resolutionSelect, blockSizeSelect, fpsModeSelect, manualFpsInput].forEach(el => el.disabled = !enabled);
+    [bpcSelect, protocolSelect, profileSelect, resolutionSelect, blockSizeSelect, fountainAutoStopInput, fpsModeSelect, manualFpsInput].forEach(el => el.disabled = !enabled);
+    fountainRedundancyInput.disabled = !enabled || !config.fountainAutoStop;
+  }
+
+  function refreshProtocolControls() {
+    fountainRedundancyRow.style.display = config.protocol === "fountain" ? "" : "none";
+    fountainAutoStopInput.checked = !!config.fountainAutoStop;
+    fountainRedundancyInput.disabled = state.running || !config.fountainAutoStop;
   }
 
   // ── Core helpers ───────────────────────
@@ -611,7 +660,11 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     };
   }
   const RSD_C = 0.1, RSD_DELTA = 0.05;
+  const RSD_CDF_CACHE_MAX = 8;
+  const rsdCdfCache = new Map();
   function robustSolitonCdf(K) {
+    const cached = rsdCdfCache.get(K);
+    if (cached) return cached;
     if (K === 1) return [0.0, 1.0];
     const rho = new Array(K+1).fill(0); rho[1] = 1.0/K;
     for (let d = 2; d <= K; d++) rho[d] = 1.0/(d*(d-1));
@@ -623,7 +676,10 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     let Z = 0; for (let d = 1; d <= K; d++) Z += rho[d]+tau[d];
     const cdf = new Array(K+1).fill(0); let cum = 0;
     for (let d = 1; d <= K; d++) { cum += (rho[d]+tau[d])/Z; cdf[d] = cum; }
-    cdf[K] = 1.0; return cdf;
+    cdf[K] = 1.0;
+    if (rsdCdfCache.size >= RSD_CDF_CACHE_MAX) rsdCdfCache.clear();
+    rsdCdfCache.set(K, cdf);
+    return cdf;
   }
   function sampleDegree(cdf, r) {
     let lo = 1, hi = cdf.length-1;
@@ -631,7 +687,12 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     return Math.max(1, Math.min(lo, cdf.length-1));
   }
   function chooseIndices(seed, K) {
-    const next = createPRNG(seed); const cdf = robustSolitonCdf(K);
+    const next = createPRNG(seed);
+    const cdf = (
+      state.rsdCdf && state.rsdCdf.length === K + 1
+        ? state.rsdCdf
+        : robustSolitonCdf(K)
+    );
     let degree = Math.min(sampleDegree(cdf, next()/0x100000000), K);
     const indices = new Set();
     while (indices.size < degree) indices.add(next() % K);
@@ -786,6 +847,16 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     if (config.protocol === "fountain") renderFountainFrame();
     else renderSeqFrame();
     state.frame += 1;
+    state.lastRenderAt = performance.now();
+    if (
+      config.protocol === "fountain"
+      && config.fountainAutoStop
+      && state.fountainTargetFrames > 0
+      && state.frame >= state.fountainTargetFrames
+    ) {
+      stopSending();
+      return;
+    }
     if (state.frame % 20 === 0) {
       hudFrames.textContent = state.frame;
       headerFrames.textContent = state.frame;
@@ -798,10 +869,40 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   }
   function renderLoop(timestamp) {
     if (!state.running) return;
-    const eFps = getEffectiveFps(), mHz = config.detectedHz || 60;
-    if (eFps >= mHz) renderFrame();
-    else { const interval = 1000/eFps; if (timestamp - lastFrameTime >= interval*0.95) { renderFrame(); lastFrameTime = timestamp; } }
-    state.raf = requestAnimationFrame(renderLoop);
+    try {
+      const eFps = getEffectiveFps(), mHz = config.detectedHz || 60;
+      if (eFps >= mHz) renderFrame();
+      else {
+        const interval = 1000 / eFps;
+        if (timestamp - lastFrameTime >= interval * 0.95) {
+          renderFrame();
+          lastFrameTime = timestamp;
+        }
+      }
+    } catch (err) {
+      console.error("Sender render loop failed", err);
+      configWarningEl.className = "side-note warn";
+      configWarningEl.style.display = "";
+      configWarningEl.textContent = "Render stall detected. Recovering loop...";
+    } finally {
+      if (state.running) state.raf = requestAnimationFrame(renderLoop);
+    }
+  }
+
+  function checkViewportGeometry() {
+    const vw = canvasWrap.clientWidth || window.innerWidth;
+    const vh = canvasWrap.clientHeight || window.innerHeight;
+    if (vw === config.width && vh === config.height) {
+      if (!state.running) {
+        configWarningEl.style.display = "none";
+      }
+      return;
+    }
+    configWarningEl.className = "side-note warn";
+    configWarningEl.style.display = "";
+    configWarningEl.textContent =
+      `Viewport mismatch: ${vw}x${vh} (expected ${config.width}x${config.height}). ` +
+      "Receiver auto-align may be required.";
   }
 
   // ── Start / Stop ───────────────────────
@@ -809,7 +910,6 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     if (!state.chunks.length || !validateConfig()) return;
     state.running = true; state.seed = 1; state.frame = 0;
     state.seqPhase = "start"; state.seqDataIdx = 0; state.seqRepeat = 0;
-    state.startTime = performance.now(); lastFrameTime = 0;
     startBtn.disabled = true; stopBtn.disabled = false;
     setSettingsEnabled(false);
     statusLabel.textContent = "Transmitting";
@@ -817,8 +917,18 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     statusLabel.style.color = "var(--green)";
     canvasWrap.classList.add("active");
     hud.classList.add("active");
-    document.documentElement.requestFullscreen().catch(() => {});
-    renderLoop(0);
+    const begin = () => {
+      if (!state.running) return;
+      checkViewportGeometry();
+      state.startTime = performance.now();
+      state.lastRenderAt = state.startTime;
+      lastFrameTime = 0;
+      renderLoop(0);
+    };
+    const fsReq = document.documentElement.requestFullscreen
+      ? document.documentElement.requestFullscreen()
+      : Promise.resolve();
+    Promise.resolve(fsReq).catch(() => {}).finally(() => setTimeout(begin, 120));
   }
 
   function stopSending() {
@@ -882,14 +992,21 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
       state.rawWrapped = wrapped;
       const { K, chunks } = sliceIntoChunks(wrapped);
       state.chunks = chunks; state.K = K;
+      state.rsdCdf = robustSolitonCdf(K);
+      state.fountainTargetFrames = (config.fountainAutoStop && config.fountainRedundancy > 0)
+        ? Math.ceil(state.K * config.fountainRedundancy)
+        : 0;
     } else {
       const { K, chunks } = sliceSeqChunks(state.rawBytes);
       state.chunks = chunks; state.K = K;
+      state.rsdCdf = null;
+      state.fountainTargetFrames = 0;
     }
     state.seed = 1; state.frame = 0;
     fileChunksEl.textContent = state.K + " chunks";
     headerK.textContent = state.K; hudK.textContent = state.K;
     updateChips();
+    updateDerivedStats();
   }
 
   fileInput.addEventListener("change", (e) => handleFile(e.target.files[0]));
@@ -920,8 +1037,27 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   });
 
   document.addEventListener("fullscreenchange", () => {
-    if (!document.fullscreenElement && state.running) stopSending();
+    if (!state.running) return;
+    if (document.fullscreenElement) return;
+    // Keep streaming if fullscreen is lost (focus changes can trigger this).
+    checkViewportGeometry();
+    configWarningEl.className = "side-note warn";
+    configWarningEl.style.display = "";
+    configWarningEl.textContent =
+      "Fullscreen exited. Transmission continues in windowed mode.";
   });
+
+  setInterval(() => {
+    if (!state.running) return;
+    const dt = performance.now() - state.lastRenderAt;
+    if (dt <= 2500) return;
+    if (state.raf) cancelAnimationFrame(state.raf);
+    state.raf = requestAnimationFrame(renderLoop);
+    configWarningEl.className = "side-note warn";
+    configWarningEl.style.display = "";
+    configWarningEl.textContent =
+      "Sender loop stalled briefly. Auto-restarting render loop...";
+  }, 1000);
 
   // ── Settings events ────────────────────
   bpcSelect.addEventListener("change", () => {
@@ -930,6 +1066,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   });
   protocolSelect.addEventListener("change", () => {
     config.protocol = protocolSelect.value;
+    refreshProtocolControls();
     applyConfig();
   });
   profileSelect.addEventListener("change", () => {
@@ -964,6 +1101,21 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     config.manualFps = val; config.targetFps = val; manualFpsInput.value = val;
     updateDerivedStats(); updateChips(); saveSettings();
   });
+  fountainRedundancyInput.addEventListener("change", () => {
+    const val = Math.max(0, Math.min(5, Number(fountainRedundancyInput.value)));
+    config.fountainRedundancy = Number.isFinite(val) ? val : 1.5;
+    fountainRedundancyInput.value = config.fountainRedundancy.toFixed(2);
+    if (state.rawBytes && config.protocol === "fountain") rechunk();
+    updateDerivedStats();
+    saveSettings();
+  });
+  fountainAutoStopInput.addEventListener("change", () => {
+    config.fountainAutoStop = !!fountainAutoStopInput.checked;
+    if (state.rawBytes && config.protocol === "fountain") rechunk();
+    refreshProtocolControls();
+    updateDerivedStats();
+    saveSettings();
+  });
 
   // ── Init ───────────────────────────────
   loadSettings(); recalcDerived();
@@ -972,9 +1124,11 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   profileSelect.value = config.profileName;
   resolutionSelect.value = `${config.width}x${config.height}`;
   blockSizeSelect.value = String(config.blockSize);
+  fountainRedundancyInput.value = config.fountainRedundancy.toFixed(2);
   fpsModeSelect.value = config.fpsMode;
   manualFpsInput.value = config.manualFps;
   manualRow.style.display = config.fpsMode === "manual" ? "" : "none";
+  refreshProtocolControls();
   canvas.width = config.width; canvas.height = config.height;
   imageData = ctx.createImageData(config.width, config.height);
   buf = new Uint32Array(imageData.data.buffer);

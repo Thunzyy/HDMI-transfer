@@ -130,6 +130,12 @@ html,body{
 }
 .cbtn-stop:hover{color:var(--bright);border-color:rgba(255,255,255,0.3)}
 .cbtn-stop:disabled{opacity:.25;cursor:not-allowed}
+.cbtn-reset{
+  background:transparent;border:1px solid rgba(124,138,255,0.45);
+  color:var(--accent);
+}
+.cbtn-reset:hover{border-color:var(--accent);color:#a9b4ff}
+.cbtn-reset:disabled{opacity:.25;cursor:not-allowed}
 #statusMsg{font-size:12px;color:var(--muted);padding:0 20px;min-height:16px}
 
 .center-body{flex:1;display:flex;flex-direction:column;gap:12px;padding:0 20px 14px;overflow:hidden}
@@ -138,7 +144,7 @@ html,body{
 #preview{
   flex:1;border:1px solid var(--accent-border);border-radius:6px;
   overflow:hidden;position:relative;background:var(--bg2);
-  display:flex;flex-direction:column;min-height:180px;
+  display:flex;flex-direction:column;min-height:180px;min-width:0;
 }
 .preview-badges{position:absolute;top:10px;left:10px;z-index:2;display:flex;gap:5px}
 .badge{
@@ -155,7 +161,18 @@ html,body{
   border:1px solid rgba(255,255,255,0.15);border-radius:4px;
   font-size:11px;font-weight:500;color:var(--accent);font-family:var(--font-mono);
 }
-#previewCanvas{width:100%;flex:1;background:var(--bg2);image-rendering:pixelated;display:block}
+#previewStream,
+#previewCanvas{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+}
+#previewStream{
+  object-fit:contain;object-position:center;
+  background:var(--bg2);
+}
+#previewCanvas{
+  background:var(--bg2);image-rendering:pixelated;
+}
 .preview-idle{
   position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   z-index:1;color:var(--muted);font-size:14px;font-weight:600;
@@ -293,6 +310,13 @@ html,body{
         <option value="2">2 bpc — Fast (2x)</option>
         <option value="3">3 bpc — Max (3x)</option>
       </select>
+      <label class="config-label">Preview quality</label>
+      <select class="config-select" id="previewQualitySelect">
+        <option value="45">Low (Q45)</option>
+        <option value="60">Balanced (Q60)</option>
+        <option value="75" selected>High (Q75)</option>
+        <option value="90">Max (Q90)</option>
+      </select>
       <button class="btn-detect" id="refreshBtn">Detect devices</button>
     </div>
     <div class="sidebar-ver">v0.1.0</div>
@@ -306,6 +330,7 @@ html,body{
       </div>
       <div class="top-btns">
         <button class="cbtn cbtn-start" id="startBtn" disabled>Start</button>
+        <button class="cbtn cbtn-reset" id="resetBtn" disabled>Reset</button>
         <button class="cbtn cbtn-stop" id="stopBtn" disabled>Stop</button>
       </div>
     </div>
@@ -319,7 +344,8 @@ html,body{
           <span class="badge" id="badgeRes">--</span>
         </div>
         <span class="badge-frm" id="badgeFrm">FRM: 0</span>
-        <canvas id="previewCanvas"></canvas>
+        <img id="previewStream" style="display:none" />
+        <canvas id="previewCanvas" style="display:none"></canvas>
         <div class="preview-idle" id="previewIdle">Waiting for signal</div>
       </div>
       <div id="log">
@@ -353,8 +379,8 @@ html,body{
       <div class="panel-title">Blocks <span id="fountainPct" style="float:right;color:var(--accent)">0%</span></div>
       <div id="fountainGrid"></div>
       <div class="fountain-counts">
-        <span id="fountainRcvd">Decoded: 0</span>
-        <span id="fountainTarget">Total: 0</span>
+        <span id="fountainRcvd">Solved: 0</span>
+        <span id="fountainTarget">Needed: 0</span>
       </div>
     </div>
 
@@ -380,7 +406,9 @@ html,body{
   const profileSelect = document.getElementById("profileSelect");
   const modeSelect    = document.getElementById("modeSelect");
   const bpcSelect     = document.getElementById("bpcSelect");
+  const previewQualitySelect = document.getElementById("previewQualitySelect");
   const startBtn      = document.getElementById("startBtn");
+  const resetBtn      = document.getElementById("resetBtn");
   const stopBtn       = document.getElementById("stopBtn");
   const refreshBtn    = document.getElementById("refreshBtn");
   const statusMsg     = document.getElementById("statusMsg");
@@ -393,6 +421,7 @@ html,body{
   const canvas        = document.getElementById("previewCanvas");
   const ctx           = canvas.getContext("2d");
   const previewIdle   = document.getElementById("previewIdle");
+  const previewStream = document.getElementById("previewStream");
   const logBody       = document.getElementById("logBody");
 
   const pctBig         = document.getElementById("pctBig");
@@ -415,6 +444,113 @@ html,body{
 
   let sse = null, totalChunks = 0, speedHistory = [];
   const MAX_PTS = 30, GRID_N = 40;
+  const SETTINGS_KEY = "hdmi_exfil_settings";
+  const LEGACY_PREVIEW_SETTINGS_KEY = "hdmi_exfil_preview_settings";
+  let autoScanEnabled = true;
+  let idlePreviewEnabled = true;
+  let previewLastFrameAt = 0;
+  let previewLastSeq = 0;
+  let previewWatchdogWarned = false;
+  let previewHealthPollInFlight = false;
+
+  function markPreviewHeartbeat(seq = null) {
+    previewLastFrameAt = Date.now();
+    previewWatchdogWarned = false;
+    const n = Number(seq);
+    if (Number.isFinite(n) && n > previewLastSeq) {
+      previewLastSeq = n;
+    }
+  }
+
+  async function pollPreviewHealth() {
+    if (previewHealthPollInFlight || stopBtn.disabled) return;
+    previewHealthPollInFlight = true;
+    try {
+      const r = await fetch("/api/receive/status", {cache: "no-store"});
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!d.active) return;
+
+      const seq = Number(d.preview_seq ?? 0);
+      const age = Number(d.preview_age_s);
+      if (Number.isFinite(seq) && seq > previewLastSeq) {
+        markPreviewHeartbeat(seq);
+        return;
+      }
+      if (Number.isFinite(age) && age >= 0 && age <= 1.5) {
+        markPreviewHeartbeat(seq);
+      }
+    } catch {}
+    finally {
+      previewHealthPollInFlight = false;
+    }
+  }
+
+  function startPreviewStream(force = false) {
+    const q = Number(previewQualitySelect.value || 75);
+    const src = "/api/receive/preview?ts=" + Date.now() + "&quality=" + q;
+    if (!force && previewStream.src) return;
+    previewStream.src = src;
+    previewStream.style.display = "block";
+    markPreviewHeartbeat();
+  }
+
+  function stopPreviewStream() {
+    previewStream.removeAttribute("src");
+    previewStream.src = "";
+    previewStream.style.display = "none";
+  }
+
+  function loadPreviewSettings() {
+    const allowed = new Set(["45", "60", "75", "90"]);
+    try {
+      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+      if (s && s.defaultPreviewQuality !== undefined) {
+        const q = String(Number(s.defaultPreviewQuality));
+        if (allowed.has(q)) previewQualitySelect.value = q;
+        return;
+      }
+    } catch {}
+
+    // Backward compatibility for existing local state from previous versions.
+    try {
+      const raw = localStorage.getItem(LEGACY_PREVIEW_SETTINGS_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s && s.quality !== undefined) {
+        const q = String(Number(s.quality));
+        if (allowed.has(q)) previewQualitySelect.value = q;
+      }
+    } catch {}
+  }
+
+  function savePreviewSettings() {
+    try {
+      const q = Number(previewQualitySelect.value);
+      const settings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+      settings.defaultPreviewQuality = q;
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      localStorage.removeItem(LEGACY_PREVIEW_SETTINGS_KEY);
+    } catch {}
+  }
+
+  async function applyPreviewSettings(showLog = false) {
+    const q = Number(previewQualitySelect.value);
+    try {
+      const r = await fetch("/api/receive/preview/settings", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({quality: q}),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        if (showLog) log("info", "Preview quality set to Q" + d.quality + ".");
+      }
+      if (!r.ok && r.status !== 409) {
+        log("warn", "Preview settings not applied.");
+      }
+    } catch {}
+  }
 
   /* ── Canvas ────────────────────────────── */
   function sizeCanvas() {
@@ -467,6 +603,7 @@ html,body{
     });
     statusMsg.textContent = devs.length + " device(s) found.";
     startBtn.disabled = false;
+    resetBtn.disabled = false;
     updateBadge();
   }
 
@@ -481,8 +618,10 @@ html,body{
       log("info", devs.length + " cached device(s) loaded. Ready.");
       deviceSelect.disabled = false;
       refreshBtn.disabled = false;
+      resetBtn.disabled = false;
       // Ensure server has cache + pre-warms device (awaited to avoid race)
-      fetch("/api/devices").then(r => r.json()).then(serverDevs => {
+      const syncUrl = autoScanEnabled ? "/api/devices" : "/api/devices?cached_only=1";
+      fetch(syncUrl).then(r => r.json()).then(serverDevs => {
         if (serverDevs && serverDevs.length) {
           populateDevices(serverDevs);
           try { sessionStorage.setItem(DEVICE_CACHE_KEY, JSON.stringify(serverDevs)); } catch {}
@@ -499,23 +638,29 @@ html,body{
     }).catch(() => {});
   }
 
-  async function loadDevices(force) {
+  async function loadDevices(force, cachedOnly = false) {
     deviceSelect.innerHTML = '<option value="">Scanning...</option>';
     deviceSelect.disabled = true;
     refreshBtn.disabled = true;
     startBtn.disabled = true;
-    statusMsg.textContent = "Scanning devices...";
-    log("info", "Scanning capture devices...");
+    resetBtn.disabled = true;
+    statusMsg.textContent = cachedOnly ? "Loading cached devices..." : "Scanning devices...";
+    log("info", cachedOnly ? "Loading cached devices..." : "Scanning capture devices...");
     try {
-      const url = force ? "/api/devices?force=1" : "/api/devices";
+      const url = cachedOnly ? "/api/devices?cached_only=1" : (force ? "/api/devices?force=1" : "/api/devices");
       const r = await fetch(url);
       const devs = await r.json();
       populateDevices(devs);
       if (devs.length) {
-        log("success", devs.length + " device(s) found. Ready.");
+        log("success", devs.length + " device(s) available. Ready.");
         try { sessionStorage.setItem(DEVICE_CACHE_KEY, JSON.stringify(devs)); } catch {}
       } else {
-        log("warn", "No capture devices detected.");
+        if (cachedOnly) {
+          statusMsg.textContent = "No cached device. Click Detect devices.";
+          log("warn", "No cached device available. Manual detect required.");
+        } else {
+          log("warn", "No capture devices detected.");
+        }
       }
     } catch (e) {
       deviceSelect.innerHTML = '<option value="">Error</option>';
@@ -524,6 +669,8 @@ html,body{
     }
     deviceSelect.disabled = false;
     refreshBtn.disabled = false;
+    resetBtn.disabled = !deviceSelect.value;
+    applySavedSettings();
   }
 
   function updateBadge() {
@@ -544,10 +691,13 @@ html,body{
       });
       if (!r.ok) { const e = await r.json(); statusMsg.textContent = "Error: " + (e.error||"Failed"); log("error", e.error||"Start failed"); return; }
     } catch (e) { statusMsg.textContent = "Network error: " + e.message; log("error", "Network: " + e.message); return; }
-    startBtn.disabled = true; stopBtn.disabled = false;
+    startBtn.disabled = true; stopBtn.disabled = false; resetBtn.disabled = false;
     deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = true;
     badgeRec.style.display = "flex";
     previewIdle.classList.add("hidden");
+    previewLastSeq = 0;
+    startPreviewStream(true);
+    applyPreviewSettings();
     log("info", "Starting capture...");
     connectSSE();
   }
@@ -558,35 +708,54 @@ html,body{
     try { await fetch("/api/receive/stop", {method:"POST"}); } catch {}
   }
 
+  async function resetConnection() {
+    resetBtn.disabled = true;
+    log("warn", "Resetting receiver connection...");
+    if (sse) { sse.close(); sse = null; }
+    try {
+      const payload = {device: deviceSelect.value ? +deviceSelect.value : null};
+      const r = await fetch("/api/receive/reset", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error || ("reset failed (" + r.status + ")"));
+      }
+      statusMsg.textContent = "Connection reset.";
+      log("success", "Receiver connection reset.");
+    } catch (e) {
+      statusMsg.textContent = "Reset error: " + e.message;
+      log("error", "Reset failed: " + e.message);
+    } finally {
+      previewLastSeq = 0;
+      cleanup();
+      resetBtn.disabled = !deviceSelect.value;
+    }
+  }
+
   /* ── SSE ────────────────────────────────── */
   function connectSSE() {
     sse = new EventSource("/api/receive/events");
 
     sse.addEventListener("status", e => {
       const d = JSON.parse(e.data);
+      markPreviewHeartbeat();
       setLink(d.state);
       log(d.state === "error" ? "error" : "info", d.message);
       if (d.total_chunks) { totalChunks = d.total_chunks; initGrid(Math.min(totalChunks, GRID_N)); }
     });
 
-    sse.addEventListener("frame", e => {
-      const d = JSON.parse(e.data);
-      const img = new Image();
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        previewIdle.classList.add("hidden");
-      };
-      img.src = "data:image/jpeg;base64," + d.jpeg;
-    });
-
     sse.addEventListener("progress", e => {
       const d = JSON.parse(e.data);
+      markPreviewHeartbeat();
       const pct = d.percent || 0;
       pctBig.textContent = pct.toFixed(1);
       fountainPct.textContent = pct.toFixed(0) + "%";
       badgeFrm.textContent = "FRM: " + d.frames_captured.toLocaleString();
-      fountainRcvd.textContent = "Decoded: " + d.chunks_decoded.toLocaleString();
-      fountainTarget.textContent = "Total: " + d.total_chunks.toLocaleString();
+      fountainRcvd.textContent = "Solved: " + d.chunks_decoded.toLocaleString();
+      fountainTarget.textContent = "Needed: " + d.total_chunks.toLocaleString();
       totalChunks = d.total_chunks;
       const spd = d.speed_kbps || 0;
       if (spd > 0) {
@@ -597,7 +766,10 @@ html,body{
       }
       metricSpeed.textContent = spd > 0 ? spd.toFixed(1) + " KB/s" : "--";
       metricEta.textContent = d.eta_seconds >= 0 ? fmtEta(d.eta_seconds) : "--";
-      if (d.decoded_indices) { updateGrid(d.decoded_indices, d.total_chunks); drawCanvas(d.decoded_indices, d.total_chunks); }
+      if (d.decoded_indices) {
+        updateGrid(d.decoded_indices, d.total_chunks);
+        if (canvas.style.display !== "none") drawCanvas(d.decoded_indices, d.total_chunks);
+      }
     });
 
     sse.addEventListener("complete", e => { showComplete(JSON.parse(e.data)); cleanup(); });
@@ -609,8 +781,18 @@ html,body{
   function cleanup() {
     if (sse) { sse.close(); sse = null; }
     startBtn.disabled = !deviceSelect.value; stopBtn.disabled = true;
+    resetBtn.disabled = !deviceSelect.value;
     deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = false;
     badgeRec.style.display = "none";
+    if (idlePreviewEnabled) {
+      previewIdle.textContent = "Live preview (idle)";
+      previewIdle.classList.remove("hidden");
+      startPreviewStream(true);
+    } else {
+      stopPreviewStream();
+      previewIdle.textContent = "Waiting for signal";
+      previewIdle.classList.remove("hidden");
+    }
   }
 
   /* ── Helpers ────────────────────────────── */
@@ -638,6 +820,24 @@ html,body{
     setLink("idle");
     log("success", "Complete: " + d.filename + " (" + fmtBytes(d.size) + ")");
     log("success", "SHA-256: " + (d.sha256_ok ? "OK" : "MISMATCH") + " | " + d.speed_mbps.toFixed(2) + " Mbps");
+    const total = Number(d.total_chunks || totalChunks || 0);
+    const solved = total > 0 ? total : Number(d.chunks_decoded || 0);
+    const finalKbps = Number((d.speed_mbps || 0) * 122.0703125);
+    pctBig.textContent = "100.0";
+    fountainPct.textContent = "100%";
+    if (Number.isFinite(finalKbps) && finalKbps > 0) {
+      speedBadge.textContent = finalKbps.toFixed(1) + " KB/s";
+      speedHistory.push(finalKbps);
+      if (speedHistory.length > MAX_PTS) speedHistory.shift();
+      drawSpeed();
+    }
+    if (total > 0) {
+      fountainRcvd.textContent = "Solved: " + solved.toLocaleString();
+      fountainTarget.textContent = "Needed: " + total.toLocaleString();
+      const allDecoded = Array.from({length: total}, (_, i) => i);
+      updateGrid(allDecoded, total);
+      if (canvas.style.display !== "none") drawCanvas(allDecoded, total);
+    }
     metricName.textContent = d.filename;
     metricSize.textContent = fmtBytes(d.size);
     metricSha.textContent = d.sha256_ok ? "OK" : "MISMATCH";
@@ -707,7 +907,9 @@ html,body{
   /* ── Saved settings ──────────────────────── */
   function applySavedSettings() {
     try {
-      const s = JSON.parse(localStorage.getItem("hdmi_exfil_settings") || "{}");
+      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+      autoScanEnabled = s.autoDeviceScan !== false;
+      idlePreviewEnabled = s.idlePreviewEnabled !== false;
       if (s.defaultDevice !== null && s.defaultDevice !== undefined) {
         deviceSelect.value = String(s.defaultDevice);
         warmDevice(s.defaultDevice);
@@ -715,6 +917,9 @@ html,body{
       if (s.defaultProfile) profileSelect.value = s.defaultProfile;
       if (s.defaultMode) modeSelect.value = s.defaultMode;
       if (s.defaultBpc) bpcSelect.value = String(s.defaultBpc);
+      if (s.defaultPreviewQuality !== undefined) {
+        previewQualitySelect.value = String(Number(s.defaultPreviewQuality));
+      }
     } catch {}
     updateBadge();
   }
@@ -726,22 +931,63 @@ html,body{
       const d = await r.json();
       if (d.active) {
         log("warn", "Previous session still active — reconnecting...");
-        startBtn.disabled = true; stopBtn.disabled = false;
+        startBtn.disabled = true; stopBtn.disabled = false; resetBtn.disabled = false;
         deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = true;
         badgeRec.style.display = "flex";
         previewIdle.classList.add("hidden");
+        previewLastSeq = Number(d.preview_seq || 0);
+        markPreviewHeartbeat(previewLastSeq);
+        startPreviewStream(true);
+        applyPreviewSettings();
         connectSSE();
       }
     } catch {}
   }
 
   /* ── Init ───────────────────────────────── */
-  if (!loadCachedDevices()) {
-    loadDevices(false);
-  }
+  loadPreviewSettings();
   applySavedSettings();
+  if (!loadCachedDevices()) {
+    if (autoScanEnabled) loadDevices(false);
+    else loadDevices(false, true);
+  }
+  if (idlePreviewEnabled) {
+    previewIdle.textContent = "Live preview (idle)";
+    previewIdle.classList.remove("hidden");
+    startPreviewStream(true);
+  }
+  previewStream.addEventListener("load", () => {
+    markPreviewHeartbeat();
+    previewIdle.classList.add("hidden");
+  });
+  previewStream.addEventListener("error", () => {
+    if (!stopBtn.disabled) return;
+    previewIdle.classList.remove("hidden");
+    previewIdle.textContent = "No preview signal";
+  });
+  setInterval(async () => {
+    // Watchdog only while actively receiving.
+    if (stopBtn.disabled) return;
+    await pollPreviewHealth();
+    const dt = Date.now() - previewLastFrameAt;
+    if (dt <= 6000) {
+      previewWatchdogWarned = false;
+      return;
+    }
+    if (!previewWatchdogWarned) {
+      log("warn", "Preview stalled — reconnecting stream...");
+      previewWatchdogWarned = true;
+    }
+    startPreviewStream(true);
+  }, 2000);
   startBtn.addEventListener("click", start);
+  resetBtn.addEventListener("click", resetConnection);
   stopBtn.addEventListener("click", stop);
+  previewQualitySelect.addEventListener("change", () => {
+    savePreviewSettings();
+    if (!stopBtn.disabled) applyPreviewSettings(true);
+    else if (idlePreviewEnabled) startPreviewStream(true);
+  });
   refreshBtn.addEventListener("click", () => loadDevices(true));
   checkActiveWorker();
 })();

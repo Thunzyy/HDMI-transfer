@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import queue
+import sys
 import threading
 import time
 from pathlib import Path
@@ -61,6 +62,7 @@ def create_app(output_dir: str = "received_files") -> Flask:
     app.config["OUTPUT_DIR"] = output_dir
     app.config["SENDER_HTML"] = str(sender_html)
     app._receiver_worker: ReceiverWorker | None = None
+    app._receiver_control_lock = threading.Lock()
 
     # Device cache: memory + disk
     app._devices: list[dict] = _load_disk_cache() or []
@@ -172,6 +174,14 @@ def create_app(output_dir: str = "received_files") -> Flask:
                     return d.get("backend")
         return None
 
+    def _get_device_info(device_idx: int) -> dict | None:
+        """Look up full device entry for a cached device index."""
+        with app._devices_lock:
+            for d in app._devices:
+                if d["index"] == device_idx:
+                    return d
+        return None
+
     def _detect_and_cache() -> list[dict]:
         """Run device detection under the device-open lock and cache results."""
         from hdmi_exfil.receiver.cli.console import _detect_devices
@@ -217,11 +227,15 @@ def create_app(output_dir: str = "received_files") -> Flask:
     @app.route("/api/devices")
     def api_devices():
         force = request.args.get("force", "0") == "1"
-        log.info("[pcap] /api/devices called (force=%s)", force)
+        cached_only = request.args.get("cached_only", "0") == "1"
+        log.info("[pcap] /api/devices called (force=%s cached_only=%s)", force, cached_only)
         with app._devices_lock:
-            if not force and app._devices:
+            if app._devices and (cached_only or not force):
                 log.info("[pcap] /api/devices returning %d cached devices", len(app._devices))
                 return jsonify(app._devices)
+            if cached_only:
+                log.info("[pcap] /api/devices cached_only requested and cache empty")
+                return jsonify([])
 
         # Release persistent cap before detection (avoids camera contention)
         log.info("[pcap] /api/devices: releasing persistent for detection")
@@ -266,71 +280,262 @@ def create_app(output_dir: str = "received_files") -> Flask:
         """Return current receiver state so the UI can recover after refresh."""
         worker = app._receiver_worker
         if worker is not None and worker.is_alive():
-            return jsonify({"active": True})
+            out = {"active": True}
+            try:
+                out.update(worker.get_preview_health())
+            except Exception:
+                pass
+            return jsonify(out)
         return jsonify({"active": False})
 
     @app.route("/api/receive/start", methods=["POST"])
     def api_receive_start():
-        # Auto-stop previous worker if still alive (e.g. page refresh)
-        old = app._receiver_worker
-        if old is not None and old.is_alive():
-            log.info("Auto-stopping previous worker before new START")
-            old.stop()
-            app._receiver_worker = None
+        with app._receiver_control_lock:
+            # Auto-stop previous worker if still alive (e.g. page refresh)
+            old = app._receiver_worker
+            if old is not None and old.is_alive():
+                log.info("Auto-stopping previous worker before new START")
+                old.stop()
+                app._receiver_worker = None
 
-        data = request.get_json(force=True)
-        device = int(data.get("device", 0))
-        profile_name = data.get("profile", "speed")
-        mode = data.get("mode", "auto")
-        output = data.get("output", app.config["OUTPUT_DIR"])
+            data = request.get_json(force=True)
+            device = int(data.get("device", 0))
+            profile_name = data.get("profile", "speed")
+            mode = data.get("mode", "auto")
+            output = data.get("output", app.config["OUTPUT_DIR"])
 
-        bpc = int(data.get("bpc", 1))
-        if bpc not in (1, 2, 3):
-            bpc = 1
+            bpc = int(data.get("bpc", 1))
+            if bpc not in (1, 2, 3):
+                bpc = 1
 
-        base = PROFILES.get(profile_name)
-        if base is None:
-            return jsonify({"error": f"Unknown profile: {profile_name}"}), 400
+            base = PROFILES.get(profile_name)
+            if base is None:
+                return jsonify({"error": f"Unknown profile: {profile_name}"}), 400
 
-        from dataclasses import replace
-        profile = replace(base, bits_per_channel=bpc)
+            from dataclasses import replace
+            profile = replace(base, bits_per_channel=bpc)
 
-        backend = _get_backend_for(device)
+            backend = _get_backend_for(device)
+            device_info = _get_device_info(device)
 
-        # If backend unknown, detect devices now (race-condition fallback)
-        if backend is None:
-            _release_persistent()
-            devices = _detect_and_cache()
-            for d in devices:
-                if d["index"] == device:
-                    backend = d.get("backend")
-                    break
+            decode_device = device
+            decode_backend = backend
+            prefer_dshow = bool(
+                sys.platform == "win32"
+                and device_info is not None
+                and device_info.get("prefer_dshow")
+                and device_info.get("dshow_index") is not None
+            )
+            if prefer_dshow:
+                decode_device = int(device_info["dshow_index"])
+                decode_backend = int(cv2.CAP_DSHOW)
+                log.info(
+                    "[pcap] START: using DSHOW path for capture card "
+                    "(logical_index=%d -> dshow_index=%d)",
+                    device, decode_device,
+                )
+                # Persistent cap currently tracks MSMF devices; release it before
+                # opening DSHOW to avoid backend contention on the same hardware.
+                _release_persistent()
 
-        # Wait for persistent cap if it's still opening (startup race)
-        log.info("[pcap] START: waiting for persistent_ready (device=%d)...", device)
-        ready = app._persistent_ready.wait(timeout=10.0)
-        log.info("[pcap] START: persistent_ready=%s", ready)
-        precap, _ = _take_persistent(device)
-        log.info("[pcap] START: precap=%s", "YES" if precap else "NO")
+            # If backend unknown, detect devices now (race-condition fallback)
+            if decode_backend is None:
+                _release_persistent()
+                devices = _detect_and_cache()
+                for d in devices:
+                    if d["index"] == device:
+                        decode_backend = d.get("backend")
+                        device_info = d
+                        break
+                if (
+                    sys.platform == "win32"
+                    and device_info is not None
+                    and device_info.get("prefer_dshow")
+                    and device_info.get("dshow_index") is not None
+                ):
+                    decode_device = int(device_info["dshow_index"])
+                    decode_backend = int(cv2.CAP_DSHOW)
+                    _release_persistent()
 
-        worker = ReceiverWorker(
-            device=device, profile=profile,
-            mode=mode, output_dir=output,
-            backend=backend, precap=precap,
-            on_cap_return=_return_cap,
-        )
-        app._receiver_worker = worker
-        worker.start()
-        return jsonify({"status": "started"})
+            precap = None
+            on_cap_return = _return_cap
+            if decode_backend == cv2.CAP_DSHOW:
+                # Do not reuse MSMF persistent capture path with DSHOW workers.
+                on_cap_return = None
+            else:
+                # Wait for persistent cap if it's still opening (startup race)
+                log.info("[pcap] START: waiting for persistent_ready (device=%d)...", device)
+                ready = app._persistent_ready.wait(timeout=10.0)
+                log.info("[pcap] START: persistent_ready=%s", ready)
+                precap, _ = _take_persistent(device)
+                log.info("[pcap] START: precap=%s", "YES" if precap else "NO")
+
+            worker = ReceiverWorker(
+                device=decode_device, profile=profile,
+                mode=mode, output_dir=output,
+                backend=decode_backend, precap=precap,
+                on_cap_return=on_cap_return,
+            )
+            app._receiver_worker = worker
+            worker.start()
+            return jsonify({"status": "started"})
 
     @app.route("/api/receive/stop", methods=["POST"])
     def api_receive_stop():
+        with app._receiver_control_lock:
+            worker = app._receiver_worker
+            if worker is None or not worker.is_alive():
+                return jsonify({"error": "Not receiving"}), 409
+            worker.stop()
+            # Cap is returned via _return_cap callback automatically
+            return jsonify({"status": "stopped"})
+
+    @app.route("/api/receive/reset", methods=["POST"])
+    def api_receive_reset():
+        """Force-close stale receive session and reopen persistent capture."""
+        with app._receiver_control_lock:
+            worker = app._receiver_worker
+            if worker is not None and worker.is_alive():
+                worker.stop()
+            app._receiver_worker = None
+
+            # Tear down any stale persistent handle first.
+            _release_persistent()
+
+            data = request.get_json(silent=True) or {}
+            target_device = data.get("device")
+            opened = False
+
+            if target_device is not None:
+                try:
+                    target_device = int(target_device)
+                except Exception:
+                    target_device = None
+
+            if isinstance(target_device, int):
+                backend = _get_backend_for(target_device)
+                if backend is None:
+                    devices = _detect_and_cache()
+                    for d in devices:
+                        if d["index"] == target_device:
+                            backend = d.get("backend")
+                            break
+                if backend is not None:
+                    _open_persistent_bg(target_device, backend)
+                    opened = True
+
+            if not opened:
+                with app._devices_lock:
+                    fallback = app._devices[0] if app._devices else None
+                if fallback is not None:
+                    _open_persistent_bg(
+                        fallback["index"],
+                        fallback.get("backend", cv2.CAP_MSMF),
+                    )
+                    opened = True
+
+            return jsonify({"status": "reset", "persistent_opening": opened})
+
+    @app.route("/api/receive/preview")
+    def api_receive_preview():
+        """Low-latency MJPEG preview stream (active worker or idle device)."""
+        def clamp_int(value: str | None, lo: int, hi: int, default: int) -> int:
+            try:
+                return max(lo, min(hi, int(value)))
+            except Exception:
+                return default
+
+        def clamp_float(value: str | None, lo: float, hi: float, default: float) -> float:
+            try:
+                return max(lo, min(hi, float(value)))
+            except Exception:
+                return default
+
+        idle_quality = clamp_int(request.args.get("quality"), 10, 100, 75)
+        idle_scale = clamp_float(request.args.get("scale"), 0.25, 1.0, 1.0)
+        idle_fps = clamp_float(request.args.get("idle_fps"), 1.0, 60.0, 20.0)
+
+        def generate():
+            last_worker: ReceiverWorker | None = None
+            last_seq = 0
+            while True:
+                worker = app._receiver_worker
+                if worker is not None and worker.is_alive():
+                    if worker is not last_worker:
+                        last_worker = worker
+                        last_seq = 0
+
+                    jpeg, seq = worker.wait_for_preview(last_seq, timeout_s=1.0)
+                    if jpeg is None or seq <= last_seq:
+                        continue
+                    last_seq = seq
+                else:
+                    # Idle preview: read directly from the persistent capture.
+                    ret = False
+                    frame = None
+                    with app._persistent_lock:
+                        cap = app._persistent_cap
+                        if cap is not None and cap.isOpened():
+                            ret, frame = cap.read()
+                    if not ret or frame is None:
+                        time.sleep(0.05)
+                        continue
+
+                    if idle_scale < 1.0:
+                        h, w = frame.shape[:2]
+                        nw = max(1, int(w * idle_scale))
+                        nh = max(1, int(h * idle_scale))
+                        frame = cv2.resize(
+                            frame,
+                            (nw, nh),
+                            interpolation=cv2.INTER_AREA,
+                        )
+
+                    ok, encoded = cv2.imencode(
+                        ".jpg",
+                        frame,
+                        [cv2.IMWRITE_JPEG_QUALITY, idle_quality],
+                    )
+                    if not ok:
+                        time.sleep(0.01)
+                        continue
+                    jpeg = encoded.tobytes()
+                    time.sleep(1.0 / idle_fps)
+
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n"
+                    + jpeg
+                    + b"\r\n"
+                )
+        return Response(generate(),
+                        mimetype="multipart/x-mixed-replace; boundary=frame",
+                        headers={
+                            "Cache-Control": "no-cache, no-store, must-revalidate",
+                            "Pragma": "no-cache",
+                            "Expires": "0",
+                            "X-Accel-Buffering": "no",
+                        })
+
+    @app.route("/api/receive/preview/settings", methods=["POST"])
+    def api_preview_settings():
+        """Update preview quality/scale on the fly."""
         worker = app._receiver_worker
-        if worker is None or not worker.is_alive():
-            return jsonify({"error": "Not receiving"}), 409
-        worker.stop()
-        # Cap is returned via _return_cap callback automatically
-        return jsonify({"status": "stopped"})
+        if worker is None:
+            return jsonify({"error": "No active worker"}), 409
+        data = request.get_json(force=True)
+        if "quality" in data:
+            worker._preview_quality = max(10, min(100, int(data["quality"])))
+        if "scale" in data:
+            worker._preview_scale = max(0.25, min(1.0, float(data["scale"])))
+        if "fps" in data:
+            worker._preview_target_fps = max(1.0, min(120.0, float(data["fps"])))
+        return jsonify({
+            "quality": worker._preview_quality,
+            "scale": worker._preview_scale,
+            "fps": worker._preview_target_fps,
+        })
 
     @app.route("/api/receive/events")
     def api_receive_events():

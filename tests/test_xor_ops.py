@@ -13,7 +13,7 @@ from hdmi_exfil.protocols.fountain import (
     FountainDecoder,
     PAYLOAD_SIZE,
 )
-from hdmi_exfil.prng import PRNG
+from hdmi_exfil.prng import choose_indices
 
 
 def test_xor_into_basic():
@@ -76,22 +76,8 @@ def test_fountain_decoder_with_numba():
         if decoder.is_complete():
             break
 
-        # Build droplet payload by XOR-ing selected chunks (mirrors decoder logic)
-        prng = PRNG(seed)
-        degree = 1
-        r = prng.next_float()
-        if r < 0.1:
-            degree = 1
-        elif r < 0.6:
-            degree = 2
-        else:
-            degree = int(prng.next_float() * min(K, 20)) + 1
-        degree = min(degree, K)
-
-        indices = set()
-        while len(indices) < degree:
-            idx = prng.next() % K
-            indices.add(idx)
+        # Build droplet payload by XOR-ing selected chunks (matches decoder logic).
+        indices = choose_indices(seed, K)
 
         droplet_data = bytearray(PAYLOAD_SIZE)
         for idx in indices:

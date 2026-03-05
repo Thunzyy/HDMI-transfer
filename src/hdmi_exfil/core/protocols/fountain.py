@@ -17,6 +17,7 @@ class and the canonical ``hdmi_exfil.core.config`` constants.
 from __future__ import annotations
 
 import struct
+import time
 import zlib
 
 import numpy as np
@@ -40,6 +41,12 @@ FOUNT_HEADER_SIZE: int = FOUNT_HEADER_PRE_CRC + FOUNT_CRC_SIZE  # 12
 # 3bpp: 3 bits per block (RGB binary), same as sequential protocol
 FOUNTAIN_BYTES_PER_FRAME: int = (config.ROWS * config.COLS * 3) // 8  # 12150
 PAYLOAD_SIZE: int = FOUNTAIN_BYTES_PER_FRAME - FOUNT_HEADER_SIZE  # 12138
+
+# GE fallback safeguards for large transfers.
+# For very large K, full GE can monopolize CPU and starve capture/progress.
+_GE_MAX_TOTAL_CHUNKS = 2048
+_GE_MAX_UNKNOWNS = 192
+_GE_MIN_INTERVAL_S = 0.35
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +72,9 @@ class FountainDecoder:
         self.chunk_to_droplets: dict[int, list] = {
             i: [] for i in range(self.K)
         }
+        self._last_ge_attempt_s: float = 0.0
+        self._last_ge_unknown: int | None = None
+        self._last_ge_unresolved: int | None = None
 
     # -- public API ----------------------------------------------------------
 
@@ -153,8 +163,34 @@ class FountainDecoder:
         if self.is_complete():
             return
 
+        # Safety cap: avoid pathological GE cost on large transfers.
+        if self.K > _GE_MAX_TOTAL_CHUNKS:
+            return
+
         n_unknown = self.K - len(self.chunks)
         n_unresolved = sum(1 for d in self.droplets if len(d[0]) > 0)
+
+        # GE cost grows rapidly with unknowns; keep it for small residual systems.
+        if n_unknown > _GE_MAX_UNKNOWNS:
+            return
+
+        # Throttle repeated GE attempts only for medium-sized residual systems.
+        # Keep tiny systems aggressive to preserve low-overhead behavior.
+        now = time.monotonic()
+        if n_unknown > 64:
+            if now - self._last_ge_attempt_s < _GE_MIN_INTERVAL_S:
+                return
+
+            if self._last_ge_unknown is not None and self._last_ge_unresolved is not None:
+                unresolved_gain = n_unresolved - self._last_ge_unresolved
+                # If unknown set didn't shrink and unresolved equations barely grew,
+                # a new GE attempt is unlikely to add value.
+                if n_unknown >= self._last_ge_unknown and unresolved_gain < max(6, n_unknown // 24):
+                    return
+
+            self._last_ge_attempt_s = now
+            self._last_ge_unknown = n_unknown
+            self._last_ge_unresolved = n_unresolved
 
         if n_unresolved >= n_unknown:
             self.gaussian_elimination_fallback()

@@ -179,6 +179,38 @@ html,body{
             <option value="sequential">Sequential</option>
           </select>
         </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Preview quality</div>
+            <div class="setting-hint">JPEG quality for live preview stream</div>
+          </div>
+          <select class="setting-select" id="defaultPreviewQuality">
+            <option value="45">Low (Q45)</option>
+            <option value="60">Balanced (Q60)</option>
+            <option value="75">High (Q75)</option>
+            <option value="90">Max (Q90)</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Auto device scan</div>
+            <div class="setting-hint">Scan capture devices automatically on Receive</div>
+          </div>
+          <select class="setting-select" id="autoDeviceScan">
+            <option value="1">Enabled</option>
+            <option value="0">Disabled</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Idle preview</div>
+            <div class="setting-hint">Show live device preview when not receiving</div>
+          </div>
+          <select class="setting-select" id="idlePreviewEnabled">
+            <option value="1">Enabled</option>
+            <option value="0">Disabled</option>
+          </select>
+        </div>
       </div>
 
       <button class="btn-save" id="saveBtn">Save settings</button>
@@ -196,6 +228,9 @@ html,body{
   const defaultDevice = document.getElementById("defaultDevice");
   const defaultProfile = document.getElementById("defaultProfile");
   const defaultMode = document.getElementById("defaultMode");
+  const defaultPreviewQuality = document.getElementById("defaultPreviewQuality");
+  const autoDeviceScan = document.getElementById("autoDeviceScan");
+  const idlePreviewEnabled = document.getElementById("idlePreviewEnabled");
   const saveBtn = document.getElementById("saveBtn");
   const toast = document.getElementById("toast");
 
@@ -218,8 +253,10 @@ html,body{
 
   // Load devices into dropdown
   async function loadDevices() {
+    const autoScan = autoDeviceScan.value !== "0";
     try {
-      const r = await fetch("/api/devices");
+      const url = autoScan ? "/api/devices" : "/api/devices?cached_only=1";
+      const r = await fetch(url);
       const devs = await r.json();
       defaultDevice.innerHTML = '<option value="">None (manual selection)</option>';
       devs.forEach(d => {
@@ -235,6 +272,15 @@ html,body{
       if (s.defaultDevice !== undefined) defaultDevice.value = String(s.defaultDevice);
       if (s.defaultProfile) defaultProfile.value = s.defaultProfile;
       if (s.defaultMode) defaultMode.value = s.defaultMode;
+      if (s.defaultPreviewQuality !== undefined) {
+        defaultPreviewQuality.value = String(Number(s.defaultPreviewQuality));
+      }
+      if (s.autoDeviceScan !== undefined) {
+        autoDeviceScan.value = s.autoDeviceScan ? "1" : "0";
+      }
+      if (s.idlePreviewEnabled !== undefined) {
+        idlePreviewEnabled.value = s.idlePreviewEnabled ? "1" : "0";
+      }
     } catch {
       defaultDevice.innerHTML = '<option value="">Error loading devices</option>';
     }
@@ -245,6 +291,9 @@ html,body{
       defaultDevice: defaultDevice.value ? Number(defaultDevice.value) : null,
       defaultProfile: defaultProfile.value,
       defaultMode: defaultMode.value,
+      defaultPreviewQuality: Number(defaultPreviewQuality.value),
+      autoDeviceScan: autoDeviceScan.value !== "0",
+      idlePreviewEnabled: idlePreviewEnabled.value !== "0",
     };
     saveSettings(s);
     showToast();
@@ -256,12 +305,28 @@ html,body{
         body: JSON.stringify({device: s.defaultDevice}),
       }).catch(() => {});
     }
+
+    // Apply preview quality immediately if a receive session is active.
+    fetch("/api/receive/preview/settings", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({quality: s.defaultPreviewQuality}),
+    }).catch(() => {});
   });
 
   // Init
   const s = loadSettings();
   if (s.defaultProfile) defaultProfile.value = s.defaultProfile;
   if (s.defaultMode) defaultMode.value = s.defaultMode;
+  if (s.defaultPreviewQuality !== undefined) {
+    defaultPreviewQuality.value = String(Number(s.defaultPreviewQuality));
+  }
+  if (s.autoDeviceScan !== undefined) {
+    autoDeviceScan.value = s.autoDeviceScan ? "1" : "0";
+  }
+  if (s.idlePreviewEnabled !== undefined) {
+    idlePreviewEnabled.value = s.idlePreviewEnabled ? "1" : "0";
+  }
+  autoDeviceScan.addEventListener("change", loadDevices);
   loadDevices();
 })();
 </script>

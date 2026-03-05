@@ -26,6 +26,7 @@ from hdmi_exfil.config import (
 from hdmi_exfil.protocols.fountain import (
     FOUNT_HEADER_FMT, FOUNT_HEADER_PRE_CRC, FOUNT_HEADER_SIZE,
 )
+from hdmi_exfil.core.protocols.encoding import pixels_to_bytes
 
 # Module-level protocol instance for encode/decode
 _proto = SequentialProtocol()
@@ -466,12 +467,8 @@ class TestProtocolRouting:
         frame = _proto.encode_frame(data, 0, 1)
         sampled = sample_frame(frame, ROWS, COLS, BLOCK_SIZE)
 
-        # Get raw bytes (replicate decode pipeline to get bytes before parsing)
-        flat_pixels = sampled.reshape(-1, 3)
-        bits = (flat_pixels > 128).astype(np.uint8)
-        flat_bits = bits.reshape(-1)
-        packed = np.packbits(flat_bits)
-        raw_bytes = packed.tobytes()
+        # Replicate runtime decode pipeline (sampled is BGR; decoder expects RGB).
+        raw_bytes = pixels_to_bytes(sampled[..., ::-1], bpc=1)
 
         protocol, result = _route_frame(raw_bytes)
         assert protocol == 'sequential'

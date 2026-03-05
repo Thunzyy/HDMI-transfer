@@ -1,0 +1,86 @@
+{
+  "elgato": {
+    "backend": 1400,
+    "dshow_index": 1,
+    "fps": 60.0,
+    "height": 1080,
+    "index": 0,
+    "name": "Elgato 4K X",
+    "prefer_dshow": true,
+    "width": 1920
+  },
+  "results": [
+    {
+      "bpc_requested": 1,
+      "receiver_start": {
+        "status": "started"
+      },
+      "status_messages": [
+        {
+          "state": "ready",
+          "message": "Device opened: 1920x1080 @ 60 FPS"
+        },
+        {
+          "state": "probing",
+          "message": "Auto-detecting protocol and bpc..."
+        }
+      ],
+      "speed_max_kbs": 0.0,
+      "speed_avg_kbs": 0.0,
+      "progress_count": 0,
+      "percent_max": 0.0,
+      "frames_captured_max": 0,
+      "errors": [],
+      "complete": null,
+      "stopped": null
+    },
+    {
+      "bpc_requested": 2,
+      "receiver_start": {
+        "status": "started"
+      },
+      "status_messages": [
+        {
+          "state": "ready",
+          "message": "Device opened: 1920x1080 @ 60 FPS"
+        },
+        {
+          "state": "probing",
+          "message": "Auto-detecting protocol and bpc..."
+        }
+      ],
+      "speed_max_kbs": 0.0,
+      "speed_avg_kbs": 0.0,
+      "progress_count": 0,
+      "percent_max": 0.0,
+      "frames_captured_max": 0,
+      "errors": [],
+      "complete": null,
+      "stopped": null
+    },
+    {
+      "bpc_requested": 3,
+      "receiver_start": {
+        "status": "started"
+      },
+      "status_messages": [
+        {
+          "state": "ready",
+          "message": "Device opened: 1920x1080 @ 60 FPS"
+        },
+        {
+          "state": "probing",
+          "message": "Auto-detecting protocol and bpc..."
+        }
+      ],
+      "speed_max_kbs": 0.0,
+      "speed_avg_kbs": 0.0,
+      "progress_count": 0,
+      "percent_max": 0.0,
+      "frames_captured_max": 0,
+      "errors": [],
+      "complete": null,
+      "stopped": null
+    }
+  ]
+}

@@ -19,6 +19,7 @@ Usage::
 
 from __future__ import annotations
 
+import contextlib
 import sys
 
 import cv2
@@ -69,6 +70,9 @@ def _try_open(
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
     cap.set(cv2.CAP_PROP_FPS, fps)
+    # Keep camera queue small to reduce live-preview latency on supported backends.
+    with contextlib.suppress(Exception):
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
     actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))

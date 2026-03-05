@@ -326,3 +326,44 @@ class TestGEWithExistingTests:
 
         recovered = decoder.get_file_data()
         assert bytes(recovered) == data
+
+
+class TestGESafeguards:
+    """Performance safeguards for GE fallback on large systems."""
+
+    def test_try_ge_skips_for_large_total_k(self, monkeypatch):
+        """GE auto-trigger is disabled for very large K to avoid stalls."""
+        decoder = FountainDecoder(3000, CHUNK_SIZE)
+        called = {"n": 0}
+
+        def _fake_ge():
+            called["n"] += 1
+            return True
+
+        monkeypatch.setattr(decoder, "gaussian_elimination_fallback", _fake_ge)
+        decoder.try_gaussian_elimination()
+        assert called["n"] == 0
+
+    def test_try_ge_throttles_back_to_back_attempts(self, monkeypatch):
+        """Consecutive GE auto-triggers are throttled by cooldown."""
+        K = 80
+        decoder = FountainDecoder(K, CHUNK_SIZE)
+        called = {"n": 0}
+
+        def _fake_ge():
+            called["n"] += 1
+            return True
+
+        monkeypatch.setattr(decoder, "gaussian_elimination_fallback", _fake_ge)
+
+        # Create a solvable-sized unresolved system (unknown=10, unresolved=10)
+        for i in range(K):
+            data = np.zeros(CHUNK_SIZE, dtype=np.uint8)
+            entry = [{i}, data]
+            decoder.droplets.append(entry)
+            decoder.chunk_to_droplets[i].append(entry)
+
+        decoder.try_gaussian_elimination()
+        decoder.try_gaussian_elimination()
+
+        assert called["n"] == 1

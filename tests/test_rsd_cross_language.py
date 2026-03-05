@@ -181,8 +181,8 @@ _JS_SOURCE = textwrap.dedent("""\
       return Array.from(indices).sort((a, b) => a - b);
     }
 
-    // Read test cases from stdin
-    const input = require('fs').readFileSync('/dev/stdin', 'utf8');
+    // Read test cases from stdin (fd 0 works on Windows and POSIX).
+    const input = require('fs').readFileSync(0, 'utf8');
     const testCases = JSON.parse(input);
 
     const results = [];

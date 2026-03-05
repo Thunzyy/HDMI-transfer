@@ -24,6 +24,30 @@ DECODE_THRESHOLDS: dict[int, np.ndarray] = {
 }
 
 
+def _normalize_multilevel_grid(sampled_grid: np.ndarray) -> np.ndarray:
+    """Normalize limited-range capture to full-range before quantization.
+
+    Some capture pipelines compress levels from 0..255 to a narrower span
+    (e.g. 16..235). This hurts 2/3 bpc symbol decoding much more than 1 bpc.
+    We only normalize when the frame appears to have broad dynamic range but
+    is not already close to full-range.
+    """
+    work = sampled_grid.astype(np.float32, copy=False)
+    lo = float(np.percentile(work, 0.5))
+    hi = float(np.percentile(work, 99.5))
+    span = hi - lo
+
+    # Skip normalization when there is not enough spread (likely sparse symbols)
+    # or when the frame already covers near-full range.
+    if span < 160.0:
+        return sampled_grid
+    if lo <= 4.0 and hi >= 251.0:
+        return sampled_grid
+
+    scaled = ((work - lo) * (255.0 / span)).clip(0, 255)
+    return scaled.astype(np.uint8)
+
+
 def bytes_to_pixels(
     data: bytes,
     blocks_per_frame: int,
@@ -65,6 +89,9 @@ def pixels_to_bytes(sampled_grid: np.ndarray, bpc: int) -> bytes:
     Applies multi-level quantization based on bpc, then packs to bytes.
     The input grid should already be in RGB order (caller flips BGR→RGB).
     """
+    if bpc > 1:
+        sampled_grid = _normalize_multilevel_grid(sampled_grid)
+
     thresholds = DECODE_THRESHOLDS[bpc]
     flat = sampled_grid.reshape(-1)  # flatten all channels
 

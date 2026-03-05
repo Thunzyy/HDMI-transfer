@@ -155,7 +155,7 @@ def _detect_devices(max_index: int = 10) -> list[dict]:
     # DSHOW and MSMF may have different device counts (e.g. NVIDIA
     # Broadcast only in DSHOW). We match by reading a DSHOW frame for
     # each index and comparing brightness/zero patterns to MSMF frames.
-    dshow_frames = {}  # dshow_index -> (name, brightness, is_zero)
+    dshow_frames = {}  # dshow_index -> (name, brightness, is_zero, width, height, fps)
     with _suppress_stderr():
         for i in range(max_index):
             cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
@@ -163,22 +163,40 @@ def _detect_devices(max_index: int = 10) -> list[dict]:
                 continue
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-            ret, frame = cap.read()
+            best_b = -1.0
+            is_zero = True
+            got_frame = False
+            for _ in range(10):
+                ret, frame = cap.read()
+                if not ret or not isinstance(frame, np.ndarray):
+                    continue
+                got_frame = True
+                b = float(frame.mean())
+                if b > best_b:
+                    best_b = b
+                if int(frame.max()) > 0:
+                    is_zero = False
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
             cap.release()
             name = dshow_names[i] if i < len(dshow_names) else f"Device {i}"
-            if ret and isinstance(frame, np.ndarray):
-                b = float(frame.mean())
-                is_zero = int(frame.max()) == 0
+            if got_frame:
+                b = best_b
             else:
                 b = -1.0
                 is_zero = True
-            dshow_frames[i] = (name, b, is_zero)
+            dshow_frames[i] = (name, b, is_zero, w, h, fps)
 
     # Classify DSHOW devices: zero-frame devices are candidates for
     # capture cards (Elgato DSHOW bug) or virtual cams (NVIDIA Broadcast).
     # Non-zero DSHOW devices are webcams we can match by brightness.
-    dshow_zero = {i: n for i, (n, b, z) in dshow_frames.items() if z}
-    dshow_nonzero = {i: (n, b) for i, (n, b, z) in dshow_frames.items() if not z}
+    dshow_zero = {i: n for i, (n, b, z, w, h, fps) in dshow_frames.items() if z}
+    dshow_nonzero = {
+        i: (n, b, w, h, fps)
+        for i, (n, b, z, w, h, fps) in dshow_frames.items()
+        if not z
+    }
 
     # Match MSMF devices to DSHOW names
     devices = []
@@ -188,6 +206,7 @@ def _detect_devices(max_index: int = 10) -> list[dict]:
         mi = md["msmf_index"]
         mb = md["brightness"]
         name = None
+        matched_di = None
 
         if mb > 10:
             # MSMF device has real signal. If it's a capture card, the
@@ -202,12 +221,13 @@ def _detect_devices(max_index: int = 10) -> list[dict]:
                                           "blackmagic", "4k")):
                     name = dn
                     used_dshow.add(di)
+                    matched_di = di
                     break
             if name is None:
                 # Could be a webcam with signal — match to non-zero DSHOW
                 best_di = None
                 best_diff = float("inf")
-                for di, (dn, db) in dshow_nonzero.items():
+                for di, (dn, db, dw, dh, dfps) in dshow_nonzero.items():
                     if di in used_dshow:
                         continue
                     diff = abs(db - mb)
@@ -217,32 +237,63 @@ def _detect_devices(max_index: int = 10) -> list[dict]:
                 if best_di is not None:
                     name = dshow_nonzero[best_di][0]
                     used_dshow.add(best_di)
+                    matched_di = best_di
         else:
             # MSMF device is dark/black — match to non-zero DSHOW webcam
             # (webcam with lens cap appears black via MSMF but may read
             # via DSHOW), or to remaining DSHOW devices.
-            for di, (dn, db) in dshow_nonzero.items():
+            for di, (dn, db, dw, dh, dfps) in dshow_nonzero.items():
                 if di in used_dshow:
                     continue
                 name = dn
                 used_dshow.add(di)
+                matched_di = di
                 break
 
         if name is None:
             # Use any remaining DSHOW name
-            for di, (dn, _, _) in dshow_frames.items():
+            for di, (dn, _, _, _, _, _) in dshow_frames.items():
                 if di not in used_dshow:
                     name = dn
                     used_dshow.add(di)
+                    matched_di = di
                     break
 
         if name is None:
             name = f"Device {mi}"
 
+        out_index = mi
+        out_backend = int(cv2.CAP_MSMF)
+        out_w = md["width"]
+        out_h = md["height"]
+        out_fps = md["fps"]
+        dshow_index = None
+        prefer_dshow = False
+
+        # Prefer DSHOW for capture cards when the DSHOW stream is non-zero.
+        if matched_di is not None:
+            nl = name.lower()
+            is_capture_card = any(k in nl for k in (
+                "elgato", "avermedia", "capture", "hdmi",
+                "cam link", "magewell", "blackmagic", "4k",
+            ))
+            if is_capture_card and matched_di in dshow_frames:
+                _, _, is_zero, dw, dh, dfps = dshow_frames[matched_di]
+                if not is_zero:
+                    dshow_index = matched_di
+                    prefer_dshow = True
+                    if dw > 0 and dh > 0:
+                        out_w = dw
+                        out_h = dh
+                    if dfps > 0:
+                        out_fps = dfps
+
         devices.append({
-            "index": mi, "name": name,
-            "width": md["width"], "height": md["height"],
-            "fps": md["fps"], "backend": int(cv2.CAP_MSMF),
+            "index": out_index, "name": name,
+            "width": out_w, "height": out_h,
+            "fps": out_fps, "backend": out_backend,
+            "dshow_index": dshow_index,
+            "prefer_dshow": prefer_dshow,
         })
 
     return devices
