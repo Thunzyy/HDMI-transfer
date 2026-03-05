@@ -235,7 +235,7 @@ html,body{
 .fblock.decoded{background:var(--accent);border-color:var(--accent)}
 .fblock.active{background:rgba(124,138,255,0.35);border-color:rgba(124,138,255,0.5)}
 .fountain-counts{
-  display:flex;justify-content:space-between;margin-top:5px;
+  display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:5px;
   font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:var(--font-mono);
 }
 
@@ -380,7 +380,9 @@ html,body{
       <div id="fountainGrid"></div>
       <div class="fountain-counts">
         <span id="fountainRcvd">Solved: 0</span>
-        <span id="fountainTarget">Needed: 0</span>
+        <span id="fountainTarget">Needed(min): 0</span>
+        <span id="fountainNeededMax">Needed(max): 0</span>
+        <span id="fountainRx">Rx: 0 (0%)</span>
       </div>
     </div>
 
@@ -432,6 +434,8 @@ html,body{
   const fountainGrid   = document.getElementById("fountainGrid");
   const fountainRcvd   = document.getElementById("fountainRcvd");
   const fountainTarget = document.getElementById("fountainTarget");
+  const fountainNeededMax = document.getElementById("fountainNeededMax");
+  const fountainRx     = document.getElementById("fountainRx");
 
   const metricName     = document.getElementById("metricName");
   const metricSize     = document.getElementById("metricSize");
@@ -443,6 +447,7 @@ html,body{
   const downloadBtn    = document.getElementById("downloadBtn");
 
   let sse = null, totalChunks = 0, speedHistory = [];
+  let expectedDroplets = null;
   const MAX_PTS = 30, GRID_N = 40;
   const SETTINGS_KEY = "hdmi_exfil_settings";
   const LEGACY_PREVIEW_SETTINGS_KEY = "hdmi_exfil_preview_settings";
@@ -682,6 +687,7 @@ html,body{
 
   /* ── Start / Stop ──────────────────────── */
   async function start() {
+    resetTransferStats();
     downloadArea.classList.remove("visible");
     speedHistory = [];
     try {
@@ -729,10 +735,62 @@ html,body{
       statusMsg.textContent = "Reset error: " + e.message;
       log("error", "Reset failed: " + e.message);
     } finally {
+      resetTransferStats();
       previewLastSeq = 0;
       cleanup();
       resetBtn.disabled = !deviceSelect.value;
     }
+  }
+
+  function resetTransferStats() {
+    totalChunks = 0;
+    speedHistory = [];
+    expectedDroplets = null;
+
+    pctBig.textContent = "0.0";
+    fountainPct.textContent = "0%";
+    speedBadge.textContent = "--";
+    badgeFrm.textContent = "FRM: 0";
+    fountainRcvd.textContent = "Solved: 0";
+    fountainTarget.textContent = "Needed(min): 0";
+    fountainNeededMax.textContent = "Needed(max): 0";
+    fountainRx.textContent = "Rx: 0 (0%)";
+
+    speedLine.setAttribute("d", "M0 100 L100 100");
+    speedArea.setAttribute("d", "M0 100 L100 100 L100 100 L0 100 Z");
+    initGrid(GRID_N);
+    if (canvas.style.display !== "none") sizeCanvas();
+
+    metricName.textContent = "--";
+    metricSize.textContent = "--";
+    metricSha.textContent = "--";
+    metricSha.className = "m-value";
+    metricDuration.textContent = "--";
+    metricSpeed.textContent = "--";
+    metricEta.textContent = "--";
+    downloadArea.classList.remove("visible");
+  }
+
+  function formatRxLabel(rx, total) {
+    if (!total || total <= 0) {
+      return "Rx: " + rx.toLocaleString() + " (0%)";
+    }
+    const pct = (rx / total) * 100;
+    return "Rx: " + rx.toLocaleString() + " (" + pct.toFixed(1) + "% of K)";
+  }
+
+  function normalizeExpectedDroplets(raw) {
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.floor(n);
+  }
+
+  function formatNeededMax(total, droplets, expected) {
+    if (expected === 0) return "Needed(max): loop";
+    if (Number.isFinite(expected) && expected > 0) {
+      return "Needed(max): " + Math.max(total, expected).toLocaleString();
+    }
+    return "Needed(max): " + Math.max(total, droplets).toLocaleString();
   }
 
   /* ── SSE ────────────────────────────────── */
@@ -744,19 +802,36 @@ html,body{
       markPreviewHeartbeat();
       setLink(d.state);
       log(d.state === "error" ? "error" : "info", d.message);
-      if (d.total_chunks) { totalChunks = d.total_chunks; initGrid(Math.min(totalChunks, GRID_N)); }
+      if (d.total_chunks) {
+        totalChunks = d.total_chunks;
+        const parsedExpected = normalizeExpectedDroplets(d.expected_droplets);
+        if (parsedExpected !== null) expectedDroplets = parsedExpected;
+        initGrid(Math.min(totalChunks, GRID_N));
+        fountainTarget.textContent = "Needed(min): " + totalChunks.toLocaleString();
+        fountainNeededMax.textContent = formatNeededMax(totalChunks, 0, expectedDroplets);
+        fountainRx.textContent = formatRxLabel(0, totalChunks);
+      }
     });
 
     sse.addEventListener("progress", e => {
       const d = JSON.parse(e.data);
       markPreviewHeartbeat();
-      const pct = d.percent || 0;
+      const decoded = Number(d.chunks_decoded || 0);
+      const total = Number(d.total_chunks || 0);
+      const droplets = Number(d.droplets_received || 0);
+      const parsedExpected = normalizeExpectedDroplets(d.expected_droplets);
+      if (parsedExpected !== null) expectedDroplets = parsedExpected;
+      // Compute percent from the exact counters shown in UI.
+      // This guarantees consistency between %, Solved and Needed.
+      const pct = total > 0 ? Math.min(99.9, (decoded / total) * 100) : 0;
       pctBig.textContent = pct.toFixed(1);
       fountainPct.textContent = pct.toFixed(0) + "%";
       badgeFrm.textContent = "FRM: " + d.frames_captured.toLocaleString();
-      fountainRcvd.textContent = "Solved: " + d.chunks_decoded.toLocaleString();
-      fountainTarget.textContent = "Needed: " + d.total_chunks.toLocaleString();
-      totalChunks = d.total_chunks;
+      fountainRcvd.textContent = "Solved: " + decoded.toLocaleString();
+      fountainTarget.textContent = "Needed(min): " + total.toLocaleString();
+      fountainNeededMax.textContent = formatNeededMax(total, droplets, expectedDroplets);
+      fountainRx.textContent = formatRxLabel(droplets, total);
+      totalChunks = total;
       const spd = d.speed_kbps || 0;
       if (spd > 0) {
         speedBadge.textContent = spd.toFixed(1) + " KB/s";
@@ -833,7 +908,12 @@ html,body{
     }
     if (total > 0) {
       fountainRcvd.textContent = "Solved: " + solved.toLocaleString();
-      fountainTarget.textContent = "Needed: " + total.toLocaleString();
+      fountainTarget.textContent = "Needed(min): " + total.toLocaleString();
+      const rx = Number(d.droplets_received || solved || 0);
+      const parsedExpected = normalizeExpectedDroplets(d.expected_droplets);
+      if (parsedExpected !== null) expectedDroplets = parsedExpected;
+      fountainNeededMax.textContent = formatNeededMax(total, rx, expectedDroplets);
+      fountainRx.textContent = formatRxLabel(rx, total);
       const allDecoded = Array.from({length: total}, (_, i) => i);
       updateGrid(allDecoded, total);
       if (canvas.style.display !== "none") drawCanvas(allDecoded, total);

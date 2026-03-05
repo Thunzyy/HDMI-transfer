@@ -59,7 +59,7 @@ class TestSpeedProfile:
         assert profile.seq_bytes_per_frame == 12133
 
     def test_fount_bytes_per_frame(self, profile: ResolutionProfile) -> None:
-        assert profile.fount_bytes_per_frame == 12138
+        assert profile.fount_bytes_per_frame == 12134
 
 
 class TestBalancedProfile:
@@ -99,7 +99,7 @@ class TestQualityProfile:
         assert profile.seq_bytes_per_frame == 48583
 
     def test_fount_bytes_per_frame(self, profile: ResolutionProfile) -> None:
-        assert profile.fount_bytes_per_frame == 48588
+        assert profile.fount_bytes_per_frame == 48584
 
 
 # ---------------------------------------------------------------------------
@@ -139,13 +139,13 @@ def test_sequential_protocol_with_quality_profile() -> None:
 def test_fountain_protocol_default_compat() -> None:
     """FountainProtocol() with no args matches legacy bytes_per_frame."""
     proto = FountainProtocol()
-    assert proto.bytes_per_frame == 12138
+    assert proto.bytes_per_frame == 12134
 
 
 def test_fountain_protocol_with_quality_profile() -> None:
     """FountainProtocol(profile=quality) uses 4K payload capacity."""
     proto = FountainProtocol(profile=PROFILES["quality"])
-    assert proto.bytes_per_frame == 48588
+    assert proto.bytes_per_frame == 48584
 
 
 # ---------------------------------------------------------------------------

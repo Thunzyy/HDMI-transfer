@@ -361,8 +361,9 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
 
 <script>
 (() => {
-  const FOUNTAIN_MAGIC = 0xF0C0;
-  const FOUNTAIN_HEADER_LEN = 12;
+  const FOUNTAIN_MAGIC = 0xF0C1; // v2
+  const FOUNTAIN_HEADER_PRE_CRC = 12;
+  const FOUNTAIN_HEADER_LEN = 16;
 
   const SEQ_MAGIC = 0xDAEA;
   const SEQ_HEADER_PRE_CRC = 13;
@@ -802,15 +803,20 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   function renderFountainFrame() {
     const seed = state.seed >>> 0;
     const payload = buildDroplet(seed);
+    const expectedDroplets = (state.fountainTargetFrames > 0)
+      ? state.fountainTargetFrames >>> 0
+      : 0;
     const frameBytes = new Uint8Array(config.bytesPerFrame);
     const view = new DataView(frameBytes.buffer);
     view.setUint16(0, FOUNTAIN_MAGIC, false);
     view.setUint32(2, seed, false);
     view.setUint16(6, state.K, false);
+    view.setUint32(8, expectedDroplets, false);
     frameBytes.set(payload, FOUNTAIN_HEADER_LEN);
-    const crcData = new Uint8Array(8 + payload.length);
-    crcData.set(frameBytes.subarray(0, 8)); crcData.set(payload, 8);
-    view.setUint32(8, crc32(crcData), false);
+    const crcData = new Uint8Array(FOUNTAIN_HEADER_PRE_CRC + payload.length);
+    crcData.set(frameBytes.subarray(0, FOUNTAIN_HEADER_PRE_CRC));
+    crcData.set(payload, FOUNTAIN_HEADER_PRE_CRC);
+    view.setUint32(FOUNTAIN_HEADER_PRE_CRC, crc32(crcData), false);
     bytesToValues(frameBytes); drawValues(state.vals);
     state.seed = (state.seed + 1) >>> 0; if (state.seed === 0) state.seed = 1;
   }

@@ -325,7 +325,11 @@ def _send_fountain(
             xor_into(payload, chunks[idx])
 
         frame = protocol.encode_frame(
-            payload.tobytes(), frame_count, K, seed=seed,
+            payload.tobytes(),
+            frame_count,
+            K,
+            seed=seed,
+            expected_droplets=(max_droplets if max_droplets is not None else 0),
         )
 
         key = renderer.show(frame, delay_ms=delay)

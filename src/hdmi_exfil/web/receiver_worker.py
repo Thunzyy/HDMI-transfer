@@ -230,6 +230,8 @@ class ReceiverWorker(threading.Thread):
         decoder: FountainDecoder | None = None
         start_time: float | None = None
         bytes_received = 0
+        droplets_received = 0
+        expected_droplets: int | None = None
         frames_captured = 0
         last_progress = 0.0
         last_indices_emit = 0.0
@@ -257,8 +259,11 @@ class ReceiverWorker(threading.Thread):
                 continue
 
             seed, K, payload = result.frame_index, result.total_frames, result.data
+            frame_max = result.max_frames
             if K is None or K == 0 or K > 60000:
                 continue
+            if frame_max is not None and expected_droplets is None:
+                expected_droplets = max(0, int(frame_max))
 
             if decoder is None:
                 decoder = FountainDecoder(K, len(payload))
@@ -267,6 +272,7 @@ class ReceiverWorker(threading.Thread):
                     "state": "receiving",
                     "message": f"Transmission detected! K={K} chunks",
                     "total_chunks": K,
+                    "expected_droplets": expected_droplets,
                 })
 
             if decoder.K != K:
@@ -274,6 +280,7 @@ class ReceiverWorker(threading.Thread):
 
             decoder.add_droplet(seed, payload)
             bytes_received += len(payload)
+            droplets_received += 1
 
             now = time.time()
             if now - last_progress > 0.2:
@@ -286,6 +293,7 @@ class ReceiverWorker(threading.Thread):
                     last_indices_emit = now
                 self._publish_fountain_progress(
                     decoder, K, payload, bytes_received,
+                    droplets_received, expected_droplets,
                     frames_captured, start_time,
                     emit_indices=emit_indices,
                 )
@@ -293,6 +301,7 @@ class ReceiverWorker(threading.Thread):
             if decoder.is_complete():
                 self._finalize_fountain(
                     decoder, start_time, frames_captured, bytes_received,
+                    droplets_received, expected_droplets,
                 )
                 return
 
@@ -303,19 +312,38 @@ class ReceiverWorker(threading.Thread):
 
     def _publish_fountain_progress(
         self, decoder, K, payload, bytes_received,
+        droplets_received, expected_droplets,
         frames_captured, start_time,
         *,
         emit_indices: bool = True,
     ) -> None:
+        decoded = len(decoder.chunks)
+        unknown = max(0, K - decoded)
+        # Fountain decoding is non-linear: BP/GE can unlock many chunks at once.
+        # Use unresolved equation count as a progress hint for smoother, more
+        # realistic ETA/percent while keeping Solved/Needed exact.
+        unresolved = sum(1 for d in decoder.droplets if len(d[0]) > 0)
+        hinted = decoded + min(unknown, int(unresolved * 0.8))
+        effective_resolved = max(decoded, min(K, hinted))
+
         elapsed = time.time() - start_time if start_time else 0
         speed = bytes_received / elapsed if elapsed > 2 else 0
-        remaining = (K - len(decoder.chunks)) * len(payload)
+        remaining = max(0, K - effective_resolved) * len(payload)
         eta = remaining / speed if speed > 0 else -1
+        percent = round(decoded / K * 100, 1)
+        # Keep 100% exclusively for the "complete" event to avoid
+        # transient UI jumps when late progress and completion race.
+        if percent >= 100.0:
+            percent = 99.9
+        acquisition_percent = round((droplets_received / K) * 100, 1)
 
         data = {
-            "chunks_decoded": len(decoder.chunks),
+            "chunks_decoded": decoded,
             "total_chunks": K,
-            "percent": round(len(decoder.chunks) / K * 100, 1),
+            "percent": percent,
+            "droplets_received": droplets_received,
+            "expected_droplets": expected_droplets,
+            "acquisition_percent": acquisition_percent,
             "speed_kbps": round(speed / 1024, 1) if speed > 0 else 0,
             "eta_seconds": round(eta, 1) if eta >= 0 else -1,
             "frames_captured": frames_captured,
@@ -327,6 +355,7 @@ class ReceiverWorker(threading.Thread):
 
     def _finalize_fountain(
         self, decoder, start_time, frames_captured, bytes_received,
+        droplets_received, expected_droplets,
     ) -> None:
         full_data = decoder.get_file_data()
         file_size, expected_sha256, filename, content_offset = (
@@ -360,6 +389,8 @@ class ReceiverWorker(threading.Thread):
             "speed_mbps": round(speed_mbps, 2),
             "frames_captured": frames_captured,
             "bytes_received": bytes_received,
+            "droplets_received": droplets_received,
+            "expected_droplets": expected_droplets,
             "chunks_decoded": len(decoder.chunks),
             "total_chunks": decoder.K,
         })

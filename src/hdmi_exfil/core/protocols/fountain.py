@@ -6,7 +6,7 @@ redundancy) and FountainDecoder (hybrid BP + GE decoder) behind the
 
 Each block encodes 3 bits (one per R/G/B channel, each either 0 or 255),
 matching the same 3bpp pattern used by SequentialProtocol.  This gives
-12,150 bytes per frame (12,138 payload) -- a 3x capacity increase over the
+12,150 bytes per frame (12,134 payload in v2) -- a 3x capacity increase over the
 original 1bpp (4,050 bytes / 4,038 payload) encoding.
 
 Migrated from the monolithic ``receiver_fountain.py`` -- all logic is
@@ -33,14 +33,31 @@ from hdmi_exfil.core.protocols.xor_ops import xor_into
 # Fountain-specific constants (protocol-level, not in config.py)
 # ---------------------------------------------------------------------------
 
-FOUNT_HEADER_FMT: str = ">HIH"  # magic(2) + seed(4) + K(2)
-FOUNT_HEADER_PRE_CRC: int = struct.calcsize(FOUNT_HEADER_FMT)  # 8
+# Legacy v1: magic(2) + seed(4) + K(2)
+FOUNT_HEADER_V1_FMT: str = ">HIH"
+FOUNT_HEADER_V1_PRE_CRC: int = struct.calcsize(FOUNT_HEADER_V1_FMT)  # 8
+FOUNT_HEADER_V1_SIZE: int = FOUNT_HEADER_V1_PRE_CRC + 4  # + crc32
+
+# v2 (current): magic(2) + seed(4) + K(2) + max_droplets(4)
+FOUNT_MAGIC_V2: int = (config.FOUNTAIN_MAGIC + 1) & 0xFFFF
+FOUNT_HEADER_V2_FMT: str = ">HIHI"
+FOUNT_HEADER_V2_PRE_CRC: int = struct.calcsize(FOUNT_HEADER_V2_FMT)  # 12
 FOUNT_CRC_SIZE: int = 4
-FOUNT_HEADER_SIZE: int = FOUNT_HEADER_PRE_CRC + FOUNT_CRC_SIZE  # 12
+FOUNT_HEADER_V2_SIZE: int = FOUNT_HEADER_V2_PRE_CRC + FOUNT_CRC_SIZE  # 16
+
+# Backward-compatible legacy aliases kept for external/tests imports.
+FOUNT_HEADER_FMT: str = FOUNT_HEADER_V1_FMT
+FOUNT_HEADER_PRE_CRC: int = FOUNT_HEADER_V1_PRE_CRC
+FOUNT_HEADER_SIZE: int = FOUNT_HEADER_V1_SIZE
+
+# Current sender header (v2) aliases.
+FOUNT_HEADER_CURRENT_FMT: str = FOUNT_HEADER_V2_FMT
+FOUNT_HEADER_CURRENT_PRE_CRC: int = FOUNT_HEADER_V2_PRE_CRC
+FOUNT_HEADER_CURRENT_SIZE: int = FOUNT_HEADER_V2_SIZE
 
 # 3bpp: 3 bits per block (RGB binary), same as sequential protocol
 FOUNTAIN_BYTES_PER_FRAME: int = (config.ROWS * config.COLS * 3) // 8  # 12150
-PAYLOAD_SIZE: int = FOUNTAIN_BYTES_PER_FRAME - FOUNT_HEADER_SIZE  # 12138
+PAYLOAD_SIZE: int = FOUNTAIN_BYTES_PER_FRAME - FOUNT_HEADER_CURRENT_SIZE  # 12134 (v2)
 
 # GE fallback safeguards for large transfers.
 # For very large K, full GE can monopolize CPU and starve capture/progress.
@@ -307,7 +324,10 @@ class FountainProtocol(EncodingProtocol):
     """3-bit-per-block fountain (LT-code) encoding protocol.
 
     Each frame carries a single fountain droplet:
-      - Header: magic(2) + seed(4) + K(2) + crc32(4) = 12 bytes
+      - Header v2: magic(2) + seed(4) + K(2) + max_droplets(4) + crc32(4)
+        = 16 bytes
+      - Header v1 (legacy decode): magic(2) + seed(4) + K(2) + crc32(4)
+        = 12 bytes
       - Payload: XOR'd chunk data (size depends on profile)
       - Total: packed as bits (3 bits per block, RGB)
 
@@ -323,7 +343,7 @@ class FountainProtocol(EncodingProtocol):
         self._profile = profile or DEFAULT_PROFILE
         # Recompute payload sizes from profile
         self._total_bytes: int = self._profile.bits_per_frame // 8
-        self._payload_size: int = self._total_bytes - FOUNT_HEADER_SIZE
+        self._payload_size: int = self._total_bytes - FOUNT_HEADER_CURRENT_SIZE
 
     # -- ABC properties ------------------------------------------------------
 
@@ -360,19 +380,31 @@ class FountainProtocol(EncodingProtocol):
         seed:
             Explicit seed for the droplet (keyword-only). Defaults to
             *frame_index* when not supplied.
+        expected_droplets:
+            Optional sender-advertised upper bound on droplets for this
+            transfer. ``0`` means unbounded/looping stream.
         """
         seed: int = int(kwargs.get("seed", frame_index))
+        expected_droplets = int(kwargs.get("expected_droplets", 0))
+        if expected_droplets < 0:
+            expected_droplets = 0
+        expected_droplets = min(expected_droplets, 0xFFFFFFFF)
 
-        # Build pre-CRC header: magic(2) + seed(4) + K(2)
+        # Build pre-CRC header v2:
+        # magic(2) + seed(4) + K(2) + max_droplets(4)
         header_pre_crc = struct.pack(
-            FOUNT_HEADER_FMT, config.FOUNTAIN_MAGIC, seed, total_frames,
+            FOUNT_HEADER_V2_FMT,
+            FOUNT_MAGIC_V2,
+            seed,
+            total_frames,
+            expected_droplets,
         )
 
         # CRC32 over pre-CRC header + payload
         crc = zlib.crc32(header_pre_crc + data) & 0xFFFFFFFF
         crc_bytes = struct.pack(">I", crc)
 
-        # Full frame bytes: header_pre_crc(8) + crc(4) + payload
+        # Full frame bytes: header_pre_crc + crc + payload
         frame_bytes = header_pre_crc + crc_bytes + data
 
         # Pad to exactly total_bytes if payload is short
@@ -406,7 +438,7 @@ class FountainProtocol(EncodingProtocol):
         Uses 3bpp decoding (threshold all 3 RGB channels):
           1. Flatten grid, threshold all channels > 128 to get 3 bits/block
           2. Pack bits to bytes
-          3. Parse fountain header (magic + seed + K + CRC)
+          3. Parse fountain header (v2 or legacy v1)
           4. Verify CRC32
         """
         # OpenCV captures in BGR order; flip to RGB to match the sender's
@@ -415,20 +447,42 @@ class FountainProtocol(EncodingProtocol):
         rgb_grid = sampled_grid[..., ::-1]
         raw_bytes = pixels_to_bytes(rgb_grid, self._profile.bits_per_channel)
 
-        # Need at least a full header
-        if len(raw_bytes) < FOUNT_HEADER_SIZE:
+        # Need at least the smallest supported header (legacy v1)
+        if len(raw_bytes) < FOUNT_HEADER_V1_SIZE:
             return FrameResult(
                 data=None, frame_type=None, frame_index=None,
                 total_frames=None, is_valid=False,
             )
 
         try:
-            # Parse pre-CRC fields
-            magic, seed, K = struct.unpack(
-                FOUNT_HEADER_FMT, raw_bytes[:FOUNT_HEADER_PRE_CRC],
-            )
+            magic = struct.unpack(">H", raw_bytes[:2])[0]
+            seed: int
+            K: int
+            max_frames: int | None
+            pre_crc_len: int
+            header_size: int
 
-            if magic != config.FOUNTAIN_MAGIC:
+            if magic == FOUNT_MAGIC_V2:
+                if len(raw_bytes) < FOUNT_HEADER_V2_SIZE:
+                    return FrameResult(
+                        data=None, frame_type=None, frame_index=None,
+                        total_frames=None, is_valid=False,
+                    )
+                _, seed, K, max_frames = struct.unpack(
+                    FOUNT_HEADER_V2_FMT,
+                    raw_bytes[:FOUNT_HEADER_V2_PRE_CRC],
+                )
+                pre_crc_len = FOUNT_HEADER_V2_PRE_CRC
+                header_size = FOUNT_HEADER_V2_SIZE
+            elif magic == config.FOUNTAIN_MAGIC:
+                _, seed, K = struct.unpack(
+                    FOUNT_HEADER_V1_FMT,
+                    raw_bytes[:FOUNT_HEADER_V1_PRE_CRC],
+                )
+                max_frames = None
+                pre_crc_len = FOUNT_HEADER_V1_PRE_CRC
+                header_size = FOUNT_HEADER_V1_SIZE
+            else:
                 return FrameResult(
                     data=None, frame_type=None, frame_index=None,
                     total_frames=None, is_valid=False,
@@ -436,14 +490,14 @@ class FountainProtocol(EncodingProtocol):
 
             # Extract stored CRC
             stored_crc = struct.unpack(
-                ">I", raw_bytes[FOUNT_HEADER_PRE_CRC:FOUNT_HEADER_SIZE],
+                ">I", raw_bytes[pre_crc_len:header_size],
             )[0]
 
-            payload = raw_bytes[FOUNT_HEADER_SIZE:]
+            payload = raw_bytes[header_size:]
 
             # Verify CRC32 over pre-CRC header + payload
             computed_crc = (
-                zlib.crc32(raw_bytes[:FOUNT_HEADER_PRE_CRC] + payload)
+                zlib.crc32(raw_bytes[:pre_crc_len] + payload)
                 & 0xFFFFFFFF
             )
             if computed_crc != stored_crc:
@@ -458,6 +512,7 @@ class FountainProtocol(EncodingProtocol):
                 frame_index=seed,
                 total_frames=K,
                 is_valid=True,
+                max_frames=max_frames,
             )
 
         except Exception:

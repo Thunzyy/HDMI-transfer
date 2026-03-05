@@ -5,11 +5,18 @@ data using 3 bits per block (RGB binary), and that the full fountain
 pipeline (encode -> sample -> decode -> peel) recovers original data.
 """
 
+import struct
+import zlib
+
 import numpy as np
 
 from hdmi_exfil import config
 from hdmi_exfil.capture.sampler import sample_frame
 from hdmi_exfil.protocols.fountain import (
+    FOUNT_HEADER_CURRENT_SIZE,
+    FOUNT_HEADER_V1_FMT,
+    FOUNT_HEADER_V1_PRE_CRC,
+    FOUNT_HEADER_V1_SIZE,
     FOUNTAIN_BYTES_PER_FRAME,
     FountainDecoder,
     FountainProtocol,
@@ -19,18 +26,22 @@ from hdmi_exfil.protocols.fountain import (
 
 def test_3bpp_capacity_constants():
     """Verify 3bpp capacity constants are 3x the old 1bpp values."""
-    # Old 1bpp values: FOUNTAIN_BYTES_PER_FRAME=4050, PAYLOAD_SIZE=4038
-    # New 3bpp values: 3x capacity
+    # Old 1bpp values: FOUNTAIN_BYTES_PER_FRAME=4050.
+    # New 3bpp values: 3x capacity.
     assert FOUNTAIN_BYTES_PER_FRAME == 12150, (
         f"Expected 12150, got {FOUNTAIN_BYTES_PER_FRAME}"
     )
-    assert PAYLOAD_SIZE == 12138, (
-        f"Expected 12138, got {PAYLOAD_SIZE}"
+    assert FOUNT_HEADER_CURRENT_SIZE == 16, (
+        f"Expected v2 fountain header size=16, got {FOUNT_HEADER_CURRENT_SIZE}"
+    )
+    assert PAYLOAD_SIZE == 12134, (
+        f"Expected 12134, got {PAYLOAD_SIZE}"
     )
 
     # Verify derivation from config
     expected_bytes = (config.ROWS * config.COLS * 3) // 8
     assert FOUNTAIN_BYTES_PER_FRAME == expected_bytes
+    assert PAYLOAD_SIZE == expected_bytes - FOUNT_HEADER_CURRENT_SIZE
 
 
 def test_3bpp_encode_frame_shape():
@@ -62,8 +73,13 @@ def test_3bpp_encode_decode_roundtrip():
     # Encode with known seed and K
     seed = 42
     K = 1
+    expected_droplets = 777
     frame_img = proto.encode_frame(
-        original_payload, frame_index=0, total_frames=K, seed=seed,
+        original_payload,
+        frame_index=0,
+        total_frames=K,
+        seed=seed,
+        expected_droplets=expected_droplets,
     )
 
     # Sample (downscale back to block grid)
@@ -81,6 +97,7 @@ def test_3bpp_encode_decode_roundtrip():
     assert result.total_frames == K, (
         f"Expected K={K}, got {result.total_frames}"
     )
+    assert result.max_frames == expected_droplets
     assert result.data is not None
 
     # The decoded payload should match the original
@@ -131,7 +148,11 @@ def test_3bpp_fountain_full_roundtrip():
 
         # Encode the droplet as a 3bpp frame
         frame_img = proto.encode_frame(
-            bytes(droplet_data), frame_index=seed, total_frames=K, seed=seed,
+            bytes(droplet_data),
+            frame_index=seed,
+            total_frames=K,
+            seed=seed,
+            expected_droplets=max_droplets,
         )
 
         # Sample the frame (simulate perfect capture)
@@ -146,6 +167,7 @@ def test_3bpp_fountain_full_roundtrip():
         )
         assert result.frame_index == seed
         assert result.total_frames == K
+        assert result.max_frames == max_droplets
 
         # Feed decoded payload into the fountain decoder
         decoder.add_droplet(seed, bytearray(result.data[:PAYLOAD_SIZE]))
@@ -162,3 +184,28 @@ def test_3bpp_fountain_full_roundtrip():
     assert recovered_data == original_data, (
         "Full fountain pipeline failed: recovered data does not match original"
     )
+
+
+def test_3bpp_decode_legacy_v1_header(monkeypatch):
+    """Decoder accepts legacy v1 fountain frames (no max_droplets field)."""
+    proto = FountainProtocol()
+    seed = 1337
+    k = 5
+    payload = np.random.RandomState(2026).bytes(FOUNTAIN_BYTES_PER_FRAME - FOUNT_HEADER_V1_SIZE)
+
+    header_pre = struct.pack(FOUNT_HEADER_V1_FMT, config.FOUNTAIN_MAGIC, seed, k)
+    crc = zlib.crc32(header_pre + payload) & 0xFFFFFFFF
+    raw = header_pre + struct.pack(">I", crc) + payload
+
+    monkeypatch.setattr(
+        "hdmi_exfil.core.protocols.encoding.pixels_to_bytes",
+        lambda _grid, _bpc: raw,
+    )
+
+    sampled = np.zeros((config.ROWS, config.COLS, 3), dtype=np.uint8)
+    result = proto.decode_frame(sampled)
+    assert result.is_valid
+    assert result.frame_index == seed
+    assert result.total_frames == k
+    assert result.max_frames is None
+    assert result.data == payload

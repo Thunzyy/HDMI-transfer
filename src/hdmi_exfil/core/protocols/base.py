@@ -22,6 +22,8 @@ class FrameResult:
         frame_type: Protocol-specific frame type tag (e.g. START/DATA/END).
         frame_index: Zero-based frame sequence number.
         total_frames: Total number of frames in the transfer.
+        max_frames: Optional sender-advertised upper bound for frames/droplets
+            in this transfer. ``0`` means unbounded/looping stream.
         is_valid: ``True`` if the frame passed integrity checks (magic + CRC).
     """
 
@@ -30,6 +32,7 @@ class FrameResult:
     frame_index: int | None
     total_frames: int | None
     is_valid: bool
+    max_frames: int | None = None
 
 
 class EncodingProtocol(ABC):

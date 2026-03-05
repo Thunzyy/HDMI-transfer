@@ -54,8 +54,9 @@ HEADER_SIZE: int = SEQ_HEADER_PRE_CRC + SEQ_CRC_SIZE  # 17
 # ---------------------------------------------------------------------------
 
 # Fountain header size duplicated here to avoid circular import with
-# fountain.py.  Value: magic(2) + seed(4) + K(2) + crc32(4) = 12 bytes.
-_FOUNT_HEADER_SIZE: int = 12
+# fountain.py. Value (v2): magic(2) + seed(4) + K(2) + max_droplets(4)
+# + crc32(4) = 16 bytes.
+_FOUNT_HEADER_SIZE: int = 16
 
 
 @dataclass(frozen=True)
