@@ -5,6 +5,7 @@ from dataclasses import replace
 import numpy as np
 
 from hdmi_exfil.core.config import PROFILES
+from hdmi_exfil.core.protocols import get_protocol
 from hdmi_exfil.web.receiver_worker import ReceiverWorker
 
 
@@ -50,6 +51,51 @@ def test_estimate_sampling_from_frame_detects_active_box():
     assert sampling is not None
     ox, oy, sx, sy = sampling
 
+    assert abs(ox - left) <= 2
+    assert abs(oy - top) <= 2
+    assert abs(sx - (vw / profile.width)) < 0.02
+    assert abs(sy - (vh / profile.height)) < 0.02
+
+
+def _resize_nearest(frame: np.ndarray, height: int, width: int) -> np.ndarray:
+    row_idx = np.linspace(0, frame.shape[0] - 1, height, dtype=int)
+    col_idx = np.linspace(0, frame.shape[1] - 1, width, dtype=int)
+    return frame[row_idx[:, None], col_idx[None, :]]
+
+
+def test_manual_sequential_3bpc_probes_browser_geometry() -> None:
+    profile = replace(PROFILES["balanced"], bits_per_channel=3)
+    worker = ReceiverWorker(device=0, profile=profile, mode="sequential")
+    protocol = get_protocol("sequential", profile=profile)
+    payload = bytes(range(64))
+    frame = protocol.encode_frame(payload, frame_index=0, total_frames=1)
+
+    top, left = 73, 8
+    vh, vw = 933, 1904
+    captured = np.zeros_like(frame)
+    captured[top:top + vh, left:left + vw] = _resize_nearest(frame, vh, vw)
+
+    result = None
+    sampling = None
+    geometry_cursor = 0
+    geometry_candidates = worker._build_geometry_candidates(profile)
+    for _ in range(20):
+        result, geometry_cursor, sampling = worker._decode_with_sampling_fallbacks(
+            captured,
+            profile,
+            protocol.decode_frame,
+            geometry_candidates,
+            geometry_cursor,
+        )
+        if result is not None and result.is_valid:
+            break
+
+    assert result is not None
+    assert result.is_valid
+    assert result.data == payload
+    assert sampling is not None
+    ox, oy, sx, sy = sampling
+    assert sampling != (0, 0, 1.0, 1.0)
     assert abs(ox - left) <= 2
     assert abs(oy - top) <= 2
     assert abs(sx - (vw / profile.width)) < 0.02

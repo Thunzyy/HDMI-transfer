@@ -231,6 +231,7 @@ class ReceiverWorker(threading.Thread):
         start_time: float | None = None
         bytes_received = 0
         droplets_received = 0
+        unique_droplets_received = 0
         expected_droplets: int | None = None
         frames_captured = 0
         last_progress = 0.0
@@ -238,10 +239,14 @@ class ReceiverWorker(threading.Thread):
         last_waiting_emit = 0.0
         k_switch_candidate: int | None = None
         k_switch_hits = 0
+        seen_seeds: set[int] = set()
+        geometry_candidates = self._build_geometry_candidates(self._profile)
+        geometry_cursor = 0
 
         self._publish("status", {
             "state": "waiting",
             "message": "Waiting for fountain droplets...",
+            "protocol": "fountain",
         })
 
         while not self._stop_event.is_set():
@@ -264,13 +269,19 @@ class ReceiverWorker(threading.Thread):
                         f"({frames_captured:,} frames scanned)"
                     ),
                     "frames_captured": frames_captured,
+                    "protocol": "fountain",
                 })
 
             frame = self._ensure_size(frame)
-            sampled = self._sample_grid(frame, self._profile)
-            result = protocol.decode_frame(sampled)
+            result, geometry_cursor, _ = self._decode_with_sampling_fallbacks(
+                frame,
+                self._profile,
+                protocol.decode_frame,
+                geometry_candidates,
+                geometry_cursor,
+            )
 
-            if not result.is_valid or result.data is None:
+            if result is None or not result.is_valid or result.data is None:
                 continue
 
             seed, K, payload = result.frame_index, result.total_frames, result.data
@@ -288,6 +299,7 @@ class ReceiverWorker(threading.Thread):
                     "message": f"Transmission detected! K={K} chunks",
                     "total_chunks": K,
                     "expected_droplets": expected_droplets,
+                    "protocol": "fountain",
                 })
 
             if decoder.K != K:
@@ -303,6 +315,8 @@ class ReceiverWorker(threading.Thread):
                     start_time = time.time()
                     bytes_received = 0
                     droplets_received = 0
+                    unique_droplets_received = 0
+                    seen_seeds.clear()
                     expected_droplets = (
                         max(0, int(frame_max)) if frame_max is not None else None
                     )
@@ -313,12 +327,17 @@ class ReceiverWorker(threading.Thread):
                         "message": f"Resynced transmission! K={K} chunks",
                         "total_chunks": K,
                         "expected_droplets": expected_droplets,
+                        "protocol": "fountain",
                     })
                 else:
                     continue
             else:
                 k_switch_candidate = None
                 k_switch_hits = 0
+
+            if seed not in seen_seeds:
+                seen_seeds.add(seed)
+                unique_droplets_received += 1
 
             decoder.add_droplet(seed, payload)
             bytes_received += len(payload)
@@ -335,7 +354,7 @@ class ReceiverWorker(threading.Thread):
                     last_indices_emit = now
                 self._publish_fountain_progress(
                     decoder, K, payload, bytes_received,
-                    droplets_received, expected_droplets,
+                    droplets_received, unique_droplets_received, expected_droplets,
                     frames_captured, start_time,
                     emit_indices=emit_indices,
                 )
@@ -343,7 +362,7 @@ class ReceiverWorker(threading.Thread):
             if decoder.is_complete():
                 self._finalize_fountain(
                     decoder, start_time, frames_captured, bytes_received,
-                    droplets_received, expected_droplets,
+                    droplets_received, unique_droplets_received, expected_droplets,
                 )
                 return
 
@@ -354,7 +373,7 @@ class ReceiverWorker(threading.Thread):
 
     def _publish_fountain_progress(
         self, decoder, K, payload, bytes_received,
-        droplets_received, expected_droplets,
+        droplets_received, unique_droplets_received, expected_droplets,
         frames_captured, start_time,
         *,
         emit_indices: bool = True,
@@ -380,10 +399,12 @@ class ReceiverWorker(threading.Thread):
         acquisition_percent = round((droplets_received / K) * 100, 1)
 
         data = {
+            "protocol": "fountain",
             "chunks_decoded": decoded,
             "total_chunks": K,
             "percent": percent,
             "droplets_received": droplets_received,
+            "unique_droplets_received": unique_droplets_received,
             "expected_droplets": expected_droplets,
             "acquisition_percent": acquisition_percent,
             "speed_kbps": round(speed / 1024, 1) if speed > 0 else 0,
@@ -397,7 +418,7 @@ class ReceiverWorker(threading.Thread):
 
     def _finalize_fountain(
         self, decoder, start_time, frames_captured, bytes_received,
-        droplets_received, expected_droplets,
+        droplets_received, unique_droplets_received, expected_droplets,
     ) -> None:
         full_data = decoder.get_file_data()
         file_size, expected_sha256, filename, content_offset = (
@@ -422,9 +443,11 @@ class ReceiverWorker(threading.Thread):
         speed_mbps = (file_size * 8) / duration / 1_000_000 if duration > 0 else 0
 
         self._publish("complete", {
+            "protocol": "fountain",
             "filename": filename,
             "size": file_size,
             "sha256_ok": sha256_ok,
+            "sha256_available": expected_sha256 is not None,
             "save_path": save_path,
             "download_url": f"/api/receive/download/{filename}",
             "duration_s": round(duration, 2),
@@ -432,6 +455,7 @@ class ReceiverWorker(threading.Thread):
             "frames_captured": frames_captured,
             "bytes_received": bytes_received,
             "droplets_received": droplets_received,
+            "unique_droplets_received": unique_droplets_received,
             "expected_droplets": expected_droplets,
             "chunks_decoded": len(decoder.chunks),
             "total_chunks": decoder.K,
@@ -450,10 +474,19 @@ class ReceiverWorker(threading.Thread):
         frames_captured = 0
         bytes_received = 0
         last_progress = 0.0
+        last_unique_data_at = start_time
+        last_data_idx: int | None = None
+        pass_count = 0
+        saw_start = False
+        saw_end = False
+        waiting_for_metadata_reported = False
+        geometry_candidates = self._build_geometry_candidates(self._profile)
+        geometry_cursor = 0
 
         self._publish("status", {
             "state": "waiting",
             "message": "Waiting for sequential frames...",
+            "protocol": "sequential",
         })
 
         while not self._stop_event.is_set():
@@ -467,39 +500,135 @@ class ReceiverWorker(threading.Thread):
             self._maybe_publish_preview(frame)
 
             frame = self._ensure_size(frame)
-            sampled = self._sample_grid(frame, self._profile)
-            result = protocol.decode_frame(sampled)
+            result, geometry_cursor, _ = self._decode_with_sampling_fallbacks(
+                frame,
+                self._profile,
+                protocol.decode_frame,
+                geometry_candidates,
+                geometry_cursor,
+            )
 
-            if not result.is_valid:
+            if result is None or not result.is_valid:
                 continue
 
             ftype, data = result.frame_type, result.data
             idx, total = result.frame_index, result.total_frames
 
-            if ftype == FRAME_TYPE_START and expected_name is None:
-                fs, sha, fn = parse_start_metadata(data)
-                if fs is not None:
-                    expected_size, expected_sha256, expected_name = fs, sha, fn
+            if ftype == FRAME_TYPE_START:
+                saw_start = True
+                if total_expected is None and total:
                     total_expected = total
+                if expected_name is None:
+                    fs, sha, fn = parse_start_metadata(data)
+                    if fs is not None:
+                        expected_size, expected_sha256, expected_name = fs, sha, fn
+                if expected_name is not None and total_expected:
+                    waiting_for_metadata_reported = False
                     self._publish("status", {
                         "state": "receiving",
-                        "message": f"File: {fn} ({fs} bytes, {total} frames)",
-                        "total_chunks": total,
+                        "message": (
+                            f"File: {expected_name} "
+                            f"({expected_size} bytes, {total_expected} frames)"
+                        ),
+                        "protocol": "sequential",
+                        "total_chunks": total_expected,
+                        "start_seen": True,
+                        "end_seen": saw_end,
+                        "pass_count": pass_count,
                     })
+                if total_expected and len(received) >= total_expected:
+                    self._finalize_sequential(
+                        received,
+                        total_expected,
+                        expected_size,
+                        expected_sha256,
+                        expected_name,
+                        start_time,
+                        frames_captured,
+                        bytes_received,
+                        saw_start=saw_start,
+                        saw_end=saw_end,
+                        pass_count=pass_count,
+                    )
+                    return
 
             elif ftype == FRAME_TYPE_DATA:
                 if total_expected is None and total:
                     total_expected = total
+                if (
+                    total_expected
+                    and expected_name is None
+                    and not waiting_for_metadata_reported
+                ):
+                    waiting_for_metadata_reported = True
+                    self._publish("status", {
+                        "state": "receiving",
+                        "message": (
+                            "Sequential data detected "
+                            f"({total_expected} frames). "
+                            "Waiting for START metadata..."
+                        ),
+                        "protocol": "sequential",
+                        "total_chunks": total_expected,
+                        "start_seen": saw_start,
+                        "end_seen": saw_end,
+                        "pass_count": pass_count,
+                    })
+                now = time.time()
+                if (
+                    total_expected
+                    and len(received) >= total_expected
+                    and last_data_idx is not None
+                    and idx is not None
+                    and idx < last_data_idx
+                ):
+                    pass_count += 1
+                    self._finalize_sequential(
+                        received,
+                        total_expected,
+                        expected_size,
+                        expected_sha256,
+                        expected_name,
+                        start_time,
+                        frames_captured,
+                        bytes_received,
+                        saw_start=saw_start,
+                        saw_end=saw_end,
+                        pass_count=pass_count,
+                    )
+                    return
                 if idx not in received:
                     received[idx] = data
                     bytes_received += len(data)
-                now = time.time()
+                    last_unique_data_at = now
+                last_data_idx = idx
+                if total_expected and len(received) >= total_expected:
+                    grace_s = 0.35 if expected_name is not None else 1.0
+                    if now - last_unique_data_at >= grace_s:
+                        self._finalize_sequential(
+                            received,
+                            total_expected,
+                            expected_size,
+                            expected_sha256,
+                            expected_name,
+                            start_time,
+                            frames_captured,
+                            bytes_received,
+                            saw_start=saw_start,
+                            saw_end=saw_end,
+                            pass_count=pass_count,
+                        )
+                        return
                 if total_expected and now - last_progress > 0.1:
                     last_progress = now
+                    percent = round(len(received) / total_expected * 100, 1)
+                    if percent >= 100.0:
+                        percent = 99.9
                     self._publish("progress", {
+                        "protocol": "sequential",
                         "chunks_decoded": len(received),
                         "total_chunks": total_expected,
-                        "percent": round(len(received) / total_expected * 100, 1),
+                        "percent": percent,
                         "speed_kbps": round(
                             bytes_received / (now - start_time) / 1024, 1,
                         ) if now - start_time > 2 else 0,
@@ -507,14 +636,26 @@ class ReceiverWorker(threading.Thread):
                         "frames_captured": frames_captured,
                         "bytes_received": bytes_received,
                         "decoded_indices": sorted(received.keys()),
+                        "start_seen": saw_start,
+                        "end_seen": saw_end,
+                        "pass_count": pass_count,
                     })
 
             elif ftype == FRAME_TYPE_END:
+                saw_end = True
                 if total_expected and len(received) >= total_expected:
                     self._finalize_sequential(
-                        received, total_expected, expected_size,
-                        expected_sha256, expected_name,
-                        start_time, frames_captured, bytes_received,
+                        received,
+                        total_expected,
+                        expected_size,
+                        expected_sha256,
+                        expected_name,
+                        start_time,
+                        frames_captured,
+                        bytes_received,
+                        saw_start=saw_start,
+                        saw_end=saw_end,
+                        pass_count=pass_count,
                     )
                     return
 
@@ -523,20 +664,38 @@ class ReceiverWorker(threading.Thread):
             "frames_captured": frames_captured,
         })
 
+    def _reassemble_sequential_data(
+        self,
+        received: dict[int, bytes],
+        total_frames: int,
+    ) -> tuple[bytes, list[int]]:
+        bpf = self._profile.seq_bytes_per_frame
+        full_data = bytearray()
+        missing: list[int] = []
+        for i in range(total_frames):
+            chunk = received.get(i)
+            if chunk is None:
+                missing.append(i)
+                full_data.extend(b"\x00" * bpf)
+            else:
+                full_data.extend(chunk)
+        return bytes(full_data), missing
+
     def _finalize_sequential(
         self, received, total_frames, expected_size,
         expected_sha256, expected_name,
         start_time, frames_captured, bytes_received,
+        *,
+        saw_start: bool,
+        saw_end: bool,
+        pass_count: int,
     ) -> None:
-        bpf = self._profile.seq_bytes_per_frame
-        full_data = bytearray()
-        for i in range(total_frames):
-            full_data.extend(received.get(i, b"\x00" * bpf))
+        full_data, missing = self._reassemble_sequential_data(received, total_frames)
 
-        if expected_size:
-            file_content = bytes(full_data[:expected_size])
+        if expected_size is not None:
+            file_content = full_data[:expected_size]
         else:
-            file_content = bytes(full_data)
+            file_content = full_data
 
         sha256_ok = bool(
             expected_sha256 and verify_integrity(file_content, expected_sha256),
@@ -547,9 +706,11 @@ class ReceiverWorker(threading.Thread):
         speed_mbps = (len(file_content) * 8) / duration / 1e6 if duration > 0 else 0
 
         self._publish("complete", {
+            "protocol": "sequential",
             "filename": filename,
             "size": len(file_content),
             "sha256_ok": sha256_ok,
+            "sha256_available": expected_sha256 is not None,
             "save_path": save_path,
             "download_url": f"/api/receive/download/{filename}",
             "duration_s": round(duration, 2),
@@ -558,6 +719,10 @@ class ReceiverWorker(threading.Thread):
             "bytes_received": bytes_received,
             "chunks_decoded": len(received),
             "total_chunks": total_frames,
+            "start_seen": saw_start,
+            "end_seen": saw_end,
+            "pass_count": pass_count,
+            "missing_frames": missing,
         })
 
     # -- auto-detect mode ------------------------------------------------
@@ -649,6 +814,7 @@ class ReceiverWorker(threading.Thread):
                                 detected_bpc=bpc,
                                 sampling=sampling,
                             ),
+                            "protocol": "sequential",
                         })
                         self._run_sequential(cap)
                         return
@@ -665,6 +831,7 @@ class ReceiverWorker(threading.Thread):
                                 detected_bpc=bpc,
                                 sampling=sampling,
                             ),
+                            "protocol": "fountain",
                         })
                         self._run_fountain(cap)
                         return
@@ -686,6 +853,60 @@ class ReceiverWorker(threading.Thread):
                 interpolation=cv2.INTER_NEAREST,
             )
         return frame
+
+    def _decode_with_sampling_fallbacks(
+        self,
+        frame,
+        profile: ResolutionProfile,
+        decode_frame,
+        geometry_candidates: list[tuple[int, int, float, float]],
+        geometry_cursor: int,
+        *,
+        extra_candidates: int = 5,
+    ):
+        """Try the current sampling first, then probe browser-style fallbacks.
+
+        Manual Web UI modes need the same geometry resilience as auto-detect:
+        browser fullscreen can still leave slight viewport offsets/scales that
+        make exact block-centre sampling miss valid frames.
+        """
+        batch: list[tuple[int, int, float, float]] = []
+        seen: set[tuple[int, int, float, float]] = set()
+
+        def add(sampling: tuple[int, int, float, float]) -> None:
+            key = (
+                int(sampling[0]),
+                int(sampling[1]),
+                round(float(sampling[2]), 6),
+                round(float(sampling[3]), 6),
+            )
+            if key in seen:
+                return
+            seen.add(key)
+            batch.append(sampling)
+
+        add(self._sampling)
+        add((0, 0, 1.0, 1.0))
+
+        dynamic_sampling = self._estimate_sampling_from_frame(frame, profile)
+        if dynamic_sampling is not None:
+            add(dynamic_sampling)
+
+        if len(geometry_candidates) > 1:
+            for _ in range(extra_candidates):
+                geometry_cursor = (geometry_cursor + 1) % len(geometry_candidates)
+                if geometry_cursor == 0:
+                    geometry_cursor = 1
+                add(geometry_candidates[geometry_cursor])
+
+        for sampling in batch:
+            sampled = self._sample_grid(frame, profile, sampling=sampling)
+            result = decode_frame(sampled)
+            if getattr(result, "is_valid", False):
+                self._sampling = sampling
+                return result, geometry_cursor, sampling
+
+        return None, geometry_cursor, None
 
     def _sample_grid(
         self,

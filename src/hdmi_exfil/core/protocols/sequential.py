@@ -28,6 +28,8 @@ from hdmi_exfil.core.config import (
 from hdmi_exfil.core.file_handling.metadata import build_start_metadata
 from hdmi_exfil.core.protocols.base import EncodingProtocol, FrameResult
 
+LEGACY_WEB_SEQ_MAGIC = 0xDAEA
+
 
 class TransferState(Enum):
     """Sequential transfer lifecycle states."""
@@ -158,7 +160,7 @@ class SequentialProtocol(EncodingProtocol):
             )
 
         # Magic number check
-        if magic != SEQ_MAGIC:
+        if magic not in (SEQ_MAGIC, LEGACY_WEB_SEQ_MAGIC):
             return FrameResult(
                 data=None,
                 frame_type=None,

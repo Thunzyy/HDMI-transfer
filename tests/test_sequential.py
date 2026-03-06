@@ -176,6 +176,22 @@ class TestMagicNumberRejection:
         assert idx == 0
         assert length == 100
 
+    def test_legacy_web_magic_accepted(self):
+        """Frame with legacy web magic 0xDAEA is accepted for compatibility."""
+        legacy_magic = 0xDAEA
+        payload = b'\x42' * 50
+        header = struct.pack(
+            SEQ_HEADER_FMT, legacy_magic, FRAME_TYPE_DATA, 0, 1, len(payload),
+        )
+        crc = zlib.crc32(header + payload) & 0xFFFFFFFF
+        frame_bytes = header + struct.pack('>I', crc) + payload
+        grid = _bytes_to_grid(frame_bytes)[..., ::-1]
+        idx, total, data, length = _proto.decode_frame_legacy(grid)
+        assert idx == 0
+        assert total == 1
+        assert length == 50
+        assert data[:50] == payload
+
     def test_noise_frame_rejected(self):
         """Random noise frame (no magic) returns None."""
         # Create a random grid that won't have the magic number

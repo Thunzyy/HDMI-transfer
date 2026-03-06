@@ -381,8 +381,9 @@ html,body{
       <div class="fountain-counts">
         <span id="fountainRcvd">Solved: 0</span>
         <span id="fountainTarget">Needed(min): 0</span>
-        <span id="fountainNeededMax">Needed(max): 0</span>
-        <span id="fountainRx">Rx: 0 (0%)</span>
+        <span id="fountainSenderTarget">Target(sender): --</span>
+        <span id="fountainRxValid">Rx(valid): 0 (0%)</span>
+        <span id="fountainRxUnique">Rx(unique): 0 (0%)</span>
       </div>
     </div>
 
@@ -434,8 +435,9 @@ html,body{
   const fountainGrid   = document.getElementById("fountainGrid");
   const fountainRcvd   = document.getElementById("fountainRcvd");
   const fountainTarget = document.getElementById("fountainTarget");
-  const fountainNeededMax = document.getElementById("fountainNeededMax");
-  const fountainRx     = document.getElementById("fountainRx");
+  const fountainSenderTarget = document.getElementById("fountainSenderTarget");
+  const fountainRxValid = document.getElementById("fountainRxValid");
+  const fountainRxUnique = document.getElementById("fountainRxUnique");
 
   const metricName     = document.getElementById("metricName");
   const metricSize     = document.getElementById("metricSize");
@@ -448,6 +450,7 @@ html,body{
 
   let sse = null, totalChunks = 0, speedHistory = [];
   let expectedDroplets = null;
+  let activeProtocol = null;
   const MAX_PTS = 30, GRID_N = 40;
   const SETTINGS_KEY = "hdmi_exfil_settings";
   const LEGACY_PREVIEW_SETTINGS_KEY = "hdmi_exfil_preview_settings";
@@ -688,6 +691,7 @@ html,body{
   /* ── Start / Stop ──────────────────────── */
   async function start() {
     resetTransferStats();
+    activeProtocol = modeSelect.value === "auto" ? null : modeSelect.value;
     downloadArea.classList.remove("visible");
     speedHistory = [];
     try {
@@ -746,15 +750,21 @@ html,body{
     totalChunks = 0;
     speedHistory = [];
     expectedDroplets = null;
+    activeProtocol = modeSelect.value === "auto" ? null : modeSelect.value;
 
     pctBig.textContent = "0.0";
     fountainPct.textContent = "0%";
     speedBadge.textContent = "--";
     badgeFrm.textContent = "FRM: 0";
-    fountainRcvd.textContent = "Solved: 0";
-    fountainTarget.textContent = "Needed(min): 0";
-    fountainNeededMax.textContent = "Needed(max): 0";
-    fountainRx.textContent = "Rx: 0 (0%)";
+    renderTransferCounts(activeProtocol || "fountain", {
+      chunks_decoded: 0,
+      total_chunks: 0,
+      droplets_received: 0,
+      unique_droplets_received: 0,
+      start_seen: false,
+      end_seen: false,
+      pass_count: 0,
+    });
 
     speedLine.setAttribute("d", "M0 100 L100 100");
     speedArea.setAttribute("d", "M0 100 L100 100 L100 100 L0 100 Z");
@@ -771,12 +781,12 @@ html,body{
     downloadArea.classList.remove("visible");
   }
 
-  function formatRxLabel(rx, total) {
+  function formatRxLabel(label, rx, total) {
     if (!total || total <= 0) {
-      return "Rx: " + rx.toLocaleString() + " (0%)";
+      return label + ": " + rx.toLocaleString() + " (0%)";
     }
     const pct = (rx / total) * 100;
-    return "Rx: " + rx.toLocaleString() + " (" + pct.toFixed(1) + "% of K)";
+    return label + ": " + rx.toLocaleString() + " (" + pct.toFixed(1) + "% of K)";
   }
 
   function normalizeExpectedDroplets(raw) {
@@ -785,12 +795,50 @@ html,body{
     return Math.floor(n);
   }
 
-  function formatNeededMax(total, droplets, expected) {
-    if (expected === 0) return "Needed(max): loop";
+  function formatSenderTargetLabel(total, expected) {
+    if (expected === 0) return "Target(sender): loop";
     if (Number.isFinite(expected) && expected > 0) {
-      return "Needed(max): " + Math.max(total, expected).toLocaleString();
+      return "Target(sender): " + Math.max(total, expected).toLocaleString();
     }
-    return "Needed(max): " + Math.max(total, droplets).toLocaleString();
+    return "Target(sender): --";
+  }
+
+  function getDisplayProtocol(data = null) {
+    const protocol = data && data.protocol;
+    if (protocol === "sequential" || protocol === "fountain") {
+      activeProtocol = protocol;
+      return protocol;
+    }
+    if (activeProtocol === "sequential" || activeProtocol === "fountain") {
+      return activeProtocol;
+    }
+    if (modeSelect.value === "sequential" || modeSelect.value === "fountain") {
+      return modeSelect.value;
+    }
+    return "fountain";
+  }
+
+  function renderTransferCounts(protocol, data) {
+    const total = Number(data.total_chunks || 0);
+    const decoded = Number(data.chunks_decoded || 0);
+    if (protocol === "sequential") {
+      fountainRcvd.textContent = "Chunks: " + decoded.toLocaleString();
+      fountainTarget.textContent = "Total: " + total.toLocaleString();
+      fountainSenderTarget.textContent = "START: " + (data.start_seen ? "seen" : "waiting");
+      fountainRxValid.textContent = "END: " + (data.end_seen ? "seen" : "waiting");
+      fountainRxUnique.textContent = "Passes: " + Number(data.pass_count || 0).toLocaleString();
+      return;
+    }
+
+    const droplets = Number(data.droplets_received || 0);
+    const uniqueDroplets = Number(data.unique_droplets_received || 0);
+    const parsedExpected = normalizeExpectedDroplets(data.expected_droplets);
+    if (parsedExpected !== null) expectedDroplets = parsedExpected;
+    fountainRcvd.textContent = "Solved: " + decoded.toLocaleString();
+    fountainTarget.textContent = "Needed(min): " + total.toLocaleString();
+    fountainSenderTarget.textContent = formatSenderTargetLabel(total, expectedDroplets);
+    fountainRxValid.textContent = formatRxLabel("Rx(valid)", droplets, total);
+    fountainRxUnique.textContent = formatRxLabel("Rx(unique)", uniqueDroplets, total);
   }
   /* ── SSE ────────────────────────────────── */
   function connectSSE() {
@@ -798,6 +846,7 @@ html,body{
 
     sse.addEventListener("status", e => {
       const d = JSON.parse(e.data);
+      const protocol = getDisplayProtocol(d);
       markPreviewHeartbeat();
       setLink(d.state);
       statusMsg.textContent = d.message || "";
@@ -810,33 +859,33 @@ html,body{
       }
       if (d.total_chunks) {
         totalChunks = d.total_chunks;
-        const parsedExpected = normalizeExpectedDroplets(d.expected_droplets);
-        if (parsedExpected !== null) expectedDroplets = parsedExpected;
         initGrid(Math.min(totalChunks, GRID_N));
-        fountainTarget.textContent = "Needed(min): " + totalChunks.toLocaleString();
-        fountainNeededMax.textContent = formatNeededMax(totalChunks, 0, expectedDroplets);
-        fountainRx.textContent = formatRxLabel(0, totalChunks);
+        renderTransferCounts(protocol, {
+          total_chunks: totalChunks,
+          chunks_decoded: 0,
+          droplets_received: 0,
+          unique_droplets_received: 0,
+          expected_droplets: d.expected_droplets,
+          start_seen: d.start_seen,
+          end_seen: d.end_seen,
+          pass_count: d.pass_count,
+        });
       }
     });
 
     sse.addEventListener("progress", e => {
       const d = JSON.parse(e.data);
+      const protocol = getDisplayProtocol(d);
       markPreviewHeartbeat();
       const decoded = Number(d.chunks_decoded || 0);
       const total = Number(d.total_chunks || 0);
-      const droplets = Number(d.droplets_received || 0);
-      const parsedExpected = normalizeExpectedDroplets(d.expected_droplets);
-      if (parsedExpected !== null) expectedDroplets = parsedExpected;
       // Compute percent from the exact counters shown in UI.
       // This guarantees consistency between %, Solved and Needed.
       const pct = total > 0 ? Math.min(99.9, (decoded / total) * 100) : 0;
       pctBig.textContent = pct.toFixed(1);
       fountainPct.textContent = pct.toFixed(0) + "%";
       badgeFrm.textContent = "FRM: " + d.frames_captured.toLocaleString();
-      fountainRcvd.textContent = "Solved: " + decoded.toLocaleString();
-      fountainTarget.textContent = "Needed(min): " + total.toLocaleString();
-      fountainNeededMax.textContent = formatNeededMax(total, droplets, expectedDroplets);
-      fountainRx.textContent = formatRxLabel(droplets, total);
+      renderTransferCounts(protocol, d);
       totalChunks = total;
       const spd = d.speed_kbps || 0;
       if (spd > 0) {
@@ -898,9 +947,11 @@ html,body{
   }
 
   function showComplete(d) {
+    const protocol = getDisplayProtocol(d);
     setLink("idle");
     log("success", "Complete: " + d.filename + " (" + fmtBytes(d.size) + ")");
-    log("success", "SHA-256: " + (d.sha256_ok ? "OK" : "MISMATCH") + " | " + d.speed_mbps.toFixed(2) + " Mbps");
+    const shaSummary = d.sha256_available ? (d.sha256_ok ? "OK" : "MISMATCH") : "UNAVAILABLE";
+    log("success", "SHA-256: " + shaSummary + " | " + d.speed_mbps.toFixed(2) + " Mbps");
     const total = Number(d.total_chunks || totalChunks || 0);
     const solved = total > 0 ? total : Number(d.chunks_decoded || 0);
     const finalKbps = Number((d.speed_mbps || 0) * 122.0703125);
@@ -913,21 +964,23 @@ html,body{
       drawSpeed();
     }
     if (total > 0) {
-      fountainRcvd.textContent = "Solved: " + solved.toLocaleString();
-      fountainTarget.textContent = "Needed(min): " + total.toLocaleString();
-      const rx = Number(d.droplets_received || solved || 0);
-      const parsedExpected = normalizeExpectedDroplets(d.expected_droplets);
-      if (parsedExpected !== null) expectedDroplets = parsedExpected;
-      fountainNeededMax.textContent = formatNeededMax(total, rx, expectedDroplets);
-      fountainRx.textContent = formatRxLabel(rx, total);
+      renderTransferCounts(protocol, {
+        ...d,
+        chunks_decoded: solved,
+        total_chunks: total,
+        droplets_received: Number(d.droplets_received || solved || 0),
+        unique_droplets_received: Number(d.unique_droplets_received || d.droplets_received || solved || 0),
+      });
       const allDecoded = Array.from({length: total}, (_, i) => i);
       updateGrid(allDecoded, total);
       if (canvas.style.display !== "none") drawCanvas(allDecoded, total);
     }
     metricName.textContent = d.filename;
     metricSize.textContent = fmtBytes(d.size);
-    metricSha.textContent = d.sha256_ok ? "OK" : "MISMATCH";
-    metricSha.className = "m-value " + (d.sha256_ok ? "ok" : "fail");
+    metricSha.textContent = shaSummary;
+    metricSha.className = d.sha256_available
+      ? "m-value " + (d.sha256_ok ? "ok" : "fail")
+      : "m-value";
     metricDuration.textContent = d.duration_s.toFixed(2) + "s";
     metricSpeed.textContent = d.speed_mbps.toFixed(2) + " Mbps";
     metricEta.textContent = "0:00";

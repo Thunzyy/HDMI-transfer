@@ -295,10 +295,10 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
         </select>
       </div>
       <div class="side-row" id="fountainRedundancyRow">
-        <span class="side-key">Fountain xK</span>
+        <span class="side-key">Target xK</span>
         <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-right:6px">
           <input type="checkbox" id="fountainAutoStopInput"/>
-          Auto-stop
+          Auto-stop at target
         </label>
         <input
           type="number"
@@ -308,7 +308,20 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
           max="5"
           step="0.05"
           value="1.50"
-          title="0 = infinite stream"
+          title="Applied only when Auto-stop is enabled; otherwise the sender loops indefinitely"
+        />
+      </div>
+      <div class="side-row" id="sequentialRedundancyRow" style="display:none">
+        <span class="side-key">Repeat</span>
+        <input
+          type="number"
+          class="side-input"
+          id="sequentialRedundancyInput"
+          min="1"
+          max="16"
+          step="1"
+          value="1"
+          title="Repeat each START, DATA and END frame N times"
         />
       </div>
       <div class="side-row">
@@ -365,7 +378,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   const FOUNTAIN_HEADER_PRE_CRC = 12;
   const FOUNTAIN_HEADER_LEN = 16;
 
-  const SEQ_MAGIC = 0xDAEA;
+  const SEQ_MAGIC = 0xDA7A;
   const SEQ_HEADER_PRE_CRC = 13;
   const SEQ_CRC_SIZE = 4;
   const SEQ_HEADER_LEN = 17;
@@ -389,8 +402,9 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     protocol: "fountain", bpc: 1,
     profileName: "balanced", width: 1920, height: 1080, blockSize: 8,
     fountainRedundancy: 1.5,
+    sequentialRedundancy: 1,
     fountainAutoStop: false,
-    targetFps: 60, fpsMode: "auto", manualFps: 60, detectedHz: null,
+    targetFps: 60, fpsMode: "profile", manualFps: 60, detectedHz: null,
     cols: 0, rows: 0, bitsPerFrame: 0, bytesPerFrame: 0, payloadSize: 0,
   };
 
@@ -481,6 +495,8 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   const fountainRedundancyRow = document.getElementById("fountainRedundancyRow");
   const fountainAutoStopInput = document.getElementById("fountainAutoStopInput");
   const fountainRedundancyInput = document.getElementById("fountainRedundancyInput");
+  const sequentialRedundancyRow = document.getElementById("sequentialRedundancyRow");
+  const sequentialRedundancyInput = document.getElementById("sequentialRedundancyInput");
   const fpsModeSelect = document.getElementById("fpsModeSelect");
   const manualFpsInput = document.getElementById("manualFpsInput");
   const manualRow = document.getElementById("manualRow");
@@ -515,7 +531,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     fountainTargetFrames: 0,
     // Sequential state
     seqPhase: "start", // "start" | "data" | "end"
-    seqDataIdx: 0, seqRepeat: 0, seqRedundancy: 3,
+    seqDataIdx: 0, seqRepeat: 0,
   };
 
   // ── Config ─────────────────────────────
@@ -547,10 +563,12 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   const STORAGE_KEY = "hdmi_exfil_sender_settings";
   function saveSettings() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      settingsVersion: 2,
       protocol: config.protocol, bpc: config.bpc,
       profileName: config.profileName, width: config.width, height: config.height,
       blockSize: config.blockSize, fpsMode: config.fpsMode, manualFps: config.manualFps,
       fountainRedundancy: config.fountainRedundancy,
+      sequentialRedundancy: config.sequentialRedundancy,
       fountainAutoStop: config.fountainAutoStop,
     })); } catch(e) {}
   }
@@ -558,6 +576,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     try {
       const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return;
       const d = JSON.parse(raw);
+      const isLegacySettings = Number(d.settingsVersion || 0) < 2;
       if (d.protocol) config.protocol = d.protocol;
       if (d.bpc && [1,2,3].includes(d.bpc)) config.bpc = d.bpc;
       if (d.profileName && PROFILES[d.profileName]) {
@@ -568,10 +587,16 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
         if (d.width) config.width = d.width; if (d.height) config.height = d.height;
         if (d.blockSize) config.blockSize = d.blockSize;
       }
-      if (d.fpsMode) config.fpsMode = d.fpsMode;
+      if (isLegacySettings) config.fpsMode = "profile";
+      else if (d.fpsMode) config.fpsMode = d.fpsMode;
       if (d.manualFps) config.manualFps = d.manualFps;
       if (typeof d.fountainRedundancy === "number" && Number.isFinite(d.fountainRedundancy)) {
         config.fountainRedundancy = Math.max(0, Math.min(5, d.fountainRedundancy));
+      }
+      if (typeof d.sequentialRedundancy === "number" && Number.isFinite(d.sequentialRedundancy)) {
+        config.sequentialRedundancy = Math.max(1, Math.min(16, Math.floor(d.sequentialRedundancy)));
+      } else if (isLegacySettings) {
+        config.sequentialRedundancy = 1;
       }
       if (typeof d.fountainAutoStop === "boolean") config.fountainAutoStop = d.fountainAutoStop;
     } catch(e) {}
@@ -583,9 +608,17 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     return (b / 1048576).toFixed(2) + " MB";
   }
 
+  function getDisplayedThroughputKbps() {
+    const fps = getEffectiveFps();
+    const repeats = config.protocol === "sequential"
+      ? Math.max(1, config.sequentialRedundancy)
+      : 1;
+    return (config.payloadSize * fps) / repeats / 1024;
+  }
+
   function updateDerivedStats() {
     const fps = getEffectiveFps();
-    const kbps = (config.payloadSize * fps / 1024).toFixed(1);
+    const kbps = getDisplayedThroughputKbps().toFixed(1);
     let extra = "";
     if (config.protocol === "fountain" && state.K > 0) {
       if (config.fountainAutoStop && state.fountainTargetFrames > 0) {
@@ -594,6 +627,8 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
       } else {
         extra = "<br>Target droplets: manual stop (loop)";
       }
+    } else if (config.protocol === "sequential" && config.sequentialRedundancy > 1) {
+      extra = `<br>Frame repeat: ${config.sequentialRedundancy}x`;
     }
     derivedStatsEl.innerHTML =
       `${config.cols}x${config.rows} blocks &middot; ${config.payloadSize} B/frame<br>` +
@@ -604,7 +639,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
 
   function updateChips() {
     const fps = getEffectiveFps();
-    const kbps = (config.payloadSize * fps / 1024).toFixed(1);
+    const kbps = getDisplayedThroughputKbps().toFixed(1);
     const names = { speed: "Speed", balanced: "Balanced", quality: "Quality", custom: "Custom" };
     const protoNames = { fountain: "Fountain", sequential: "Sequential" };
     document.getElementById("chipProtocol").textContent = protoNames[config.protocol] || config.protocol;
@@ -614,14 +649,26 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   }
 
   function setSettingsEnabled(enabled) {
-    [bpcSelect, protocolSelect, profileSelect, resolutionSelect, blockSizeSelect, fountainAutoStopInput, fpsModeSelect, manualFpsInput].forEach(el => el.disabled = !enabled);
+    [
+      bpcSelect,
+      protocolSelect,
+      profileSelect,
+      resolutionSelect,
+      blockSizeSelect,
+      fountainAutoStopInput,
+      fpsModeSelect,
+      manualFpsInput,
+      sequentialRedundancyInput,
+    ].forEach(el => el.disabled = !enabled);
     fountainRedundancyInput.disabled = !enabled || !config.fountainAutoStop;
   }
 
   function refreshProtocolControls() {
     fountainRedundancyRow.style.display = config.protocol === "fountain" ? "" : "none";
+    sequentialRedundancyRow.style.display = config.protocol === "sequential" ? "" : "none";
     fountainAutoStopInput.checked = !!config.fountainAutoStop;
     fountainRedundancyInput.disabled = state.running || !config.fountainAutoStop;
+    sequentialRedundancyInput.disabled = state.running;
   }
 
   // ── Core helpers ───────────────────────
@@ -823,25 +870,26 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
 
   function renderSeqFrame() {
     let frameBytes;
+    const seqRedundancy = Math.max(1, config.sequentialRedundancy | 0);
     if (state.seqPhase === "start") {
       const meta = buildSeqStartPayload();
       frameBytes = buildSeqFrame(FRAME_TYPE_START, 0, state.K, meta);
       state.seqRepeat++;
-      if (state.seqRepeat >= state.seqRedundancy) {
+      if (state.seqRepeat >= seqRedundancy) {
         state.seqPhase = "data"; state.seqDataIdx = 0; state.seqRepeat = 0;
       }
     } else if (state.seqPhase === "data") {
       const chunk = state.chunks[state.seqDataIdx];
       frameBytes = buildSeqFrame(FRAME_TYPE_DATA, state.seqDataIdx, state.K, chunk);
       state.seqRepeat++;
-      if (state.seqRepeat >= state.seqRedundancy) {
+      if (state.seqRepeat >= seqRedundancy) {
         state.seqRepeat = 0; state.seqDataIdx++;
         if (state.seqDataIdx >= state.K) { state.seqPhase = "end"; }
       }
     } else {
       frameBytes = buildSeqFrame(FRAME_TYPE_END, state.K, state.K, new Uint8Array([0]));
       state.seqRepeat++;
-      if (state.seqRepeat >= state.seqRedundancy) {
+      if (state.seqRepeat >= seqRedundancy) {
         // Loop: restart transmission
         state.seqPhase = "start"; state.seqRepeat = 0;
       }
@@ -1107,6 +1155,14 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     config.manualFps = val; config.targetFps = val; manualFpsInput.value = val;
     updateDerivedStats(); updateChips(); saveSettings();
   });
+  sequentialRedundancyInput.addEventListener("change", () => {
+    const val = Math.max(1, Math.min(16, Math.floor(Number(sequentialRedundancyInput.value))));
+    config.sequentialRedundancy = Number.isFinite(val) ? val : 1;
+    sequentialRedundancyInput.value = String(config.sequentialRedundancy);
+    updateDerivedStats();
+    updateChips();
+    saveSettings();
+  });
   fountainRedundancyInput.addEventListener("change", () => {
     const val = Math.max(0, Math.min(5, Number(fountainRedundancyInput.value)));
     config.fountainRedundancy = Number.isFinite(val) ? val : 1.5;
@@ -1131,6 +1187,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   resolutionSelect.value = `${config.width}x${config.height}`;
   blockSizeSelect.value = String(config.blockSize);
   fountainRedundancyInput.value = config.fountainRedundancy.toFixed(2);
+  sequentialRedundancyInput.value = String(config.sequentialRedundancy);
   fpsModeSelect.value = config.fpsMode;
   manualFpsInput.value = config.manualFps;
   manualRow.style.display = config.fpsMode === "manual" ? "" : "none";
