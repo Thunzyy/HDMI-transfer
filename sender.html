@@ -407,6 +407,9 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     targetFps: 60, fpsMode: "profile", manualFps: 60, detectedHz: null,
     cols: 0, rows: 0, bitsPerFrame: 0, bytesPerFrame: 0, payloadSize: 0,
   };
+  const runtimeOptions = {
+    debugTitle: false,
+  };
 
   function recalcDerived() {
     config.cols = config.width / config.blockSize;
@@ -602,6 +605,80 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     } catch(e) {}
   }
 
+  function parseBoolParam(value) {
+    if (value == null || value === "") return null;
+    const normalized = String(value).trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) return true;
+    if (["0", "false", "no", "off"].includes(normalized)) return false;
+    return null;
+  }
+
+  function applyUrlParams() {
+    const params = new URLSearchParams(window.location.search);
+    const protocol = params.get("protocol");
+    if (protocol === "fountain" || protocol === "sequential") {
+      config.protocol = protocol;
+    }
+
+    const bpc = Number(params.get("bpc"));
+    if ([1, 2, 3].includes(bpc)) config.bpc = bpc;
+
+    const profileName = params.get("profile");
+    if (profileName && PROFILES[profileName]) {
+      const p = PROFILES[profileName];
+      Object.assign(config, {
+        profileName,
+        width: p.width,
+        height: p.height,
+        blockSize: p.blockSize,
+        targetFps: p.targetFps,
+      });
+    }
+
+    const fpsMode = params.get("fpsMode");
+    if (["auto", "profile", "manual"].includes(fpsMode)) {
+      config.fpsMode = fpsMode;
+    }
+
+    const manualFps = Number(params.get("manualFps"));
+    if (Number.isFinite(manualFps) && manualFps >= 1 && manualFps <= 360) {
+      config.manualFps = manualFps;
+      if (config.fpsMode === "manual") config.targetFps = manualFps;
+    }
+
+    const fountainRedundancy = Number(params.get("fountainRedundancy"));
+    if (Number.isFinite(fountainRedundancy)) {
+      config.fountainRedundancy = Math.max(0, Math.min(5, fountainRedundancy));
+    }
+
+    const sequentialRedundancy = Number(params.get("sequentialRepeat") || params.get("sequentialRedundancy"));
+    if (Number.isFinite(sequentialRedundancy)) {
+      config.sequentialRedundancy = Math.max(1, Math.min(16, Math.floor(sequentialRedundancy)));
+    }
+
+    const fountainAutoStop = parseBoolParam(params.get("fountainAutoStop"));
+    if (fountainAutoStop !== null) {
+      config.fountainAutoStop = fountainAutoStop;
+    }
+    runtimeOptions.debugTitle = parseBoolParam(params.get("debugTitle")) === true;
+
+    return {
+      payloadUrl: params.get("payload") || params.get("payloadUrl") || "",
+      payloadName: params.get("name") || params.get("payloadName") || "",
+      autoStart: parseBoolParam(params.get("autostart")) === true,
+    };
+  }
+
+  function updateDebugTitle() {
+    if (!runtimeOptions.debugTitle) return;
+    const status = state.running ? "TX" : "IDLE";
+    document.title =
+      `HDMI Exfil — Sender [${status}] ` +
+      `f=${state.frame} k=${state.K} ` +
+      `inner=${window.innerWidth}x${window.innerHeight} ` +
+      `screen=${window.screenX},${window.screenY}`;
+  }
+
   function fmtSize(b) {
     if (b < 1024) return b + " B";
     if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
@@ -790,9 +867,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     const K = Math.ceil(rawBytes.length / ps);
     const chunks = new Array(K);
     for (let i = 0; i < K; i++) {
-      const chunk = new Uint8Array(ps);
-      chunk.set(rawBytes.subarray(i * ps, Math.min((i + 1) * ps, rawBytes.length)));
-      chunks[i] = chunk;
+      chunks[i] = rawBytes.slice(i * ps, Math.min((i + 1) * ps, rawBytes.length));
     }
     return { K, chunks };
   }
@@ -919,6 +994,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
       const t = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
       hudTime.textContent = t;
       headerTime.textContent = t;
+      updateDebugTitle();
     }
   }
   function renderLoop(timestamp) {
@@ -971,6 +1047,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     statusLabel.style.color = "var(--green)";
     canvasWrap.classList.add("active");
     hud.classList.add("active");
+    updateDebugTitle();
     const begin = () => {
       if (!state.running) return;
       checkViewportGeometry();
@@ -999,6 +1076,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     statusLabel.style.color = "";
     headerFrames.textContent = state.frame;
     const elapsed = (performance.now() - state.startTime) / 1000;
+    updateDebugTitle();
     if (state.frame > 0 && state.fileName) {
       saveHistory({
         type: "sent", filename: state.fileName, size: state.fileSize,
@@ -1019,24 +1097,44 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   }
 
   // ── File handling ──────────────────────
+  async function applyLoadedBytes(raw, fileName) {
+    const sha256Hash = await computeSHA256(raw);
+    state.rawBytes = raw;
+    state.sha256Hash = sha256Hash;
+    state.fileName = fileName;
+    state.fileSize = raw.length;
+    rechunk();
+    startBtn.disabled = false; stopBtn.disabled = true;
+
+    fileNameEl.textContent = fileName;
+    fileSizeEl.textContent = fmtSize(raw.length);
+    dropZone.classList.add("loaded");
+  }
+
   function handleFile(file) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async () => {
       const raw = new Uint8Array(reader.result);
-      const sha256Hash = await computeSHA256(raw);
-      state.rawBytes = raw;
-      state.sha256Hash = sha256Hash;
-      state.fileName = file.name;
-      state.fileSize = raw.length;
-      rechunk();
-      startBtn.disabled = false; stopBtn.disabled = true;
-
-      fileNameEl.textContent = file.name;
-      fileSizeEl.textContent = fmtSize(raw.length);
-      dropZone.classList.add("loaded");
+      await applyLoadedBytes(raw, file.name);
     };
     reader.readAsArrayBuffer(file);
+  }
+
+  async function loadPayloadFromUrl(url, suggestedName = "") {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(`Unable to fetch payload (${res.status})`);
+    const raw = new Uint8Array(await res.arrayBuffer());
+    let fileName = suggestedName;
+    if (!fileName) {
+      try {
+        const parsed = new URL(url, window.location.href);
+        fileName = parsed.pathname.split("/").filter(Boolean).pop() || "payload.bin";
+      } catch {
+        fileName = "payload.bin";
+      }
+    }
+    await applyLoadedBytes(raw, fileName);
   }
 
   function rechunk() {
@@ -1180,7 +1278,9 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   });
 
   // ── Init ───────────────────────────────
-  loadSettings(); recalcDerived();
+  loadSettings();
+  const urlOptions = applyUrlParams();
+  recalcDerived();
   bpcSelect.value = String(config.bpc);
   protocolSelect.value = config.protocol;
   profileSelect.value = config.profileName;
@@ -1198,6 +1298,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
   state.vals = new Uint8Array(config.rows * config.cols * 3);
   validateConfig();
   updateDerivedStats(); updateChips();
+  updateDebugTitle();
 
   detectRefreshRate().then((hz) => {
     config.detectedHz = hz;
@@ -1207,6 +1308,22 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     if (config.fpsMode === "auto") config.targetFps = hz;
     updateDerivedStats(); updateChips();
   });
+
+  if (urlOptions.payloadUrl) {
+    loadPayloadFromUrl(urlOptions.payloadUrl, urlOptions.payloadName)
+      .then(() => {
+        if (!urlOptions.autoStart) return;
+        window.setTimeout(() => {
+          if (!state.running && state.chunks.length) startSending();
+        }, 300);
+      })
+      .catch((err) => {
+        console.error("Auto payload load failed", err);
+        configWarningEl.className = "side-note warn";
+        configWarningEl.style.display = "";
+        configWarningEl.textContent = `Auto payload load failed: ${err.message || err}`;
+      });
+  }
 })();
 </script>
 </body>

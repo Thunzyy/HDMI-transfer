@@ -568,7 +568,7 @@ def create_app(output_dir: str = "received_files") -> Flask:
     def api_download(filename):
         output = app.config["OUTPUT_DIR"]
         safe = os.path.basename(filename)
-        path = os.path.join(output, safe)
+        path = os.path.abspath(os.path.join(output, safe))
         if not os.path.isfile(path):
             return jsonify({"error": "File not found"}), 404
         return send_file(path, as_attachment=True)
