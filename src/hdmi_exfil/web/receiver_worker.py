@@ -235,6 +235,9 @@ class ReceiverWorker(threading.Thread):
         frames_captured = 0
         last_progress = 0.0
         last_indices_emit = 0.0
+        last_waiting_emit = 0.0
+        k_switch_candidate: int | None = None
+        k_switch_hits = 0
 
         self._publish("status", {
             "state": "waiting",
@@ -250,6 +253,18 @@ class ReceiverWorker(threading.Thread):
             frames_captured += 1
 
             self._maybe_publish_preview(frame)
+
+            now = time.time()
+            if decoder is None and (now - last_waiting_emit) >= 1.0:
+                last_waiting_emit = now
+                self._publish("status", {
+                    "state": "waiting",
+                    "message": (
+                        "Waiting for fountain droplets... "
+                        f"({frames_captured:,} frames scanned)"
+                    ),
+                    "frames_captured": frames_captured,
+                })
 
             frame = self._ensure_size(frame)
             sampled = self._sample_grid(frame, self._profile)
@@ -276,7 +291,34 @@ class ReceiverWorker(threading.Thread):
                 })
 
             if decoder.K != K:
-                continue
+                if k_switch_candidate == K:
+                    k_switch_hits += 1
+                else:
+                    k_switch_candidate = K
+                    k_switch_hits = 1
+
+                # Stream switched: lock onto the new K after a few consistent hits.
+                if k_switch_hits >= 3:
+                    decoder = FountainDecoder(K, len(payload))
+                    start_time = time.time()
+                    bytes_received = 0
+                    droplets_received = 0
+                    expected_droplets = (
+                        max(0, int(frame_max)) if frame_max is not None else None
+                    )
+                    last_progress = 0.0
+                    last_indices_emit = 0.0
+                    self._publish("status", {
+                        "state": "receiving",
+                        "message": f"Resynced transmission! K={K} chunks",
+                        "total_chunks": K,
+                        "expected_droplets": expected_droplets,
+                    })
+                else:
+                    continue
+            else:
+                k_switch_candidate = None
+                k_switch_hits = 0
 
             decoder.add_droplet(seed, payload)
             bytes_received += len(payload)

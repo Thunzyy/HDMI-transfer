@@ -792,7 +792,6 @@ html,body{
     }
     return "Needed(max): " + Math.max(total, droplets).toLocaleString();
   }
-
   /* ── SSE ────────────────────────────────── */
   function connectSSE() {
     sse = new EventSource("/api/receive/events");
@@ -801,7 +800,14 @@ html,body{
       const d = JSON.parse(e.data);
       markPreviewHeartbeat();
       setLink(d.state);
-      log(d.state === "error" ? "error" : "info", d.message);
+      statusMsg.textContent = d.message || "";
+      if (d.state === "waiting" && Number.isFinite(Number(d.frames_captured))) {
+        badgeFrm.textContent = "FRM: " + Number(d.frames_captured).toLocaleString();
+      }
+      // Waiting heartbeats are frequent; keep only the initial waiting line.
+      if (!(d.state === "waiting" && Number.isFinite(Number(d.frames_captured)))) {
+        log(d.state === "error" ? "error" : "info", d.message);
+      }
       if (d.total_chunks) {
         totalChunks = d.total_chunks;
         const parsedExpected = normalizeExpectedDroplets(d.expected_droplets);
@@ -873,7 +879,7 @@ html,body{
   /* ── Helpers ────────────────────────────── */
   function setLink(s) {
     linkDot.className = "h-dot";
-    if (s === "idle" || s === "opening" || s === "probing") { linkDot.classList.add("idle"); linkLabel.textContent = "Idle"; }
+    if (s === "idle" || s === "opening" || s === "probing" || s === "waiting") { linkDot.classList.add("idle"); linkLabel.textContent = "Idle"; }
     else if (s === "error") { linkDot.classList.add("error"); linkLabel.textContent = "Error"; }
     else { linkLabel.textContent = "Receiving"; }
   }

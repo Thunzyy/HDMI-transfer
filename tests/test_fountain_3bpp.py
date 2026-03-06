@@ -186,6 +186,63 @@ def test_3bpp_fountain_full_roundtrip():
     )
 
 
+def test_3bpp_fountain_roundtrip_from_mid_stream_seed():
+    """Receiver can lock/decode from an already-running fountain stream.
+
+    Simulates joining in the middle by starting from a large seed offset,
+    rather than from the first emitted droplet.
+    """
+    proto = FountainProtocol()
+    rng = np.random.RandomState(2026)
+
+    K = 5
+    chunks = [rng.bytes(PAYLOAD_SIZE) for _ in range(K)]
+    original_data = b"".join(chunks)
+    decoder = FountainDecoder(total_chunks=K, payload_size=PAYLOAD_SIZE)
+
+    from hdmi_exfil.prng import choose_indices
+
+    seed = 50_000
+    max_droplets = K + 20
+    for _ in range(max_droplets):
+        if decoder.is_complete():
+            break
+
+        indices = choose_indices(seed, K)
+        droplet_data = bytearray(PAYLOAD_SIZE)
+        for idx in indices:
+            chunk_bytes = chunks[idx]
+            for i in range(PAYLOAD_SIZE):
+                droplet_data[i] ^= chunk_bytes[i]
+
+        frame_img = proto.encode_frame(
+            bytes(droplet_data),
+            frame_index=seed,
+            total_frames=K,
+            seed=seed,
+            expected_droplets=max_droplets,
+        )
+        sampled = sample_frame(
+            frame_img, config.ROWS, config.COLS, config.BLOCK_SIZE,
+        )
+        result = proto.decode_frame(sampled)
+        assert result.is_valid
+        assert result.frame_index == seed
+        assert result.total_frames == K
+
+        decoder.add_droplet(seed, bytearray(result.data[:PAYLOAD_SIZE]))
+        seed += 1
+
+    assert decoder.is_complete(), (
+        f"Decoder incomplete from mid-stream start after {max_droplets} droplets "
+        f"(recovered {len(decoder.chunks)}/{K} chunks)"
+    )
+
+    recovered = decoder.get_file_data()
+    recovered_data = bytes(recovered[: len(original_data)])
+    assert recovered_data == original_data
+
+
 def test_3bpp_decode_legacy_v1_header(monkeypatch):
     """Decoder accepts legacy v1 fountain frames (no max_droplets field)."""
     proto = FountainProtocol()
