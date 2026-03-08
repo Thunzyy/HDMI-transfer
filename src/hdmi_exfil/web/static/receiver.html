@@ -992,6 +992,10 @@ html,body{
       type: "received", filename: d.filename, size: d.size,
       duration: d.duration_s, speed: d.speed_mbps * 131072,
       success: d.sha256_ok, timestamp: Date.now(),
+      protocol,
+      systemPath: d.save_path || "",
+      downloadUrl: d.download_url || "",
+      fileExists: true,
     });
   }
 

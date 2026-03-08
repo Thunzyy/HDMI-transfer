@@ -1082,6 +1082,8 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
         type: "sent", filename: state.fileName, size: state.fileSize,
         duration: elapsed, speed: elapsed > 0 ? state.fileSize / elapsed : 0,
         success: true, timestamp: Date.now(),
+        protocol: config.protocol,
+        systemPath: "",
       });
     }
   }

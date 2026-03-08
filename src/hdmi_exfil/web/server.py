@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import queue
+import subprocess
 import sys
 import threading
 import time
@@ -52,6 +53,35 @@ def _find_sender_html() -> Path:
         if candidate.is_file():
             return candidate
     return candidate
+
+
+def _reveal_in_file_manager(path: str) -> tuple[str, str]:
+    target = Path(path).resolve()
+    parent = target.parent
+
+    if target.exists():
+        if sys.platform == "win32":
+            subprocess.Popen([
+                "explorer.exe",
+                "/select,",
+                os.path.normpath(str(target)),
+            ])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", "-R", str(target)])
+        else:
+            subprocess.Popen(["xdg-open", str(parent)])
+        return "file", str(target)
+
+    if not parent.exists():
+        raise FileNotFoundError(f"Directory not found: {parent}")
+
+    if sys.platform == "win32":
+        subprocess.Popen(["explorer.exe", os.path.normpath(str(parent))])
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(parent)])
+    else:
+        subprocess.Popen(["xdg-open", str(parent)])
+    return "directory", str(parent)
 
 
 def create_app(output_dir: str = "received_files") -> Flask:
@@ -191,6 +221,11 @@ def create_app(output_dir: str = "received_files") -> Flask:
             app._devices = devices
         _save_disk_cache(devices)
         return devices
+
+    def _resolve_output_file(filename: str) -> tuple[str, str]:
+        safe = os.path.basename(filename)
+        path = os.path.abspath(os.path.join(app.config["OUTPUT_DIR"], safe))
+        return safe, path
 
     # On startup, if we have a disk cache, open persistent cap for first device
     if app._devices:
@@ -566,12 +601,78 @@ def create_app(output_dir: str = "received_files") -> Flask:
 
     @app.route("/api/receive/download/<path:filename>")
     def api_download(filename):
-        output = app.config["OUTPUT_DIR"]
-        safe = os.path.basename(filename)
-        path = os.path.abspath(os.path.join(output, safe))
+        _, path = _resolve_output_file(filename)
         if not os.path.isfile(path):
             return jsonify({"error": "File not found"}), 404
         return send_file(path, as_attachment=True)
+
+    @app.route("/api/receive/file/<path:filename>", methods=["GET", "DELETE"])
+    def api_receive_file(filename):
+        safe, path = _resolve_output_file(filename)
+        exists = os.path.isfile(path)
+
+        if request.method == "GET":
+            payload = {
+                "filename": safe,
+                "system_path": path,
+                "exists": exists,
+            }
+            if exists:
+                payload["size"] = os.path.getsize(path)
+            return jsonify(payload)
+
+        if not exists:
+            return jsonify({
+                "error": "File not found",
+                "filename": safe,
+                "system_path": path,
+                "exists": False,
+            }), 404
+
+        try:
+            os.remove(path)
+        except OSError as exc:
+            return jsonify({
+                "error": str(exc),
+                "filename": safe,
+                "system_path": path,
+                "exists": True,
+            }), 409
+        return jsonify({
+            "status": "deleted",
+            "filename": safe,
+            "system_path": path,
+            "exists": False,
+        })
+
+    @app.route("/api/receive/file/<path:filename>/reveal", methods=["POST"])
+    def api_receive_file_reveal(filename):
+        safe, path = _resolve_output_file(filename)
+        try:
+            opened_kind, opened_path = _reveal_in_file_manager(path)
+        except FileNotFoundError:
+            return jsonify({
+                "error": "File location not found",
+                "filename": safe,
+                "system_path": path,
+                "exists": False,
+            }), 404
+        except OSError as exc:
+            return jsonify({
+                "error": str(exc),
+                "filename": safe,
+                "system_path": path,
+                "exists": os.path.isfile(path),
+            }), 409
+
+        return jsonify({
+            "status": "revealed",
+            "opened": opened_kind,
+            "opened_path": opened_path,
+            "filename": safe,
+            "system_path": path,
+            "exists": os.path.isfile(path),
+        })
 
     return app
 

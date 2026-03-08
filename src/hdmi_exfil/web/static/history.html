@@ -58,12 +58,16 @@ html,body{
 .center-top{
   padding:14px 20px 10px;
   display:flex;justify-content:space-between;align-items:center;
+  gap:16px;
 }
 .center-top h2{
   font-size:16px;font-weight:700;color:var(--bright);
   text-transform:uppercase;letter-spacing:.5px;
 }
+.title-copy{min-width:0}
 .center-top .sub{font-size:12px;color:var(--muted);margin-top:3px}
+.center-top .sub.error{color:var(--red)}
+.top-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .btn-clear{
   padding:8px 16px;border-radius:5px;
   font-family:inherit;font-size:12px;font-weight:700;
@@ -102,8 +106,46 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
 }
 .tag-sent{background:rgba(124,138,255,0.15);color:var(--accent)}
 .tag-received{background:rgba(74,222,128,0.15);color:var(--green)}
-.tag-ok{color:var(--green)}
-.tag-fail{color:var(--red)}
+.status-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:76px;padding:4px 10px;border-radius:999px;
+  font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.8px;font-family:var(--font-ui);
+}
+.status-ok{background:rgba(74,222,128,0.14);color:var(--green)}
+.status-fail{background:rgba(248,113,113,0.14);color:var(--red)}
+.status-missing{background:rgba(251,191,36,0.14);color:var(--yellow)}
+.cell-primary{
+  color:var(--bright);font-family:var(--font-ui);
+  font-size:13px;font-weight:600;word-break:break-word;
+}
+.cell-sub{
+  margin-top:4px;color:var(--muted);
+  font-size:11px;font-family:var(--font-ui);
+  letter-spacing:.2px;
+}
+.path-cell{
+  white-space:normal;min-width:320px;max-width:560px;
+}
+.path-text{
+  word-break:break-all;line-height:1.45;
+}
+.path-text.dim{color:var(--muted);font-family:var(--font-ui)}
+.row-actions{
+  display:flex;align-items:center;justify-content:flex-end;gap:8px;
+}
+.row-btn{
+  padding:6px 10px;border-radius:5px;
+  border:1px solid rgba(255,255,255,0.12);
+  background:transparent;color:var(--text);
+  font-family:inherit;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.7px;
+  cursor:pointer;transition:all .15s;
+}
+.row-btn:hover{border-color:rgba(255,255,255,0.26);color:var(--bright)}
+.row-btn-open:hover{border-color:var(--accent);color:var(--accent)}
+.row-btn-danger:hover{border-color:var(--red);color:var(--red)}
+.row-btn:disabled{opacity:.35;cursor:not-allowed}
 
 .empty-state{
   flex:1;display:flex;flex-direction:column;
@@ -135,11 +177,14 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
 
   <main id="center">
     <div class="center-top">
-      <div>
+      <div class="title-copy">
         <h2>Transfer history</h2>
         <div class="sub" id="countLabel">No transfers recorded</div>
+        <div class="sub" id="noticeLabel"></div>
       </div>
-      <button class="btn-clear" id="clearBtn">Clear all</button>
+      <div class="top-actions">
+        <button class="btn-clear" id="clearBtn">Clear all</button>
+      </div>
     </div>
 
     <div class="table-wrap" id="tableWrap">
@@ -149,10 +194,12 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
             <th>Date</th>
             <th>Type</th>
             <th>File</th>
+            <th>Location</th>
             <th>Size</th>
             <th>Duration</th>
             <th>Speed</th>
             <th>Status</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody id="historyBody"></tbody>
@@ -173,7 +220,9 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
   const table = document.getElementById('historyTable');
   const emptyState = document.getElementById('emptyState');
   const countLabel = document.getElementById('countLabel');
+  const noticeLabel = document.getElementById('noticeLabel');
   const clearBtn = document.getElementById('clearBtn');
+  const fileInfoCache = new Map();
 
   function getHistory() {
     try {
@@ -181,7 +230,13 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
     } catch { return []; }
   }
 
+  function setHistory(items) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  }
+
   function formatSize(bytes) {
+    if (bytes == null || !Number.isFinite(Number(bytes))) return '--';
+    bytes = Number(bytes);
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / 1048576).toFixed(2) + ' MB';
@@ -189,6 +244,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
 
   function formatDuration(s) {
     if (s == null) return '--';
+    s = Number(s);
     if (s < 60) return s.toFixed(1) + 's';
     const m = Math.floor(s / 60);
     return m + 'm ' + (s % 60).toFixed(0) + 's';
@@ -196,9 +252,148 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
 
   function formatSpeed(bps) {
     if (bps == null) return '--';
+    bps = Number(bps);
     if (bps < 1024) return bps.toFixed(0) + ' B/s';
     if (bps < 1048576) return (bps / 1024).toFixed(1) + ' KB/s';
     return (bps / 1048576).toFixed(2) + ' MB/s';
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function setNotice(message, isError = false) {
+    noticeLabel.textContent = message || '';
+    noticeLabel.className = 'sub' + (isError ? ' error' : '');
+  }
+
+  function statusFor(item) {
+    if (item.type === 'received' && item.fileExists === false) {
+      return { label: 'Missing', className: 'status-missing' };
+    }
+    if (item.success) {
+      return { label: 'OK', className: 'status-ok' };
+    }
+    return { label: 'Failed', className: 'status-fail' };
+  }
+
+  function locationFor(item) {
+    if (item.systemPath) return item.systemPath;
+    if (item.type === 'sent') return 'Browser-selected source file (path unavailable)';
+    if (item.type === 'received' && item.filename) {
+      return item.fileExists === false
+        ? 'Missing from receiver output directory'
+        : 'Resolving receiver output path...';
+    }
+    return '--';
+  }
+
+  async function parseJsonSafe(response) {
+    try {
+      return await response.json();
+    } catch {
+      return {};
+    }
+  }
+
+  async function hydrateReceivedFile(index, item) {
+    if (!item || item.type !== 'received' || !item.filename) return;
+    const cacheKey = item.filename;
+    let pending = fileInfoCache.get(cacheKey);
+    if (!pending) {
+      pending = fetch('/api/receive/file/' + encodeURIComponent(item.filename), {
+        cache: 'no-store',
+      })
+        .then(parseJsonSafe)
+        .catch(() => null);
+      fileInfoCache.set(cacheKey, pending);
+    }
+
+    const info = await pending;
+    if (!info || !Object.prototype.hasOwnProperty.call(info, 'exists')) return;
+
+    const items = getHistory();
+    const current = items[index];
+    if (!current) return;
+    if (current.timestamp !== item.timestamp || current.filename !== item.filename) return;
+
+    const next = { ...current };
+    let changed = false;
+
+    if ((info.system_path || '') !== (current.systemPath || '')) {
+      next.systemPath = info.system_path || '';
+      changed = true;
+    }
+    if (Boolean(info.exists) !== Boolean(current.fileExists)) {
+      next.fileExists = Boolean(info.exists);
+      changed = true;
+    }
+    if (
+      current.size == null &&
+      Number.isFinite(Number(info.size))
+    ) {
+      next.size = Number(info.size);
+      changed = true;
+    }
+
+    if (!changed) return;
+    items[index] = next;
+    setHistory(items);
+    render();
+  }
+
+  async function deleteEntry(index) {
+    const items = getHistory();
+    const item = items[index];
+    if (!item) return;
+
+    const canDeleteFile = item.type === 'received' && !!item.filename && item.fileExists !== false;
+    const label = item.filename || 'this entry';
+    const confirmed = window.confirm(
+      canDeleteFile
+        ? `Delete "${label}" from disk and remove it from history?`
+        : `Remove "${label}" from history?`
+    );
+    if (!confirmed) return;
+
+    if (canDeleteFile) {
+      const response = await fetch('/api/receive/file/' + encodeURIComponent(item.filename), {
+        method: 'DELETE',
+      });
+      if (!response.ok && response.status !== 404) {
+        const data = await parseJsonSafe(response);
+        setNotice(data.error || 'Unable to delete the receiver file.', true);
+        return;
+      }
+    }
+
+    items.splice(index, 1);
+    setHistory(items);
+    setNotice(canDeleteFile ? 'Receiver file deleted.' : 'History entry removed.');
+    render();
+  }
+
+  async function openLocation(index) {
+    const items = getHistory();
+    const item = items[index];
+    if (!item || item.type !== 'received' || !item.filename) return;
+
+    const response = await fetch('/api/receive/file/' + encodeURIComponent(item.filename) + '/reveal', {
+      method: 'POST',
+    });
+    const data = await parseJsonSafe(response);
+    if (!response.ok) {
+      setNotice(data.error || 'Unable to open the file location.', true);
+      return;
+    }
+
+    const openedDirectory = data.opened === 'directory';
+    setNotice(openedDirectory ? 'Output folder opened.' : 'File location opened.');
   }
 
   function render() {
@@ -217,8 +412,8 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
     countLabel.textContent = items.length + ' transfer' + (items.length !== 1 ? 's' : '');
 
     // Most recent first
-    const sorted = [...items].reverse();
-    for (const item of sorted) {
+    const sorted = items.map((item, index) => ({ item, index })).reverse();
+    for (const { item, index } of sorted) {
       const tr = document.createElement('tr');
       const date = new Date(item.timestamp);
       const dateStr = date.toLocaleDateString('en-US', {
@@ -228,24 +423,59 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
       });
 
       const typeClass = item.type === 'sent' ? 'tag-sent' : 'tag-received';
-      const statusClass = item.success ? 'tag-ok' : 'tag-fail';
+      const status = statusFor(item);
+      const canDeleteFile = item.type === 'received' && !!item.filename && item.fileExists !== false;
+      const canOpenLocation = item.type === 'received' && !!item.filename && !!item.systemPath;
+      const deleteLabel = canDeleteFile ? 'Delete file' : 'Delete entry';
+      const location = locationFor(item);
+      const protocol = item.protocol ? String(item.protocol).toUpperCase() : '';
+
+      if (item.type === 'received' && item.filename && (!item.systemPath || typeof item.fileExists !== 'boolean')) {
+        hydrateReceivedFile(index, item);
+      }
 
       tr.innerHTML = `
         <td>${dateStr}</td>
         <td><span class="tag ${typeClass}">${item.type}</span></td>
-        <td>${item.filename || '--'}</td>
+        <td>
+          <div class="cell-primary">${escapeHtml(item.filename || '--')}</div>
+          <div class="cell-sub">${escapeHtml(protocol || 'Protocol unavailable')}</div>
+        </td>
+        <td class="path-cell"><div class="path-text${item.systemPath ? '' : ' dim'}">${escapeHtml(location)}</div></td>
         <td>${item.size != null ? formatSize(item.size) : '--'}</td>
         <td>${formatDuration(item.duration)}</td>
         <td>${formatSpeed(item.speed)}</td>
-        <td class="${statusClass}">${item.success ? 'OK' : 'Failed'}</td>
+        <td><span class="status-badge ${status.className}">${status.label}</span></td>
+        <td>
+          <div class="row-actions">
+            ${canOpenLocation ? `<button class="row-btn row-btn-open" data-action="open" data-index="${index}">Open location</button>` : ''}
+            <button class="row-btn row-btn-danger" data-action="delete" data-index="${index}">${deleteLabel}</button>
+          </div>
+        </td>
       `;
       tbody.appendChild(tr);
     }
   }
 
   clearBtn.addEventListener('click', () => {
+    if (!window.confirm('Clear the local history list? Files on disk will not be deleted.')) return;
     localStorage.removeItem(STORAGE_KEY);
+    setNotice('History cleared.');
     render();
+  });
+
+  tbody.addEventListener('click', (event) => {
+    const btn = event.target.closest('button[data-action]');
+    if (!btn) return;
+    const index = Number(btn.dataset.index);
+    if (!Number.isInteger(index)) return;
+    if (btn.dataset.action === 'open') {
+      openLocation(index);
+      return;
+    }
+    if (btn.dataset.action === 'delete') {
+      deleteEntry(index);
+    }
   });
 
   // Listen for storage events from other tabs (sender/receiver)
