@@ -606,6 +606,25 @@ def create_app(output_dir: str = "received_files") -> Flask:
             return jsonify({"error": "File not found"}), 404
         return send_file(path, as_attachment=True)
 
+    @app.route("/api/receive/files")
+    def api_receive_files():
+        root = Path(app.config["OUTPUT_DIR"]).resolve()
+        if not root.exists():
+            return jsonify([])
+
+        files: list[dict] = []
+        for child in sorted(root.iterdir(), key=lambda item: item.name.lower()):
+            if not child.is_file():
+                continue
+            stat = child.stat()
+            files.append({
+                "filename": child.name,
+                "system_path": str(child.resolve()),
+                "size": stat.st_size,
+                "modified_ms": int(stat.st_mtime * 1000),
+            })
+        return jsonify(files)
+
     @app.route("/api/receive/file/<path:filename>", methods=["GET", "DELETE"])
     def api_receive_file(filename):
         safe, path = _resolve_output_file(filename)

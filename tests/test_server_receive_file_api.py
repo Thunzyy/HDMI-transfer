@@ -47,6 +47,35 @@ def test_receive_file_api_reports_and_deletes_output_file(tmp_path, monkeypatch)
     assert missing_download.status_code == 404
 
 
+def test_receive_files_lists_output_directory_contents(tmp_path, monkeypatch):
+    monkeypatch.setattr(server, "_load_disk_cache", lambda: [])
+    app = server.create_app(output_dir=str(tmp_path))
+    client = app.test_client()
+
+    newer = tmp_path / "b.bin"
+    older = tmp_path / "a.bin"
+    older.write_bytes(b"aa")
+    newer.write_bytes(b"bbb")
+
+    listed = client.get("/api/receive/files")
+
+    assert listed.status_code == 200
+    assert listed.json == [
+        {
+            "filename": "a.bin",
+            "modified_ms": int(older.stat().st_mtime * 1000),
+            "size": 2,
+            "system_path": str(older.resolve()),
+        },
+        {
+            "filename": "b.bin",
+            "modified_ms": int(newer.stat().st_mtime * 1000),
+            "size": 3,
+            "system_path": str(newer.resolve()),
+        },
+    ]
+
+
 def test_receive_file_delete_missing_returns_404(tmp_path, monkeypatch):
     monkeypatch.setattr(server, "_load_disk_cache", lambda: [])
     app = server.create_app(output_dir=str(tmp_path))

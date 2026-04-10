@@ -112,6 +112,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
   font-size:11px;font-weight:700;text-transform:uppercase;
   letter-spacing:.8px;font-family:var(--font-ui);
 }
+.status-disk{background:rgba(124,138,255,0.14);color:var(--accent)}
 .status-ok{background:rgba(74,222,128,0.14);color:var(--green)}
 .status-fail{background:rgba(248,113,113,0.14);color:var(--red)}
 .status-missing{background:rgba(251,191,36,0.14);color:var(--yellow)}
@@ -146,6 +147,45 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
 .row-btn-open:hover{border-color:var(--accent);color:var(--accent)}
 .row-btn-danger:hover{border-color:var(--red);color:var(--red)}
 .row-btn:disabled{opacity:.35;cursor:not-allowed}
+
+.modal-backdrop{
+  position:fixed;inset:0;z-index:50;
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;background:rgba(4,8,16,0.72);
+  backdrop-filter:blur(8px);
+}
+.modal-backdrop.hidden{display:none}
+.modal-dialog{
+  width:min(460px, calc(100vw - 40px));
+  padding:20px;border-radius:10px;
+  background:linear-gradient(180deg, rgba(28,31,40,0.98), rgba(17,19,26,0.98));
+  border:1px solid rgba(255,255,255,0.12);
+  box-shadow:0 24px 70px rgba(0,0,0,0.42);
+}
+.modal-title{
+  color:var(--bright);font-size:16px;font-weight:700;
+  letter-spacing:.3px;text-transform:uppercase;
+}
+.modal-body{
+  margin-top:10px;color:var(--text);font-size:13px;
+  line-height:1.65;word-break:break-word;
+}
+.modal-actions{
+  margin-top:18px;display:flex;justify-content:flex-end;gap:8px;
+}
+.modal-btn{
+  min-width:108px;padding:9px 14px;border-radius:6px;
+  border:1px solid rgba(255,255,255,0.12);
+  background:transparent;color:var(--text);
+  font-family:inherit;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.8px;
+  cursor:pointer;transition:all .15s;
+}
+.modal-btn:hover{border-color:rgba(255,255,255,0.26);color:var(--bright)}
+.modal-btn-confirm{
+  background:rgba(248,113,113,0.12);border-color:rgba(248,113,113,0.4);color:var(--red);
+}
+.modal-btn-confirm:hover{background:rgba(248,113,113,0.18);border-color:var(--red);color:#ffb3b3}
 
 .empty-state{
   flex:1;display:flex;flex-direction:column;
@@ -213,6 +253,17 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
   </main>
 </div>
 
+<div class="modal-backdrop hidden" id="confirmModal" aria-hidden="true">
+  <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+    <div class="modal-title" id="confirmModalTitle">Confirm action</div>
+    <div class="modal-body" id="confirmModalMessage"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" id="confirmModalCancel" type="button">Cancel</button>
+      <button class="modal-btn modal-btn-confirm" id="confirmModalConfirm" type="button">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (() => {
   const STORAGE_KEY = 'hdmi_exfil_history';
@@ -222,7 +273,15 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
   const countLabel = document.getElementById('countLabel');
   const noticeLabel = document.getElementById('noticeLabel');
   const clearBtn = document.getElementById('clearBtn');
-  const fileInfoCache = new Map();
+  const confirmModal = document.getElementById('confirmModal');
+  const confirmModalTitle = document.getElementById('confirmModalTitle');
+  const confirmModalMessage = document.getElementById('confirmModalMessage');
+  const confirmModalCancel = document.getElementById('confirmModalCancel');
+  const confirmModalConfirm = document.getElementById('confirmModalConfirm');
+  let confirmState = null;
+  let serverFiles = [];
+  let serverFilesRequest = null;
+  let viewItems = [];
 
   function getHistory() {
     try {
@@ -272,9 +331,46 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
     noticeLabel.className = 'sub' + (isError ? ' error' : '');
   }
 
+  function closeConfirmModal(confirmed) {
+    if (!confirmState) return;
+    const { resolve, previousFocus } = confirmState;
+    confirmState = null;
+    confirmModal.classList.add('hidden');
+    confirmModal.setAttribute('aria-hidden', 'true');
+    confirmModalConfirm.textContent = 'Confirm';
+    confirmModalTitle.textContent = 'Confirm action';
+    confirmModalMessage.textContent = '';
+    if (previousFocus && typeof previousFocus.focus === 'function') {
+      previousFocus.focus();
+    }
+    resolve(Boolean(confirmed));
+  }
+
+  function showConfirmModal({ title, message, confirmLabel }) {
+    if (confirmState) {
+      closeConfirmModal(false);
+    }
+    confirmModalTitle.textContent = title;
+    confirmModalMessage.textContent = message;
+    confirmModalConfirm.textContent = confirmLabel || 'Confirm';
+    confirmModal.classList.remove('hidden');
+    confirmModal.setAttribute('aria-hidden', 'false');
+
+    return new Promise((resolve) => {
+      confirmState = {
+        resolve,
+        previousFocus: document.activeElement,
+      };
+      window.requestAnimationFrame(() => confirmModalConfirm.focus());
+    });
+  }
+
   function statusFor(item) {
     if (item.type === 'received' && item.fileExists === false) {
       return { label: 'Missing', className: 'status-missing' };
+    }
+    if (item.imported && item.success == null) {
+      return { label: 'On disk', className: 'status-disk' };
     }
     if (item.success) {
       return { label: 'OK', className: 'status-ok' };
@@ -301,64 +397,110 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
     }
   }
 
-  async function hydrateReceivedFile(index, item) {
-    if (!item || item.type !== 'received' || !item.filename) return;
-    const cacheKey = item.filename;
-    let pending = fileInfoCache.get(cacheKey);
-    if (!pending) {
-      pending = fetch('/api/receive/file/' + encodeURIComponent(item.filename), {
-        cache: 'no-store',
-      })
-        .then(parseJsonSafe)
-        .catch(() => null);
-      fileInfoCache.set(cacheKey, pending);
+  async function refreshServerFiles({ silent = false } = {}) {
+    if (!serverFilesRequest) {
+      serverFilesRequest = fetch('/api/receive/files', { cache: 'no-store' })
+        .then(async (response) => {
+          if (!response.ok) return [];
+          const data = await parseJsonSafe(response);
+          return Array.isArray(data) ? data : [];
+        })
+        .catch(() => [])
+        .finally(() => {
+          serverFilesRequest = null;
+        });
     }
 
-    const info = await pending;
-    if (!info || !Object.prototype.hasOwnProperty.call(info, 'exists')) return;
+    const files = await serverFilesRequest;
+    serverFiles = files;
+    if (!silent) render();
+  }
 
-    const items = getHistory();
-    const current = items[index];
-    if (!current) return;
-    if (current.timestamp !== item.timestamp || current.filename !== item.filename) return;
+  function buildViewItems() {
+    const localItems = getHistory();
+    const filesByName = new Map(
+      serverFiles.map((file) => [file.filename, file]),
+    );
+    const seenNames = new Set();
+    const merged = localItems.map((item, localIndex) => {
+      const disk = item.type === 'received' && item.filename
+        ? filesByName.get(item.filename)
+        : null;
+      if (disk) seenNames.add(disk.filename);
 
-    const next = { ...current };
-    let changed = false;
+      return {
+        ...item,
+        imported: false,
+        localIndex,
+        size: item.size != null ? item.size : (disk ? disk.size : null),
+        systemPath: item.systemPath || (disk ? disk.system_path : ''),
+        fileExists: item.type === 'received' && item.filename
+          ? Boolean(disk)
+          : item.fileExists,
+        timestamp: item.timestamp != null
+          ? item.timestamp
+          : (disk ? disk.modified_ms : Date.now()),
+      };
+    });
 
-    if ((info.system_path || '') !== (current.systemPath || '')) {
-      next.systemPath = info.system_path || '';
-      changed = true;
+    for (const file of serverFiles) {
+      if (seenNames.has(file.filename)) continue;
+      merged.push({
+        type: 'received',
+        filename: file.filename,
+        size: file.size,
+        duration: null,
+        speed: null,
+        success: null,
+        timestamp: file.modified_ms,
+        protocol: 'disk',
+        systemPath: file.system_path,
+        fileExists: true,
+        imported: true,
+        localIndex: null,
+      });
     }
-    if (Boolean(info.exists) !== Boolean(current.fileExists)) {
-      next.fileExists = Boolean(info.exists);
-      changed = true;
-    }
-    if (
-      current.size == null &&
-      Number.isFinite(Number(info.size))
-    ) {
-      next.size = Number(info.size);
-      changed = true;
-    }
 
-    if (!changed) return;
-    items[index] = next;
-    setHistory(items);
-    render();
+    return merged.sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
+  }
+
+  function findLocalHistoryIndex(item, items) {
+    if (Number.isInteger(item.localIndex)) {
+      const candidate = items[item.localIndex];
+      if (
+        candidate &&
+        candidate.timestamp === item.timestamp &&
+        candidate.filename === item.filename &&
+        candidate.type === item.type
+      ) {
+        return item.localIndex;
+      }
+    }
+    return items.findIndex((entry) => (
+      entry.timestamp === item.timestamp &&
+      entry.filename === item.filename &&
+      entry.type === item.type
+    ));
   }
 
   async function deleteEntry(index) {
-    const items = getHistory();
-    const item = items[index];
+    const item = viewItems[index];
     if (!item) return;
 
     const canDeleteFile = item.type === 'received' && !!item.filename && item.fileExists !== false;
+    const hasLocalEntry = Number.isInteger(item.localIndex);
     const label = item.filename || 'this entry';
-    const confirmed = window.confirm(
-      canDeleteFile
-        ? `Delete "${label}" from disk and remove it from history?`
-        : `Remove "${label}" from history?`
-    );
+    const confirmed = await showConfirmModal({
+      title: canDeleteFile
+        ? 'Delete receiver file'
+        : 'Remove history entry',
+      message: canDeleteFile
+        ? (hasLocalEntry
+          ? `Delete "${label}" from disk and remove it from history?`
+          : `Delete "${label}" from disk?`)
+        : `Remove "${label}" from history?`,
+      confirmLabel: canDeleteFile ? 'Delete file' : 'Remove entry',
+    });
     if (!confirmed) return;
 
     if (canDeleteFile) {
@@ -372,15 +514,29 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
       }
     }
 
-    items.splice(index, 1);
-    setHistory(items);
-    setNotice(canDeleteFile ? 'Receiver file deleted.' : 'History entry removed.');
+    if (hasLocalEntry) {
+      const items = getHistory();
+      const localIndex = findLocalHistoryIndex(item, items);
+      if (localIndex >= 0) {
+        items.splice(localIndex, 1);
+        setHistory(items);
+      }
+    }
+
+    if (canDeleteFile) {
+      await refreshServerFiles({ silent: true });
+    }
+
+    setNotice(
+      canDeleteFile
+        ? 'Receiver file deleted.'
+        : 'History entry removed.',
+    );
     render();
   }
 
   async function openLocation(index) {
-    const items = getHistory();
-    const item = items[index];
+    const item = viewItems[index];
     if (!item || item.type !== 'received' || !item.filename) return;
 
     const response = await fetch('/api/receive/file/' + encodeURIComponent(item.filename) + '/reveal', {
@@ -397,10 +553,10 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
   }
 
   function render() {
-    const items = getHistory();
+    viewItems = buildViewItems();
     tbody.innerHTML = '';
 
-    if (items.length === 0) {
+    if (viewItems.length === 0) {
       table.style.display = 'none';
       emptyState.style.display = '';
       countLabel.textContent = 'No transfers recorded';
@@ -409,11 +565,9 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
 
     table.style.display = '';
     emptyState.style.display = 'none';
-    countLabel.textContent = items.length + ' transfer' + (items.length !== 1 ? 's' : '');
+    countLabel.textContent = viewItems.length + ' item' + (viewItems.length !== 1 ? 's' : '');
 
-    // Most recent first
-    const sorted = items.map((item, index) => ({ item, index })).reverse();
-    for (const { item, index } of sorted) {
+    for (const [index, item] of viewItems.entries()) {
       const tr = document.createElement('tr');
       const date = new Date(item.timestamp);
       const dateStr = date.toLocaleDateString('en-US', {
@@ -428,11 +582,9 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
       const canOpenLocation = item.type === 'received' && !!item.filename && !!item.systemPath;
       const deleteLabel = canDeleteFile ? 'Delete file' : 'Delete entry';
       const location = locationFor(item);
-      const protocol = item.protocol ? String(item.protocol).toUpperCase() : '';
-
-      if (item.type === 'received' && item.filename && (!item.systemPath || typeof item.fileExists !== 'boolean')) {
-        hydrateReceivedFile(index, item);
-      }
+      const protocol = item.imported
+        ? 'IMPORTED FROM DISK'
+        : (item.protocol ? String(item.protocol).toUpperCase() : '');
 
       tr.innerHTML = `
         <td>${dateStr}</td>
@@ -458,10 +610,30 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
   }
 
   clearBtn.addEventListener('click', () => {
-    if (!window.confirm('Clear the local history list? Files on disk will not be deleted.')) return;
-    localStorage.removeItem(STORAGE_KEY);
-    setNotice('History cleared.');
-    render();
+    showConfirmModal({
+      title: 'Clear local history',
+      message: 'Clear the local history list? Files on disk will not be deleted.',
+      confirmLabel: 'Clear history',
+    }).then((confirmed) => {
+      if (!confirmed) return;
+      localStorage.removeItem(STORAGE_KEY);
+      setNotice('History cleared.');
+      render();
+    });
+  });
+
+  confirmModalCancel.addEventListener('click', () => closeConfirmModal(false));
+  confirmModalConfirm.addEventListener('click', () => closeConfirmModal(true));
+  confirmModal.addEventListener('click', (event) => {
+    if (event.target === confirmModal) {
+      closeConfirmModal(false);
+    }
+  });
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && confirmState) {
+      event.preventDefault();
+      closeConfirmModal(false);
+    }
   });
 
   tbody.addEventListener('click', (event) => {
@@ -482,8 +654,16 @@ tbody tr:hover{background:rgba(255,255,255,0.02)}
   window.addEventListener('storage', (e) => {
     if (e.key === STORAGE_KEY) render();
   });
+  window.addEventListener('focus', () => {
+    refreshServerFiles({ silent: true }).then(render);
+  });
 
   render();
+  refreshServerFiles({ silent: true }).then(render);
+  window.setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    refreshServerFiles({ silent: true }).then(render);
+  }, 5000);
 })();
 </script>
 </body>
