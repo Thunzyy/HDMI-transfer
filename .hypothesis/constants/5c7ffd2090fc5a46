@@ -1,4 +1,0 @@
-# file: C:\Users\poign\Desktop\HDMI_exfil\src\protocols\__init__.py
-# hypothesis_version: 6.151.9
-
-[', ', 'EncodingProtocol', 'FountainDecoder', 'FountainProtocol', 'FrameResult', 'PROTOCOLS', 'SequentialProtocol', 'TransferState', 'fountain', 'get_protocol', 'sequential']

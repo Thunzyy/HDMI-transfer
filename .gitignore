@@ -16,6 +16,10 @@ __pycache__/
 
 # Runtime output
 received_files/
+*.bin
+
+# Test artifacts
+ui_*.json
 
 # Environment
 .env
@@ -25,9 +29,12 @@ received_files/
 .vscode/
 .idea/
 
-# Claude
-.claude/settings.local.json
+# Claude / AI tooling
+.claude/
+.planning/
+.worktrees/
+CLAUDE.md
 CLAUDE.local.md
 
-# Worktrees
-.worktrees/
+# Device cache
+.device_cache.json

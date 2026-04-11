@@ -1,4 +1,0 @@
-# file: C:\Users\poign\Desktop\HDMI_exfil\src\protocols\fountain.py
-# hypothesis_version: 6.151.9
-
-[b'\x00', 128, 255, 4294967295, '>HIH', '>I', 'constant', 'fountain', 'seed']

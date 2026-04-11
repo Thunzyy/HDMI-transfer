@@ -1,4 +1,0 @@
-# file: C:\Users\poign\Desktop\HDMI_exfil\src\cli\benchmark.py
-# hypothesis_version: 6.151.9
-
-[0.0, 10.0, 100.0, 100, 256, 1024, 4294967295, '--duration', '--mode', '--no-json', '--profile', '--size', '__main__', 'fountain', 'hdmi-bench', 'sequential', 'speed', 'store_true']
