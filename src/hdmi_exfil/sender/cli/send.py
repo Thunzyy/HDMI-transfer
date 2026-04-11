@@ -16,13 +16,12 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import hashlib
-import math
 import sys
 import time
 
 import numpy as np
 
+from hdmi_exfil.application.send_session import SendSession
 from hdmi_exfil.core.config import (
     DEFAULT_PROFILE,
     PROFILES,
@@ -30,11 +29,7 @@ from hdmi_exfil.core.config import (
 )
 from hdmi_exfil.sender.display.monitors import get_monitors
 from hdmi_exfil.sender.display.renderer import FrameRenderer, PygameRenderer
-from hdmi_exfil.core.file_handling.metadata import build_start_metadata
-from hdmi_exfil.core.file_handling.reader import read_input
-from hdmi_exfil.core.prng import choose_indices
-from hdmi_exfil.core.protocols import get_protocol
-from hdmi_exfil.core.protocols.xor_ops import warmup as warmup_numba, xor_into
+from hdmi_exfil.core.protocols.xor_ops import warmup as warmup_numba
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -149,9 +144,7 @@ def _show_end_screen(
 # ------------------------------------------------------------------
 
 def _send_sequential(
-    protocol: object,
-    filename: str,
-    file_data: bytes,
+    session: SendSession,
     renderer: FrameRenderer | PygameRenderer,
     delay: int,
     redundancy: int,
@@ -163,8 +156,7 @@ def _send_sequential(
     cannot know when the receiver is done, so it keeps transmitting
     until the user presses ESC and quits.
     """
-    bytes_per_frame = profile.seq_bytes_per_frame
-    total_frames = math.ceil(len(file_data) / bytes_per_frame)
+    total_frames = session.total_frames
     print(f"Total DATA frames per pass: {total_frames}")
     print("Looping until you stop (ESC -> quit). Stop when receiver confirms.")
 
@@ -175,18 +167,12 @@ def _send_sequential(
 
     while not stopped:
         paused = False
+        packet_iter = iter(session.iter_frame_packets())
+        current_packet = None
+        current_repeats = 0
+        frames_this_pass = 0
 
-        # Phase 1: START frame
-        start_frame = protocol.encode_start_frame(filename, file_data, total_frames)
-        for _ in range(redundancy):
-            key = renderer.show(start_frame, delay_ms=delay)
-            if key == 27:
-                paused = True
-                break
-
-        # Phase 2: DATA frames
-        i = 0
-        while i < total_frames:
+        while True:
             if paused:
                 action = _show_pause_screen(renderer, profile)
                 if action == "quit":
@@ -196,54 +182,55 @@ def _send_sequential(
                 print("\nResuming transmission...")
                 continue
 
-            start_byte = i * bytes_per_frame
-            end_byte = min((i + 1) * bytes_per_frame, len(file_data))
-            chunk = file_data[start_byte:end_byte]
-
-            frame = protocol.encode_frame(chunk, i, total_frames)
-
-            for _ in range(redundancy):
-                key = renderer.show(frame, delay_ms=delay)
-                if key == 27:
-                    paused = True
-                    print(f"\nPaused at frame {i}/{total_frames}")
+            if current_packet is None:
+                try:
+                    current_packet = next(packet_iter)
+                except StopIteration:
                     break
+                current_repeats = 0
 
-            if paused:
-                continue
-            i += 1
-
-            progress = i / total_frames
-            pass_label = f"Pass {pass_number + 1}" if pass_number > 0 else "Pass 1"
-            sys.stdout.write(
-                f"\r{pass_label}: {progress:.1%} ({i}/{total_frames})"
-            )
-            sys.stdout.flush()
-
-        if stopped:
-            total_frames_sent += i
-            break
-
-        # Phase 3: END frame
-        end_frame = protocol.encode_end_frame(total_frames)
-        for _ in range(redundancy):
-            key = renderer.show(end_frame, delay_ms=delay)
+            key = renderer.show(current_packet.frame, delay_ms=delay)
             if key == 27:
                 paused = True
-                break
+                if current_packet.kind == "data":
+                    print(
+                        f"\nPaused at frame "
+                        f"{current_packet.frame_index}/{total_frames}"
+                    )
+                continue
+
+            current_repeats += 1
+            if current_repeats < redundancy:
+                continue
+
+            if current_packet.kind == "data":
+                frames_this_pass += 1
+                progress = (
+                    frames_this_pass / total_frames if total_frames > 0 else 1.0
+                )
+                pass_label = (
+                    f"Pass {pass_number + 1}" if pass_number > 0 else "Pass 1"
+                )
+                sys.stdout.write(
+                    f"\r{pass_label}: {progress:.1%} "
+                    f"({frames_this_pass}/{total_frames})"
+                )
+                sys.stdout.flush()
+
+            current_packet = None
+
+        if stopped:
+            total_frames_sent += frames_this_pass
+            break
 
         pass_number += 1
-        total_frames_sent += total_frames
-        print(f"\nPass {pass_number} complete ({total_frames_sent} frames total). "
-              "Looping... (ESC to stop)")
+        total_frames_sent += frames_this_pass
+        print(
+            f"\nPass {pass_number} complete ({total_frames_sent} frames total). "
+            "Looping... (ESC to stop)"
+        )
 
-        # Handle pause between passes
-        if paused:
-            action = _show_pause_screen(renderer, profile)
-            if action == "quit":
-                break
-
-    _print_stats(len(file_data), start_time, False, total_frames_sent, None)
+    _print_stats(session.file_size, start_time, False, total_frames_sent, None)
     _show_end_screen(renderer, False, profile)
 
 
@@ -252,62 +239,33 @@ def _send_sequential(
 # ------------------------------------------------------------------
 
 def _send_fountain(
-    protocol: object,
-    filename: str,
-    file_data: bytes,
+    session: SendSession,
     renderer: FrameRenderer | PygameRenderer,
     delay: int,
-    fountain_redundancy: float | None = None,
     profile: ResolutionProfile = DEFAULT_PROFILE,
 ) -> None:
     """Run the fountain send loop (continuous droplets until user stops).
-
-    Parameters
-    ----------
-    fountain_redundancy:
-        If set, stop after ``K * fountain_redundancy`` droplets.
-        For example 1.05 sends 5% more droplets than chunks.
-        If ``None``, loop forever (backward-compatible).
     """
-    payload_size = profile.fount_bytes_per_frame
-
-    # Wrap metadata + content (same format as sender.html)
-    metadata = build_start_metadata(filename, file_data)
-    wrapped = metadata + file_data
-
-    # Slice into chunks as numpy arrays (Numba-compatible)
-    K = math.ceil(len(wrapped) / payload_size)
-
-    chunks: list[np.ndarray] = []
-    for i in range(K):
-        start = i * payload_size
-        end = min(start + payload_size, len(wrapped))
-        chunk = np.zeros(payload_size, dtype=np.uint8)
-        chunk[:end - start] = np.frombuffer(wrapped[start:end], dtype=np.uint8)
-        chunks.append(chunk)
-
-    # Compute optional droplet limit from redundancy factor
-    max_droplets: int | None = None
-    if fountain_redundancy is not None:
-        max_droplets = int(math.ceil(K * fountain_redundancy))
-
-    print(f"Fountain mode: K={K} chunks, payload_size={payload_size}")
-    if max_droplets is not None:
-        print(f"Redundancy: {fountain_redundancy}x -> {max_droplets} droplets")
+    print(
+        f"Fountain mode: K={session.total_frames} chunks, "
+        f"payload_size={session.bytes_per_frame}"
+    )
+    if session.max_droplets is not None:
+        print(
+            f"Redundancy limit: {session.max_droplets} droplets "
+            f"({session.max_droplets / session.total_frames:.2f}x)"
+        )
     else:
         print("Sending droplets continuously. Press ESC to stop.")
 
     start_time = time.time()
-    seed = 1
     frame_count = 0
     interrupted = False
     paused = False
+    packet_iter = iter(session.iter_frame_packets())
+    current_packet = None
 
     while True:
-        # Stop if redundancy limit reached
-        if max_droplets is not None and frame_count >= max_droplets:
-            break
-
         if paused:
             action = _show_pause_screen(renderer, profile)
             if action == "quit":
@@ -317,41 +275,30 @@ def _send_fountain(
             print("\nResuming transmission...")
             continue
 
-        # Build droplet payload by XOR-ing selected chunks (RSD via choose_indices)
-        indices = choose_indices(seed, K)
+        if current_packet is None:
+            try:
+                current_packet = next(packet_iter)
+            except StopIteration:
+                break
 
-        payload = np.zeros(payload_size, dtype=np.uint8)
-        for idx in indices:
-            xor_into(payload, chunks[idx])
-
-        frame = protocol.encode_frame(
-            payload.tobytes(),
-            frame_count,
-            K,
-            seed=seed,
-            expected_droplets=(max_droplets if max_droplets is not None else 0),
-        )
-
-        key = renderer.show(frame, delay_ms=delay)
+        key = renderer.show(current_packet.frame, delay_ms=delay)
         if key == 27:
             paused = True
             continue
 
-        seed = (seed + 1) & 0xFFFFFFFF
-        if seed == 0:
-            seed = 1
         frame_count += 1
+        current_packet = None
 
         if frame_count % 30 == 0:
             elapsed = time.time() - start_time
             fps_actual = frame_count / elapsed if elapsed > 0 else 0
             sys.stdout.write(
-                f"\rFrames: {frame_count} | Seed: {seed} | "
+                f"\rFrames: {frame_count} | "
                 f"FPS: {fps_actual:.1f}"
             )
             sys.stdout.flush()
 
-    _print_stats(len(file_data), start_time, interrupted, frame_count, None)
+    _print_stats(session.file_size, start_time, interrupted, frame_count, None)
     _show_end_screen(renderer, interrupted, profile)
 
 
@@ -429,21 +376,22 @@ def run_send(
     # Individual overrides: --fps beats profile target_fps
     target_fps = fps if fps is not None else profile.target_fps
 
-    # Read input file / directory
     try:
-        filename, file_data = read_input(input_path)
+        session = SendSession.from_input(
+            input_path=input_path,
+            mode=mode,
+            profile=profile,
+            fountain_redundancy=fountain_redundancy,
+        )
     except FileNotFoundError as exc:
         print(f"Error: {exc}")
         sys.exit(1)
 
-    file_size = len(file_data)
-    sha256_hex = hashlib.sha256(file_data).hexdigest()
-
-    print(f"Sending '{filename}' ({file_size} bytes)")
-    print(f"SHA-256: {sha256_hex}")
+    print(f"Sending '{session.filename}' ({session.file_size} bytes)")
+    print(f"SHA-256: {session.sha256_hex}")
     print(f"Resolution: {profile.width}x{profile.height}, Block Size: {profile.block_size}")
     print(f"Profile: {profile.name}")
-    print(f"Mode: {mode}")
+    print(f"Mode: {session.mode}")
     print(f"Renderer: {renderer_type}")
 
     # Detect monitors
@@ -462,9 +410,6 @@ def run_send(
         y_offset = 0
 
     print(f"Targeting screen {screen} at ({x_offset}, {y_offset})")
-
-    # Instantiate protocol with profile
-    protocol = get_protocol(mode, profile=profile)
 
     delay = max(1, int(1000 / target_fps))
     print(f"Target FPS: {target_fps} (delay: {delay}ms)")
@@ -497,22 +442,21 @@ def run_send(
         print("Press any key to start...")
 
         # Warm up Numba JIT during calibration wait (before data transfer)
-        if mode == "fountain":
+        if session.mode == "fountain":
             warmup_numba()
 
         renderer.show(calibration, delay_ms=0)
 
         # Dispatch to mode-specific send loop
-        if mode == "sequential":
+        if session.mode == "sequential":
             print(f"Redundancy: {redundancy}x")
             _send_sequential(
-                protocol, filename, file_data, renderer,
+                session, renderer,
                 delay, redundancy, profile,
             )
         else:
             _send_fountain(
-                protocol, filename, file_data, renderer, delay,
-                fountain_redundancy=fountain_redundancy,
+                session, renderer, delay,
                 profile=profile,
             )
 
