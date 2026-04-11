@@ -65,6 +65,8 @@ class SequentialSpec:
 @dataclass(frozen=True)
 class FountainSpec:
     magic: int
+    current_magic: int
+    header_pre_crc: int
     header_size: int
 
 

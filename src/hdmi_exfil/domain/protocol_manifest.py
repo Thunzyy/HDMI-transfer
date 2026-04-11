@@ -19,6 +19,9 @@ from hdmi_exfil.domain.models import (
 SEQ_HEADER_FMT = ">HBIIH"
 SEQ_HEADER_PRE_CRC = struct.calcsize(SEQ_HEADER_FMT)
 SEQ_CRC_SIZE = 4
+FOUNTAIN_CRC_SIZE = 4
+FOUNTAIN_HEADER_PRE_CRC = FOUNTAIN_HEADER_SIZE - FOUNTAIN_CRC_SIZE
+FOUNTAIN_CURRENT_MAGIC_OFFSET = 1
 
 
 @lru_cache(maxsize=1)
@@ -47,6 +50,10 @@ def get_protocol_manifest() -> ProtocolManifest:
         ),
         fountain=FountainSpec(
             magic=constants["fountain_magic"],
+            current_magic=(
+                constants["fountain_magic"] + FOUNTAIN_CURRENT_MAGIC_OFFSET
+            ) & 0xFFFF,
+            header_pre_crc=FOUNTAIN_HEADER_PRE_CRC,
             header_size=FOUNTAIN_HEADER_SIZE,
         ),
     )

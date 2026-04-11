@@ -51,6 +51,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "hdmi_exfil.core" = ["constants.json"]
+"hdmi_exfil.interfaces.browser_sender" = ["*.html", "*.js"]
 "hdmi_exfil.web" = ["static/*.html"]
 
 [tool.pytest.ini_options]
