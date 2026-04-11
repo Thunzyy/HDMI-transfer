@@ -57,12 +57,14 @@ def test_encoding_roundtrip():
             # Find first mismatch
             for i in range(min(len(recovered), total_bytes)):
                 if recovered[i] != data[i]:
-                    print(f"  bpc={bpc}: FAIL at byte {i}: expected {data[i]:02x}, got {recovered[i]:02x}")
+                    assert recovered[i] == data[i], (
+                        f"bpc={bpc}: byte {i} mismatch: "
+                        f"expected {data[i]:02x}, got {recovered[i]:02x}"
+                    )
                     break
-            else:
-                print(f"  bpc={bpc}: FAIL length mismatch: {len(recovered)} vs {total_bytes}")
-            return False
-    return True
+            assert len(recovered) >= total_bytes, (
+                f"bpc={bpc}: recovered length {len(recovered)} < {total_bytes}"
+            )
 
 
 def test_sequential_roundtrip():
@@ -95,17 +97,9 @@ def test_sequential_roundtrip():
 
         if result.is_valid and result.data == payload:
             print(f"  bpc={bpc}: OK (payload={payload_size} B, frame_idx={result.frame_index})")
-        elif not result.is_valid:
-            print(f"  bpc={bpc}: FAIL - decode returned invalid")
-            return False
         else:
-            # Find mismatch
-            for i in range(min(len(result.data), len(payload))):
-                if result.data[i] != payload[i]:
-                    print(f"  bpc={bpc}: FAIL at payload byte {i}: expected {payload[i]:02x}, got {result.data[i]:02x}")
-                    break
-            return False
-    return True
+            assert result.is_valid, f"bpc={bpc}: sequential decode returned invalid"
+            assert result.data == payload, f"bpc={bpc}: sequential payload mismatch"
 
 
 def test_fountain_roundtrip():
@@ -137,14 +131,12 @@ def test_fountain_roundtrip():
 
         if result.is_valid and result.data == payload:
             print(f"  bpc={bpc}: OK (payload={payload_size} B, seed={result.frame_index})")
-        elif not result.is_valid:
-            print(f"  bpc={bpc}: FAIL - decode returned invalid")
-            return False
         else:
             mismatch = sum(1 for a, b in zip(result.data, payload) if a != b)
-            print(f"  bpc={bpc}: FAIL - {mismatch} byte mismatches out of {len(payload)}")
-            return False
-    return True
+            assert result.is_valid, f"bpc={bpc}: fountain decode returned invalid"
+            assert result.data == payload, (
+                f"bpc={bpc}: fountain payload mismatch ({mismatch} mismatches)"
+            )
 
 
 def test_js_sender_simulation():
@@ -218,9 +210,9 @@ def test_js_sender_simulation():
             print(f"  bpc={bpc}: OK (JS->Python {total_bytes} bytes)")
         else:
             mismatch = sum(1 for a, b in zip(recovered, frame_bytes.tobytes()) if a != b)
-            print(f"  bpc={bpc}: FAIL - {mismatch} mismatches out of {total_bytes}")
-            return False
-    return True
+            assert recovered[:total_bytes] == frame_bytes.tobytes(), (
+                f"bpc={bpc}: JS sender simulation mismatch ({mismatch} mismatches)"
+            )
 
 
 def test_noise_resilience():
@@ -266,9 +258,9 @@ def test_crc32_compatibility():
     if py_crc == expected:
         print(f"  CRC32 test vector: OK ({py_crc:#010x})")
     else:
-        print(f"  CRC32 test vector: FAIL (got {py_crc:#010x}, expected {expected:#010x})")
-
-    return True
+        assert py_crc == expected, (
+            f"CRC32 mismatch: got {py_crc:#010x}, expected {expected:#010x}"
+        )
 
 
 if __name__ == "__main__":
