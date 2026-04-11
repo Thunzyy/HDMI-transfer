@@ -1,2 +1,5 @@
 """Backward-compatible import shim -- canonical location: hdmi_exfil.interfaces.cli.send."""
-from hdmi_exfil.interfaces.cli.send import *  # noqa: F401,F403
+
+from hdmi_exfil.compat.imports import reexport
+
+reexport(globals(), "hdmi_exfil.interfaces.cli.send")
