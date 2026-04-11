@@ -16,3 +16,4 @@ def test_ci_workflow_references_quality_gate_script() -> None:
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 
     assert "tools/run_quality_gate.ps1" in text
+    assert "-SkipNativeLoopback" not in text

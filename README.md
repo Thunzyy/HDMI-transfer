@@ -143,12 +143,6 @@ Le gate execute :
 - la verification `python tools/build_sender_html.py --check`
 - un smoke benchmark `hdmi-bench --profile balanced --mode fountain --no-json`
 
-Dans les environnements ou le test loopback OpenCV natif est instable, utiliser :
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tools/run_quality_gate.ps1 -SkipNativeLoopback
-```
-
 Le detail des commandes et de la validation hardware est dans [docs/testing.md](docs/testing.md).
 
 ## Compatibilite

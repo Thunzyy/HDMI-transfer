@@ -17,15 +17,9 @@ python tools/build_sender_html.py --check
 hdmi-bench --profile balanced --mode fountain --no-json
 ```
 
-## Variante pour environnements fragiles
+## Fallback local optionnel
 
-Sur certaines machines, `tests/test_loopback.py` peut planter a l'import natif OpenCV plutot que retourner un echec Python propre. Dans ce cas, le gate local peut etre lance avec :
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tools/run_quality_gate.ps1 -SkipNativeLoopback
-```
-
-Cette variante est utile pour CI ou pour des postes de dev ou la stack OpenCV GUI n'est pas parfaitement stable. Le loopback reste alors une validation manuelle obligatoire avant release.
+Le gate complet passe maintenant avec `tests/test_loopback.py` inclus. Le switch `-SkipNativeLoopback` reste disponible uniquement comme secours local si une installation OpenCV est defectueuse sur un poste de dev particulier.
 
 ## Commandes ciblees utiles
 
