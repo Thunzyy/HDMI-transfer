@@ -1,14 +1,31 @@
+import shutil
 from pathlib import Path
+import uuid
 
+import hdmi_exfil.interfaces.web.app_factory as app_factory
+import hdmi_exfil.interfaces.web.routes_files as routes_files
 import hdmi_exfil.web.server as server
+import pytest
 
 
-def test_receive_file_api_reports_and_deletes_output_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(server, "_load_disk_cache", lambda: [])
-    app = server.create_app(output_dir=str(tmp_path))
+@pytest.fixture
+def output_dir():
+    root = Path(__file__).resolve().parent / ".tmp_file_api"
+    root.mkdir(exist_ok=True)
+    path = root / uuid.uuid4().hex
+    path.mkdir()
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+def test_receive_file_api_reports_and_deletes_output_file(output_dir, monkeypatch):
+    monkeypatch.setattr(app_factory, "_load_disk_cache", lambda: [])
+    app = server.create_app(output_dir=str(output_dir), runtime=False)
     client = app.test_client()
 
-    output_file = tmp_path / "artifact.bin"
+    output_file = output_dir / "artifact.bin"
     output_file.write_bytes(b"hello")
 
     info = client.get("/api/receive/file/artifact.bin")
@@ -47,13 +64,13 @@ def test_receive_file_api_reports_and_deletes_output_file(tmp_path, monkeypatch)
     assert missing_download.status_code == 404
 
 
-def test_receive_files_lists_output_directory_contents(tmp_path, monkeypatch):
-    monkeypatch.setattr(server, "_load_disk_cache", lambda: [])
-    app = server.create_app(output_dir=str(tmp_path))
+def test_receive_files_lists_output_directory_contents(output_dir, monkeypatch):
+    monkeypatch.setattr(app_factory, "_load_disk_cache", lambda: [])
+    app = server.create_app(output_dir=str(output_dir), runtime=False)
     client = app.test_client()
 
-    newer = tmp_path / "b.bin"
-    older = tmp_path / "a.bin"
+    newer = output_dir / "b.bin"
+    older = output_dir / "a.bin"
     older.write_bytes(b"aa")
     newer.write_bytes(b"bbb")
 
@@ -76,12 +93,12 @@ def test_receive_files_lists_output_directory_contents(tmp_path, monkeypatch):
     ]
 
 
-def test_receive_file_delete_missing_returns_404(tmp_path, monkeypatch):
-    monkeypatch.setattr(server, "_load_disk_cache", lambda: [])
-    app = server.create_app(output_dir=str(tmp_path))
+def test_receive_file_delete_missing_returns_404(output_dir, monkeypatch):
+    monkeypatch.setattr(app_factory, "_load_disk_cache", lambda: [])
+    app = server.create_app(output_dir=str(output_dir), runtime=False)
     client = app.test_client()
 
-    missing_path = Path(tmp_path, "missing.bin").resolve()
+    missing_path = Path(output_dir, "missing.bin").resolve()
     deleted = client.delete("/api/receive/file/missing.bin")
 
     assert deleted.status_code == 404
@@ -93,12 +110,12 @@ def test_receive_file_delete_missing_returns_404(tmp_path, monkeypatch):
     }
 
 
-def test_receive_file_reveal_existing_uses_file_manager_helper(tmp_path, monkeypatch):
-    monkeypatch.setattr(server, "_load_disk_cache", lambda: [])
-    app = server.create_app(output_dir=str(tmp_path))
+def test_receive_file_reveal_existing_uses_file_manager_helper(output_dir, monkeypatch):
+    monkeypatch.setattr(app_factory, "_load_disk_cache", lambda: [])
+    app = server.create_app(output_dir=str(output_dir), runtime=False)
     client = app.test_client()
 
-    output_file = tmp_path / "artifact.bin"
+    output_file = output_dir / "artifact.bin"
     output_file.write_bytes(b"hello")
 
     calls = []
@@ -107,7 +124,7 @@ def test_receive_file_reveal_existing_uses_file_manager_helper(tmp_path, monkeyp
         calls.append(path)
         return "file", str(Path(path).resolve())
 
-    monkeypatch.setattr(server, "_reveal_in_file_manager", fake_reveal)
+    monkeypatch.setattr(routes_files, "_reveal_in_file_manager", fake_reveal)
 
     response = client.post("/api/receive/file/artifact.bin/reveal")
 
@@ -123,17 +140,17 @@ def test_receive_file_reveal_existing_uses_file_manager_helper(tmp_path, monkeyp
     assert calls == [str(output_file.resolve())]
 
 
-def test_receive_file_reveal_missing_returns_404_when_no_location_exists(tmp_path, monkeypatch):
-    monkeypatch.setattr(server, "_load_disk_cache", lambda: [])
-    app = server.create_app(output_dir=str(tmp_path))
+def test_receive_file_reveal_missing_returns_404_when_no_location_exists(output_dir, monkeypatch):
+    monkeypatch.setattr(app_factory, "_load_disk_cache", lambda: [])
+    app = server.create_app(output_dir=str(output_dir), runtime=False)
     client = app.test_client()
 
-    expected_path = Path(tmp_path, "missing.bin").resolve()
+    expected_path = Path(output_dir, "missing.bin").resolve()
 
     def fake_reveal(path):
         raise FileNotFoundError(path)
 
-    monkeypatch.setattr(server, "_reveal_in_file_manager", fake_reveal)
+    monkeypatch.setattr(routes_files, "_reveal_in_file_manager", fake_reveal)
 
     response = client.post("/api/receive/file/missing.bin/reveal")
 
@@ -146,8 +163,8 @@ def test_receive_file_reveal_missing_returns_404_when_no_location_exists(tmp_pat
     }
 
 
-def test_reveal_in_file_manager_uses_windows_select_form(tmp_path, monkeypatch):
-    output_file = tmp_path / "artifact.bin"
+def test_reveal_in_file_manager_uses_windows_select_form(output_dir, monkeypatch):
+    output_file = output_dir / "artifact.bin"
     output_file.write_bytes(b"hello")
 
     calls = []
@@ -155,10 +172,10 @@ def test_reveal_in_file_manager_uses_windows_select_form(tmp_path, monkeypatch):
     def fake_popen(args):
         calls.append(args)
 
-    monkeypatch.setattr(server.sys, "platform", "win32")
-    monkeypatch.setattr(server.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(routes_files.sys, "platform", "win32")
+    monkeypatch.setattr(routes_files.subprocess, "Popen", fake_popen)
 
-    opened, opened_path = server._reveal_in_file_manager(str(output_file))
+    opened, opened_path = routes_files._reveal_in_file_manager(str(output_file))
 
     assert (opened, opened_path) == ("file", str(output_file.resolve()))
     assert calls == [[

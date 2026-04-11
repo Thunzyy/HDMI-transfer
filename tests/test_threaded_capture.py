@@ -33,6 +33,17 @@ class MockSource:
         return True, frame
 
 
+class AlwaysFailSource:
+    """Simulates a source that never produces frames."""
+
+    def __init__(self) -> None:
+        self.read_count = 0
+
+    def read(self) -> tuple[bool, None]:
+        self.read_count += 1
+        return False, None
+
+
 # ---------------------------------------------------------------------------
 # FPSReporter tests
 # ---------------------------------------------------------------------------
@@ -153,3 +164,15 @@ class TestThreadedCapture:
         time.sleep(0.05)
         cap.stop()
         cap.stop()  # Should not raise
+
+    def test_failed_reads_back_off_instead_of_spinning(self) -> None:
+        """Repeated failed reads should sleep briefly instead of tight-looping."""
+        source = AlwaysFailSource()
+        cap = ThreadedCapture(source, buffer_size=4)
+        cap.start()
+        try:
+            time.sleep(0.05)
+        finally:
+            cap.stop()
+
+        assert source.read_count < 200

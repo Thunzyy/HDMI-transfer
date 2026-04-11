@@ -19,7 +19,7 @@ import pytest
 
 def test_dispatch_table_covers_all_actions():
     """Verify every non-Quit menu item has a dispatch handler."""
-    from hdmi_exfil.receiver.cli.console import (
+    from hdmi_exfil.interfaces.cli.receiver_console import (
         _DISPATCH,
         _MENU_CALIBRATE,
         _MENU_DETECT,
@@ -45,10 +45,10 @@ def test_dispatch_table_covers_all_actions():
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.receiver.cli.console._detect_devices")
+@patch("hdmi_exfil.interfaces.cli.receiver_console._detect_devices")
 def test_action_detect_with_devices(mock_detect, capsys):
     """_action_detect prints detected devices."""
-    from hdmi_exfil.receiver.cli.console import _action_detect
+    from hdmi_exfil.interfaces.cli.receiver_console import _action_detect
 
     mock_detect.return_value = [
         {"index": 0, "name": "Webcam", "width": 1920, "height": 1080, "fps": 60.0},
@@ -66,10 +66,10 @@ def test_action_detect_with_devices(mock_detect, capsys):
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.receiver.cli.console._detect_devices")
+@patch("hdmi_exfil.interfaces.cli.receiver_console._detect_devices")
 def test_action_detect_no_devices(mock_detect, capsys):
     """_action_detect handles no devices gracefully."""
-    from hdmi_exfil.receiver.cli.console import _action_detect
+    from hdmi_exfil.interfaces.cli.receiver_console import _action_detect
 
     mock_detect.return_value = []
     _action_detect()
@@ -82,13 +82,13 @@ def test_action_detect_no_devices(mock_detect, capsys):
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.receiver.cli.console.settings")
-@patch("hdmi_exfil.receiver.cli.console.run_receive")
-@patch("hdmi_exfil.receiver.cli.console._detect_devices")
-@patch("hdmi_exfil.receiver.cli.console.inquirer")
+@patch("hdmi_exfil.interfaces.cli.receiver_console.settings")
+@patch("hdmi_exfil.interfaces.cli.receiver_console.run_receive")
+@patch("hdmi_exfil.interfaces.cli.receiver_console._detect_devices")
+@patch("hdmi_exfil.interfaces.cli.receiver_console.inquirer")
 def test_action_receive(mock_inq, mock_detect, mock_run_receive, mock_settings):
     """_action_receive uses saved settings and calls run_receive()."""
-    from hdmi_exfil.receiver.cli.console import _action_receive
+    from hdmi_exfil.interfaces.cli.receiver_console import _action_receive
 
     # No saved device — falls through to full detection
     mock_settings.load.return_value = {
@@ -122,12 +122,12 @@ def test_action_receive(mock_inq, mock_detect, mock_run_receive, mock_settings):
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.receiver.cli.console.settings")
-@patch("hdmi_exfil.receiver.cli.console.run_receive")
-@patch("hdmi_exfil.receiver.cli.console._detect_devices")
+@patch("hdmi_exfil.interfaces.cli.receiver_console.settings")
+@patch("hdmi_exfil.interfaces.cli.receiver_console.run_receive")
+@patch("hdmi_exfil.interfaces.cli.receiver_console._detect_devices")
 def test_action_receive_single_device(mock_detect, mock_run_receive, mock_settings):
     """Single device case skips device selection prompt entirely."""
-    from hdmi_exfil.receiver.cli.console import _action_receive
+    from hdmi_exfil.interfaces.cli.receiver_console import _action_receive
 
     mock_settings.load.return_value = {
         "receiver": {"device_name": None, "device_index": None,
@@ -153,7 +153,7 @@ def test_action_receive_single_device(mock_detect, mock_run_receive, mock_settin
 
 def test_action_stats_no_transfer(capsys):
     """_action_stats shows message when no transfer completed."""
-    from hdmi_exfil.receiver.cli.console import _action_stats
+    from hdmi_exfil.interfaces.cli.receiver_console import _action_stats
 
     _action_stats()
     output = capsys.readouterr().out
@@ -165,10 +165,10 @@ def test_action_stats_no_transfer(capsys):
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.receiver.cli.console.inquirer")
+@patch("hdmi_exfil.interfaces.cli.receiver_console.inquirer")
 def test_action_settings(mock_inq, capsys):
     """_action_settings prints current settings and handles Back to menu."""
-    from hdmi_exfil.receiver.cli.console import _action_settings
+    from hdmi_exfil.interfaces.cli.receiver_console import _action_settings
 
     mock_select = MagicMock()
     mock_select.execute.return_value = "Back to menu"
@@ -185,10 +185,10 @@ def test_action_settings(mock_inq, capsys):
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.receiver.cli.console._show_main_menu")
+@patch("hdmi_exfil.interfaces.cli.receiver_console._show_main_menu")
 def test_main_ctrl_c_exits_cleanly(mock_menu):
     """main() exits cleanly on KeyboardInterrupt without traceback."""
-    from hdmi_exfil.receiver.cli.console import main
+    from hdmi_exfil.interfaces.cli.receiver_console import main
 
     mock_menu.side_effect = KeyboardInterrupt()
     # Should NOT raise -- exits cleanly
@@ -200,10 +200,10 @@ def test_main_ctrl_c_exits_cleanly(mock_menu):
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.receiver.cli.console._show_main_menu")
+@patch("hdmi_exfil.interfaces.cli.receiver_console._show_main_menu")
 def test_main_quit_breaks_loop(mock_menu):
     """Selecting Quit breaks the main loop."""
-    from hdmi_exfil.receiver.cli.console import _MENU_QUIT, main
+    from hdmi_exfil.interfaces.cli.receiver_console import _MENU_QUIT, main
 
     mock_menu.return_value = _MENU_QUIT
     main()  # Should return normally
@@ -215,10 +215,10 @@ def test_main_quit_breaks_loop(mock_menu):
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.receiver.cli.console._show_main_menu")
+@patch("hdmi_exfil.interfaces.cli.receiver_console._show_main_menu")
 def test_main_dispatches_action(mock_menu):
     """main() dispatches a menu selection to the correct handler."""
-    from hdmi_exfil.receiver.cli.console import (
+    from hdmi_exfil.interfaces.cli.receiver_console import (
         _DISPATCH,
         _MENU_DETECT,
         _MENU_QUIT,

@@ -31,9 +31,13 @@ def test_reassemble_sequential_data_preserves_partial_last_chunk() -> None:
     assert full_data == (b"A" * bpf) + b"tail"
 
 
-def test_sequential_finalizes_after_wrap_without_end_frame() -> None:
+def test_sequential_finalizes_after_wrap_without_end_frame(
+    tmp_path,
+    monkeypatch,
+) -> None:
     profile = replace(PROFILES["balanced"], bits_per_channel=1)
     worker = ReceiverWorker(device=0, profile=profile, mode="sequential")
+    worker._output_dir = str(tmp_path)
     frame = np.zeros((profile.height, profile.width, 3), dtype=np.uint8)
     cap = _FakeCap(frame)
     events: list[dict] = []
@@ -63,6 +67,17 @@ def test_sequential_finalizes_after_wrap_without_end_frame() -> None:
     ])
 
     worker._publish = lambda event_type, data: events.append({"type": event_type, "data": data})
+    saved: dict[str, object] = {}
+
+    def fake_write_output(file_content: bytes, filename: str, output_dir: str) -> str:
+        saved.update({
+            "file_content": file_content,
+            "filename": filename,
+            "output_dir": output_dir,
+        })
+        return str(tmp_path / filename)
+
+    monkeypatch.setattr("hdmi_exfil.web.receiver_worker.write_output", fake_write_output)
 
     def fake_decode(frame, profile, decode_frame, geometry_candidates, geometry_cursor):
         try:
@@ -71,41 +86,19 @@ def test_sequential_finalizes_after_wrap_without_end_frame() -> None:
             worker._stop_event.set()
             return None, geometry_cursor, None
 
-    finalized: dict[str, object] = {}
-
-    def fake_finalize(
-        received,
-        total_frames,
-        expected_size,
-        expected_sha256,
-        expected_name,
-        start_time,
-        frames_captured,
-        bytes_received,
-        *,
-        saw_start,
-        saw_end,
-        pass_count,
-    ) -> None:
-        finalized.update({
-            "received": dict(received),
-            "total_frames": total_frames,
-            "frames_captured": frames_captured,
-            "bytes_received": bytes_received,
-            "saw_start": saw_start,
-            "saw_end": saw_end,
-            "pass_count": pass_count,
-        })
-
     worker._decode_with_sampling_fallbacks = fake_decode  # type: ignore[method-assign]
-    worker._finalize_sequential = fake_finalize  # type: ignore[method-assign]
 
     worker._run_sequential(cap)
 
-    assert finalized["total_frames"] == 2
-    assert finalized["frames_captured"] == 3
-    assert finalized["bytes_received"] == 12
-    assert finalized["saw_start"] is False
-    assert finalized["saw_end"] is False
-    assert finalized["pass_count"] == 1
-    assert finalized["received"] == {0: b"A" * 8, 1: b"B" * 4}
+    complete = next(event for event in events if event["type"] == "complete")
+
+    assert complete["data"]["total_chunks"] == 2
+    assert complete["data"]["frames_captured"] == 3
+    assert complete["data"]["bytes_received"] == 12
+    assert complete["data"]["start_seen"] is False
+    assert complete["data"]["end_seen"] is False
+    assert complete["data"]["pass_count"] == 1
+    assert complete["data"]["missing_frames"] == []
+    assert complete["data"]["save_path"] == str(tmp_path / saved["filename"])
+    assert saved["file_content"] == (b"A" * 8) + (b"B" * 4)
+    assert saved["output_dir"] == str(tmp_path)

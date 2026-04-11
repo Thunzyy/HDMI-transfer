@@ -21,6 +21,7 @@ import statistics
 import numpy as np
 import pytest
 
+from hdmi_exfil.core.protocols.fountain_tuning import DEFAULT_FOUNTAIN_TUNING
 from hdmi_exfil.prng import PRNG, choose_indices
 from hdmi_exfil.protocols.degree import robust_soliton_cdf, sample_degree
 from hdmi_exfil.protocols.fountain import FountainDecoder
@@ -135,8 +136,9 @@ class TestOverheadByK:
     def test_overhead_k100(self) -> None:
         """K=100: avg overhead < 1.10 (10% target)."""
         avg, lo, hi, results = measure_overhead(K=100, runs=20, max_multiplier=5)
-        assert avg < 1.10, (
-            f"K=100 avg overhead {avg:.3f} exceeds 1.10 threshold "
+        assert avg < DEFAULT_FOUNTAIN_TUNING.max_avg_overhead, (
+            f"K=100 avg overhead {avg:.3f} exceeds "
+            f"{DEFAULT_FOUNTAIN_TUNING.max_avg_overhead:.2f} threshold "
             f"(min={lo:.3f}, max={hi:.3f})"
         )
 
@@ -144,8 +146,9 @@ class TestOverheadByK:
     def test_overhead_k500(self) -> None:
         """K=500: avg overhead < 1.10 (10% target)."""
         avg, lo, hi, results = measure_overhead(K=500, runs=20, max_multiplier=5)
-        assert avg < 1.10, (
-            f"K=500 avg overhead {avg:.3f} exceeds 1.10 threshold "
+        assert avg < DEFAULT_FOUNTAIN_TUNING.max_avg_overhead, (
+            f"K=500 avg overhead {avg:.3f} exceeds "
+            f"{DEFAULT_FOUNTAIN_TUNING.max_avg_overhead:.2f} threshold "
             f"(min={lo:.3f}, max={hi:.3f})"
         )
 
@@ -153,8 +156,9 @@ class TestOverheadByK:
     def test_overhead_k1000(self) -> None:
         """K=1000: avg overhead < 1.10 (10% target)."""
         avg, lo, hi, results = measure_overhead(K=1000, runs=10, max_multiplier=5)
-        assert avg < 1.10, (
-            f"K=1000 avg overhead {avg:.3f} exceeds 1.10 threshold "
+        assert avg < DEFAULT_FOUNTAIN_TUNING.max_avg_overhead, (
+            f"K=1000 avg overhead {avg:.3f} exceeds "
+            f"{DEFAULT_FOUNTAIN_TUNING.max_avg_overhead:.2f} threshold "
             f"(min={lo:.3f}, max={hi:.3f})"
         )
 

@@ -24,6 +24,7 @@ import time
 import cv2
 import numpy as np
 
+from hdmi_exfil.application.receive_session import ReceiveSession
 from hdmi_exfil.core.capture.sampler import sample_frame
 from hdmi_exfil.core.config import (
     FRAME_TYPE_DATA,
@@ -227,19 +228,10 @@ class ReceiverWorker(threading.Thread):
 
     def _run_fountain(self, cap: CaptureSource) -> None:
         protocol = get_protocol("fountain", profile=self._profile)
-        decoder: FountainDecoder | None = None
-        start_time: float | None = None
-        bytes_received = 0
-        droplets_received = 0
-        unique_droplets_received = 0
-        expected_droplets: int | None = None
+        session = ReceiveSession(mode="fountain", profile=self._profile)
         frames_captured = 0
         last_progress = 0.0
-        last_indices_emit = 0.0
         last_waiting_emit = 0.0
-        k_switch_candidate: int | None = None
-        k_switch_hits = 0
-        seen_seeds: set[int] = set()
         geometry_candidates = self._build_geometry_candidates(self._profile)
         geometry_cursor = 0
 
@@ -260,7 +252,7 @@ class ReceiverWorker(threading.Thread):
             self._maybe_publish_preview(frame)
 
             now = time.time()
-            if decoder is None and (now - last_waiting_emit) >= 1.0:
+            if session.detected_protocol is None and (now - last_waiting_emit) >= 1.0:
                 last_waiting_emit = now
                 self._publish("status", {
                     "state": "waiting",
@@ -284,86 +276,27 @@ class ReceiverWorker(threading.Thread):
             if result is None or not result.is_valid or result.data is None:
                 continue
 
-            seed, K, payload = result.frame_index, result.total_frames, result.data
-            frame_max = result.max_frames
-            if K is None or K == 0 or K > 60000:
-                continue
-            if frame_max is not None and expected_droplets is None:
-                expected_droplets = max(0, int(frame_max))
+            events = session.feed_frame_result("fountain", result)
+            for event in events:
+                data = dict(event.data)
+                data["frames_captured"] = frames_captured
 
-            if decoder is None:
-                decoder = FountainDecoder(K, len(payload))
-                start_time = time.time()
-                self._publish("status", {
-                    "state": "receiving",
-                    "message": f"Transmission detected! K={K} chunks",
-                    "total_chunks": K,
-                    "expected_droplets": expected_droplets,
-                    "protocol": "fountain",
-                })
-
-            if decoder.K != K:
-                if k_switch_candidate == K:
-                    k_switch_hits += 1
-                else:
-                    k_switch_candidate = K
-                    k_switch_hits = 1
-
-                # Stream switched: lock onto the new K after a few consistent hits.
-                if k_switch_hits >= 3:
-                    decoder = FountainDecoder(K, len(payload))
-                    start_time = time.time()
-                    bytes_received = 0
-                    droplets_received = 0
-                    unique_droplets_received = 0
-                    seen_seeds.clear()
-                    expected_droplets = (
-                        max(0, int(frame_max)) if frame_max is not None else None
-                    )
-                    last_progress = 0.0
-                    last_indices_emit = 0.0
-                    self._publish("status", {
-                        "state": "receiving",
-                        "message": f"Resynced transmission! K={K} chunks",
-                        "total_chunks": K,
-                        "expected_droplets": expected_droplets,
-                        "protocol": "fountain",
-                    })
-                else:
+                if event.kind == "status":
+                    self._publish("status", data)
                     continue
-            else:
-                k_switch_candidate = None
-                k_switch_hits = 0
 
-            if seed not in seen_seeds:
-                seen_seeds.add(seed)
-                unique_droplets_received += 1
+                if event.kind == "progress":
+                    if now - last_progress > 0.2:
+                        last_progress = now
+                        self._publish("progress", data)
+                    continue
 
-            decoder.add_droplet(seed, payload)
-            bytes_received += len(payload)
-            droplets_received += 1
-
-            now = time.time()
-            if now - last_progress > 0.2:
-                last_progress = now
-                emit_indices = (
-                    K <= 1400
-                    or (now - last_indices_emit) > 1.0
-                )
-                if emit_indices:
-                    last_indices_emit = now
-                self._publish_fountain_progress(
-                    decoder, K, payload, bytes_received,
-                    droplets_received, unique_droplets_received, expected_droplets,
-                    frames_captured, start_time,
-                    emit_indices=emit_indices,
-                )
-
-            if decoder.is_complete():
-                self._finalize_fountain(
-                    decoder, start_time, frames_captured, bytes_received,
-                    droplets_received, unique_droplets_received, expected_droplets,
-                )
+                file_content = bytes(data.pop("file_content"))
+                filename = str(data["filename"])
+                save_path = write_output(file_content, filename, self._output_dir)
+                data["save_path"] = save_path
+                data["download_url"] = f"/api/receive/download/{filename}"
+                self._publish("complete", data)
                 return
 
         self._publish("stopped", {
@@ -465,21 +398,8 @@ class ReceiverWorker(threading.Thread):
 
     def _run_sequential(self, cap: CaptureSource) -> None:
         protocol = get_protocol("sequential", profile=self._profile)
-        received: dict[int, bytes] = {}
-        expected_sha256: bytes | None = None
-        expected_size: int | None = None
-        expected_name: str | None = None
-        total_expected: int | None = None
-        start_time = time.time()
+        session = ReceiveSession(mode="sequential", profile=self._profile)
         frames_captured = 0
-        bytes_received = 0
-        last_progress = 0.0
-        last_unique_data_at = start_time
-        last_data_idx: int | None = None
-        pass_count = 0
-        saw_start = False
-        saw_end = False
-        waiting_for_metadata_reported = False
         geometry_candidates = self._build_geometry_candidates(self._profile)
         geometry_cursor = 0
 
@@ -511,153 +431,22 @@ class ReceiverWorker(threading.Thread):
             if result is None or not result.is_valid:
                 continue
 
-            ftype, data = result.frame_type, result.data
-            idx, total = result.frame_index, result.total_frames
+            events = session.feed_frame_result("sequential", result)
+            for event in events:
+                data = dict(event.data)
+                data["frames_captured"] = frames_captured
 
-            if ftype == FRAME_TYPE_START:
-                saw_start = True
-                if total_expected is None and total:
-                    total_expected = total
-                if expected_name is None:
-                    fs, sha, fn = parse_start_metadata(data)
-                    if fs is not None:
-                        expected_size, expected_sha256, expected_name = fs, sha, fn
-                if expected_name is not None and total_expected:
-                    waiting_for_metadata_reported = False
-                    self._publish("status", {
-                        "state": "receiving",
-                        "message": (
-                            f"File: {expected_name} "
-                            f"({expected_size} bytes, {total_expected} frames)"
-                        ),
-                        "protocol": "sequential",
-                        "total_chunks": total_expected,
-                        "start_seen": True,
-                        "end_seen": saw_end,
-                        "pass_count": pass_count,
-                    })
-                if total_expected and len(received) >= total_expected:
-                    self._finalize_sequential(
-                        received,
-                        total_expected,
-                        expected_size,
-                        expected_sha256,
-                        expected_name,
-                        start_time,
-                        frames_captured,
-                        bytes_received,
-                        saw_start=saw_start,
-                        saw_end=saw_end,
-                        pass_count=pass_count,
-                    )
-                    return
+                if event.kind in {"status", "progress"}:
+                    self._publish(event.kind, data)
+                    continue
 
-            elif ftype == FRAME_TYPE_DATA:
-                if total_expected is None and total:
-                    total_expected = total
-                if (
-                    total_expected
-                    and expected_name is None
-                    and not waiting_for_metadata_reported
-                ):
-                    waiting_for_metadata_reported = True
-                    self._publish("status", {
-                        "state": "receiving",
-                        "message": (
-                            "Sequential data detected "
-                            f"({total_expected} frames). "
-                            "Waiting for START metadata..."
-                        ),
-                        "protocol": "sequential",
-                        "total_chunks": total_expected,
-                        "start_seen": saw_start,
-                        "end_seen": saw_end,
-                        "pass_count": pass_count,
-                    })
-                now = time.time()
-                if (
-                    total_expected
-                    and len(received) >= total_expected
-                    and last_data_idx is not None
-                    and idx is not None
-                    and idx < last_data_idx
-                ):
-                    pass_count += 1
-                    self._finalize_sequential(
-                        received,
-                        total_expected,
-                        expected_size,
-                        expected_sha256,
-                        expected_name,
-                        start_time,
-                        frames_captured,
-                        bytes_received,
-                        saw_start=saw_start,
-                        saw_end=saw_end,
-                        pass_count=pass_count,
-                    )
-                    return
-                if idx not in received:
-                    received[idx] = data
-                    bytes_received += len(data)
-                    last_unique_data_at = now
-                last_data_idx = idx
-                if total_expected and len(received) >= total_expected:
-                    grace_s = 0.35 if expected_name is not None else 1.0
-                    if now - last_unique_data_at >= grace_s:
-                        self._finalize_sequential(
-                            received,
-                            total_expected,
-                            expected_size,
-                            expected_sha256,
-                            expected_name,
-                            start_time,
-                            frames_captured,
-                            bytes_received,
-                            saw_start=saw_start,
-                            saw_end=saw_end,
-                            pass_count=pass_count,
-                        )
-                        return
-                if total_expected and now - last_progress > 0.1:
-                    last_progress = now
-                    percent = round(len(received) / total_expected * 100, 1)
-                    if percent >= 100.0:
-                        percent = 99.9
-                    self._publish("progress", {
-                        "protocol": "sequential",
-                        "chunks_decoded": len(received),
-                        "total_chunks": total_expected,
-                        "percent": percent,
-                        "speed_kbps": round(
-                            bytes_received / (now - start_time) / 1024, 1,
-                        ) if now - start_time > 2 else 0,
-                        "eta_seconds": -1,
-                        "frames_captured": frames_captured,
-                        "bytes_received": bytes_received,
-                        "decoded_indices": sorted(received.keys()),
-                        "start_seen": saw_start,
-                        "end_seen": saw_end,
-                        "pass_count": pass_count,
-                    })
-
-            elif ftype == FRAME_TYPE_END:
-                saw_end = True
-                if total_expected and len(received) >= total_expected:
-                    self._finalize_sequential(
-                        received,
-                        total_expected,
-                        expected_size,
-                        expected_sha256,
-                        expected_name,
-                        start_time,
-                        frames_captured,
-                        bytes_received,
-                        saw_start=saw_start,
-                        saw_end=saw_end,
-                        pass_count=pass_count,
-                    )
-                    return
+                file_content = bytes(data.pop("file_content"))
+                filename = str(data["filename"])
+                save_path = write_output(file_content, filename, self._output_dir)
+                data["save_path"] = save_path
+                data["download_url"] = f"/api/receive/download/{filename}"
+                self._publish("complete", data)
+                return
 
         self._publish("stopped", {
             "message": "Stopped by user",

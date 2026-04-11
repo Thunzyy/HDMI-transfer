@@ -1,26 +1,31 @@
-# Setup matériel
+# Setup materiel
 
-## Setup un seul PC (loopback)
+## Scenario recommande
 
-```
-GPU ─── HDMI ──► Écran 2 (affichage sender)
+Le setup le plus simple pour developper et valider HDMI Exfil reste le loopback sur un seul PC :
+
+```text
+GPU ─── HDMI ──► ecran secondaire (sender)
  │
- └───── HDMI ──► Elgato 4K X (capture USB) ──► même PC
+ └───── HDMI ──► Elgato 4K X ──► meme PC via USB
 ```
 
-### Configuration Windows
+L'ecran secondaire et l'Elgato doivent recevoir le meme signal.
 
-1. **Paramètres > Affichage** : l'Elgato apparaît comme un écran
-2. Sélectionner l'Elgato > **Dupliquer avec l'écran 2**
-3. Le sender affiche sur l'écran 2, l'Elgato capture la même image
+## Configuration Windows
 
-### Trouver l'index de l'Elgato
+1. Ouvrir `Parametres > Systeme > Affichage`
+2. Reperer l'Elgato comme ecran supplementaire
+3. Choisir `Dupliquer avec l'ecran secondaire`
+4. Verifier que le sender s'affiche sur l'ecran duplique et que la capture le lit
+
+## Trouver l'index de capture
 
 ```bash
 ffmpeg -list_devices true -f dshow -i dummy 2>&1 | findstr "video"
 ```
 
-Ou via Python :
+Ou en Python :
 
 ```bash
 python -c "
@@ -30,42 +35,59 @@ for i in range(10):
     if cap.isOpened():
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        print(f'  Index {i}: {w}x{h}')
+        print(f'Index {i}: {w}x{h}')
         cap.release()
 "
 ```
 
-### Trouver l'index du moniteur
+## Trouver l'index du moniteur sender
 
 ```bash
 python -c "
-from hdmi_exfil.display.monitors import get_monitors
+from hdmi_exfil.sender.display.monitors import get_monitors
 for i, m in enumerate(get_monitors()):
-    print(f'  Monitor {i}: {m[\"width\"]}x{m[\"height\"]} at ({m[\"left\"]}, {m[\"top\"]})')
+    print(f'Monitor {i}: {m[\"width\"]}x{m[\"height\"]} at ({m[\"left\"]}, {m[\"top\"]})')
 "
 ```
 
 ## Calibration
 
-Vérifier la qualité du signal avant un transfert :
+Toujours calibrer avant un transfert reel :
 
 ```bash
 hdmi-calibrate --profile balanced loopback 1
 ```
 
-> `--profile` doit être placé **avant** le subcommand `loopback`.
+Regle importante : `--profile` doit etre place avant le subcommand.
 
-| SNR | Qualité | Action |
+Interpretation du SNR :
+
+| SNR | Qualite | Action |
 |-----|---------|--------|
-| > 30 dB | EXCELLENT | Prêt pour les transferts |
-| 20-30 dB | GOOD | OK avec les paramètres par défaut |
-| 10-20 dB | FAIR | Baisser le FPS ou utiliser `--profile quality` |
-| < 10 dB | POOR | Vérifier le câble et la duplication d'écran |
+| > 30 dB | EXCELLENT | setup pret |
+| 20-30 dB | GOOD | utilisable tel quel |
+| 10-20 dB | FAIR | baisser le FPS ou passer en `quality` |
+| < 10 dB | POOR | verifier duplication, cablage et source capture |
 
-## Configuration Elgato
+## Profils recommandes
 
-| Profil | Résolution Elgato | FPS |
-|--------|------------------|-----|
-| `speed` | 1080p | 240 |
-| `balanced` | 1080p | 60 |
-| `quality` | 4K (3840x2160) | 30 |
+| Profil | Resolution | FPS | Quand l'utiliser |
+|--------|------------|-----|------------------|
+| `balanced` | 1080p | 60 | point de depart par defaut |
+| `quality` | 4K | 30 | si le signal est marginal |
+| `speed` | 1080p | 240 | uniquement quand la machine tient la charge |
+
+## Validation manuelle minimale
+
+1. `hdmi-calibrate --profile balanced loopback <capture-index>`
+2. `hdmi-recv <capture-index> --profile balanced`
+3. `hdmi-send test.bin --mode sequential --profile balanced --screen <screen-index>`
+4. `hdmi-send test.bin --mode fountain --profile balanced --screen <screen-index>`
+5. `hdmi-web` puis verification de l'UI receiver et de `/sender/app`
+
+## Symptomes frequents
+
+- Le receiver ne voit rien : mauvais index de capture ou duplication d'ecran absente
+- SNR bas : l'Elgato ne capture pas le bon affichage ou le mauvais cable est utilise
+- Chute de FPS en loopback : sender et receiver se battent pour les memes ressources, revenir a `balanced`
+- Decodage instable : verifier d'abord la calibration, ensuite la taille des blocs et le profil

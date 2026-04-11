@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import argparse
 
-from hdmi_exfil.web.server import create_app
+from hdmi_exfil.interfaces.web import create_app
 
 
 def main() -> None:

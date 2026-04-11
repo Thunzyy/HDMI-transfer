@@ -7,6 +7,7 @@ name = "hdmi-exfil"
 version = "0.1.0"
 description = "Maximum throughput data transfer over HDMI signal encoding"
 requires-python = ">= 3.11"
+readme = "README.md"
 dependencies = [
     "numpy >= 1.24",
     "numba >= 0.60.0",
@@ -38,12 +39,12 @@ dev = [
 ]
 
 [project.scripts]
-hdmi-send = "hdmi_exfil.cli.send:main"
-hdmi-recv = "hdmi_exfil.cli.receive:main"
-hdmi-calibrate = "hdmi_exfil.cli.calibrate:main"
+hdmi-send = "hdmi_exfil.interfaces.cli.send:main"
+hdmi-recv = "hdmi_exfil.interfaces.cli.receive:main"
+hdmi-calibrate = "hdmi_exfil.interfaces.cli.calibrate:main"
 hdmi-bench = "hdmi_exfil.cli.benchmark:main"
-hdmi-sender = "hdmi_exfil.sender.cli.console:main"
-hdmi-receiver = "hdmi_exfil.receiver.cli.console:main"
+hdmi-sender = "hdmi_exfil.interfaces.cli.sender_console:main"
+hdmi-receiver = "hdmi_exfil.interfaces.cli.receiver_console:main"
 hdmi-web = "hdmi_exfil.web.__main__:main"
 
 [tool.setuptools.packages.find]
@@ -51,11 +52,12 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "hdmi_exfil.core" = ["constants.json"]
+"hdmi_exfil.interfaces.browser_sender" = ["*.html", "*.js"]
 "hdmi_exfil.web" = ["static/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["--strict-markers", "-v", "--import-mode=importlib"]
+addopts = ["--strict-markers", "-v", "--import-mode=importlib", "-p", "no:xonsh"]
 markers = [
     "hardware: marks tests requiring Elgato capture card (deselect with '-m \"not hardware\"')",
     "slow: marks tests that take >10s (deselect with '-k \"not slow\"')",

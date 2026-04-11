@@ -25,6 +25,7 @@ import numpy as np
 from hdmi_exfil.core import config
 from hdmi_exfil.core.config import DEFAULT_PROFILE, ResolutionProfile
 from hdmi_exfil.core.prng import PRNG
+from hdmi_exfil.core.protocols.fountain_tuning import DEFAULT_FOUNTAIN_TUNING
 from hdmi_exfil.core.protocols.base import EncodingProtocol, FrameResult
 from hdmi_exfil.core.protocols.degree import robust_soliton_cdf, sample_degree
 from hdmi_exfil.core.protocols.xor_ops import xor_into
@@ -60,10 +61,16 @@ FOUNTAIN_BYTES_PER_FRAME: int = (config.ROWS * config.COLS * 3) // 8  # 12150
 PAYLOAD_SIZE: int = FOUNTAIN_BYTES_PER_FRAME - FOUNT_HEADER_CURRENT_SIZE  # 12134 (v2)
 
 # GE fallback safeguards for large transfers.
-# For very large K, full GE can monopolize CPU and starve capture/progress.
-_GE_MAX_TOTAL_CHUNKS = 2048
-_GE_MAX_UNKNOWNS = 192
-_GE_MIN_INTERVAL_S = 0.35
+_GE_MAX_TOTAL_CHUNKS = DEFAULT_FOUNTAIN_TUNING.ge_max_total_chunks
+_GE_MAX_UNKNOWNS = DEFAULT_FOUNTAIN_TUNING.ge_max_unknowns
+_GE_INTERVAL_UNKNOWN_THRESHOLD = (
+    DEFAULT_FOUNTAIN_TUNING.ge_interval_unknown_threshold
+)
+_GE_MIN_INTERVAL_S = DEFAULT_FOUNTAIN_TUNING.ge_min_interval_s
+_GE_PROGRESS_MIN_GAIN_FLOOR = DEFAULT_FOUNTAIN_TUNING.ge_progress_min_gain_floor
+_GE_PROGRESS_MIN_GAIN_DIVISOR = (
+    DEFAULT_FOUNTAIN_TUNING.ge_progress_min_gain_divisor
+)
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +201,7 @@ class FountainDecoder:
         # Throttle repeated GE attempts only for medium-sized residual systems.
         # Keep tiny systems aggressive to preserve low-overhead behavior.
         now = time.monotonic()
-        if n_unknown > 64:
+        if n_unknown > _GE_INTERVAL_UNKNOWN_THRESHOLD:
             if now - self._last_ge_attempt_s < _GE_MIN_INTERVAL_S:
                 return
 
@@ -202,7 +209,11 @@ class FountainDecoder:
                 unresolved_gain = n_unresolved - self._last_ge_unresolved
                 # If unknown set didn't shrink and unresolved equations barely grew,
                 # a new GE attempt is unlikely to add value.
-                if n_unknown >= self._last_ge_unknown and unresolved_gain < max(6, n_unknown // 24):
+                min_gain = max(
+                    _GE_PROGRESS_MIN_GAIN_FLOOR,
+                    n_unknown // _GE_PROGRESS_MIN_GAIN_DIVISOR,
+                )
+                if n_unknown >= self._last_ge_unknown and unresolved_gain < min_gain:
                     return
 
             self._last_ge_attempt_s = now

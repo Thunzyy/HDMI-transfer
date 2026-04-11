@@ -1,67 +1,61 @@
-# Tests
+# Testing
 
-## Tests unitaires (pas de matériel requis)
+## Gate local canonique
 
-```bash
-pip install -r requirements-dev.txt
-pytest
+Le point d'entree unique pour valider la branche localement est :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/run_quality_gate.ps1
 ```
 
-~300 tests couvrant : encode/decode séquentiel et fountain, PRNG, profils, calibration, capture threadée, tests property-based.
+Le script execute dans l'ordre :
 
-### Commandes utiles
-
-```bash
-pytest -v                          # sortie détaillée
-pytest -k "not slow"               # exclure les tests lents (K>=500)
-pytest tests/test_fountain.py -v   # un fichier spécifique
-```
-
-## Tests hardware (Elgato requis)
-
-```bash
-pytest -m hardware
-```
-
-Les tests marqués `@pytest.mark.hardware` nécessitent une Elgato connectée.
-
-## Benchmark en mémoire
-
-```bash
+```text
+pytest -m "not hardware"
+pytest tests/test_fountain_overhead.py tests/perf/test_fountain_budget.py -v
+python tools/build_sender_html.py --check
 hdmi-bench --profile balanced --mode fountain --no-json
 ```
 
-## Test loopback complet
+## Fallback local optionnel
+
+Le gate complet passe maintenant avec `tests/test_loopback.py` inclus. Le switch `-SkipNativeLoopback` reste disponible uniquement comme secours local si une installation OpenCV est defectueuse sur un poste de dev particulier.
+
+## Commandes ciblees utiles
 
 ```bash
-# Terminal 1 : receiver
-hdmi-recv 1 --profile balanced
-
-# Terminal 2 : sender
-hdmi-send monfichier.zip --mode fountain --profile balanced --screen 0
+pytest tests/contracts -v
+pytest tests/test_send_session.py tests/test_receive_session.py -v
+pytest tests/test_capture_manager.py tests/test_threaded_capture.py -v
+pytest tests/test_web_app_factory.py tests/test_server_receive_file_api.py -v
+pytest tests/test_compat_imports.py -v
+pytest tests/test_sender_build.py tests/test_sender_html_magic.py -v
+pytest tests/test_fountain_overhead.py tests/perf/test_fountain_budget.py -v
 ```
 
-## Résultats validés
+## Validation hardware
 
-Testé sur Windows 11, Elgato 4K X, écran 1080p dupliqué :
+Le hardware n'entre pas dans la CI standard. Il doit etre valide manuellement sur une machine preparee :
 
-| Test | Résultat |
-|------|----------|
-| Calibration loopback | SNR 60.0 dB (EXCELLENT) |
-| Transfert 2.6 KB | SHA-256 OK, 0.14s |
-| Transfert 50 KB | SHA-256 OK, 0.46s, ~110 KB/s |
+1. `hdmi-calibrate --profile balanced loopback <capture-index>`
+2. `hdmi-recv <capture-index> --profile balanced`
+3. `hdmi-send <payload> --mode sequential --profile balanced --screen <screen-index>`
+4. `hdmi-send <payload> --mode fountain --profile balanced --screen <screen-index>`
+5. `hdmi-web`, puis verification des pages `/`, `/sender`, `/history` et `/settings`
 
-## Fichiers de test
+## Ce que couvrent les tests
 
-| Fichier | Contenu |
-|---------|---------|
-| `test_sequential.py` | Protocole séquentiel encode/decode |
-| `test_fountain.py` | Protocole fountain, droplets |
-| `test_fountain_3bpp.py` | Encodage 3 bits par bloc |
-| `test_fountain_ge.py` | Élimination de Gauss (fallback) |
-| `test_prng.py` | SplitMix32 déterminisme |
-| `test_rsd.py` | Robust Soliton Distribution |
-| `test_calibration.py` | Patterns de test, SNR |
-| `test_threaded_capture.py` | Capture threadée ring buffer |
-| `test_profiles.py` | Profils de résolution |
-| `test_properties.py` | Tests property-based (hypothesis) |
+- Contrats protocole et compatibilite Python/browser
+- Sessions shared send/receive
+- Capture manager et backoff sur lecture ratee
+- Interfaces web Flask et wrappers CLI
+- Budgets de performance fountain
+- Compatibilite des imports legacy
+- Proprietes deterministes PRNG/RSD
+
+## Regle de sortie
+
+Une branche n'est pas prete a etre mergee tant que :
+- `tools/run_quality_gate.ps1` ne passe pas
+- `python tools/build_sender_html.py --check` ne passe pas
+- les checks hardware manuels requis n'ont pas ete executes sur une machine equipee
