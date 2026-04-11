@@ -38,12 +38,12 @@ dev = [
 ]
 
 [project.scripts]
-hdmi-send = "hdmi_exfil.cli.send:main"
-hdmi-recv = "hdmi_exfil.cli.receive:main"
-hdmi-calibrate = "hdmi_exfil.cli.calibrate:main"
+hdmi-send = "hdmi_exfil.interfaces.cli.send:main"
+hdmi-recv = "hdmi_exfil.interfaces.cli.receive:main"
+hdmi-calibrate = "hdmi_exfil.interfaces.cli.calibrate:main"
 hdmi-bench = "hdmi_exfil.cli.benchmark:main"
-hdmi-sender = "hdmi_exfil.sender.cli.console:main"
-hdmi-receiver = "hdmi_exfil.receiver.cli.console:main"
+hdmi-sender = "hdmi_exfil.interfaces.cli.sender_console:main"
+hdmi-receiver = "hdmi_exfil.interfaces.cli.receiver_console:main"
 hdmi-web = "hdmi_exfil.web.__main__:main"
 
 [tool.setuptools.packages.find]

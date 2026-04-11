@@ -13,13 +13,37 @@ import pytest
 
 
 # ------------------------------------------------------------------
-# Test 1: Dispatch table covers all menu actions
+# Test 1: Interface entry points exist
+# ------------------------------------------------------------------
+
+
+def test_cli_entry_points_import_from_interfaces_layer():
+    """New interface-layer CLI entry points are importable and callable."""
+    from hdmi_exfil.interfaces.cli.calibrate import main as calibrate_main
+    from hdmi_exfil.interfaces.cli.receive import main as receive_main
+    from hdmi_exfil.interfaces.cli.receiver_console import (
+        main as receiver_console_main,
+    )
+    from hdmi_exfil.interfaces.cli.send import main as send_main
+    from hdmi_exfil.interfaces.cli.sender_console import (
+        main as sender_console_main,
+    )
+
+    assert callable(send_main)
+    assert callable(receive_main)
+    assert callable(calibrate_main)
+    assert callable(sender_console_main)
+    assert callable(receiver_console_main)
+
+
+# ------------------------------------------------------------------
+# Test 2: Dispatch table covers all menu actions
 # ------------------------------------------------------------------
 
 
 def test_dispatch_table_covers_all_actions():
     """Verify every non-Quit menu item has a dispatch handler."""
-    from hdmi_exfil.sender.cli.console import (
+    from hdmi_exfil.interfaces.cli.sender_console import (
         _DISPATCH,
         _MENU_BENCHMARK,
         _MENU_CALIBRATE,
@@ -41,14 +65,14 @@ def test_dispatch_table_covers_all_actions():
 
 
 # ------------------------------------------------------------------
-# Test 2: Detect hardware action
+# Test 3: Detect hardware action
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.sender.cli.console.get_monitors")
+@patch("hdmi_exfil.interfaces.cli.sender_console.get_monitors")
 def test_action_detect(mock_monitors, capsys):
     """_action_detect prints detected monitors."""
-    from hdmi_exfil.sender.cli.console import _action_detect
+    from hdmi_exfil.interfaces.cli.sender_console import _action_detect
 
     mock_monitors.return_value = [
         {"width": 1920, "height": 1080, "left": 0, "top": 0},
@@ -62,16 +86,16 @@ def test_action_detect(mock_monitors, capsys):
 
 
 # ------------------------------------------------------------------
-# Test 3: Send Python collects params and delegates
+# Test 4: Send Python collects params and delegates
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.sender.cli.console.run_send")
-@patch("hdmi_exfil.sender.cli.console.get_monitors")
-@patch("hdmi_exfil.sender.cli.console.inquirer")
+@patch("hdmi_exfil.interfaces.cli.sender_console.run_send")
+@patch("hdmi_exfil.interfaces.cli.sender_console.get_monitors")
+@patch("hdmi_exfil.interfaces.cli.sender_console.inquirer")
 def test_action_send_python(mock_inq, mock_monitors, mock_run_send):
     """_action_send_python collects parameters and calls run_send()."""
-    from hdmi_exfil.sender.cli.console import _action_send_python
+    from hdmi_exfil.interfaces.cli.sender_console import _action_send_python
 
     # Mock single monitor (skips monitor selection prompt)
     mock_monitors.return_value = [
@@ -100,14 +124,14 @@ def test_action_send_python(mock_inq, mock_monitors, mock_run_send):
 
 
 # ------------------------------------------------------------------
-# Test 4: Benchmark action delegates
+# Test 5: Benchmark action delegates
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.sender.cli.console.inquirer")
+@patch("hdmi_exfil.interfaces.cli.sender_console.inquirer")
 def test_action_benchmark(mock_inq):
     """_action_benchmark calls run_benchmark with correct params."""
-    from hdmi_exfil.sender.cli.console import _action_benchmark
+    from hdmi_exfil.interfaces.cli.sender_console import _action_benchmark
 
     mock_select = MagicMock()
     mock_select.execute.side_effect = ["speed", "fountain"]
@@ -126,14 +150,14 @@ def test_action_benchmark(mock_inq):
 
 
 # ------------------------------------------------------------------
-# Test 5: Ctrl-C exits cleanly
+# Test 6: Ctrl-C exits cleanly
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.sender.cli.console._show_main_menu")
+@patch("hdmi_exfil.interfaces.cli.sender_console._show_main_menu")
 def test_main_ctrl_c_exits_cleanly(mock_menu):
     """main() exits cleanly on KeyboardInterrupt without traceback."""
-    from hdmi_exfil.sender.cli.console import main
+    from hdmi_exfil.interfaces.cli.sender_console import main
 
     mock_menu.side_effect = KeyboardInterrupt()
     # Should NOT raise -- exits cleanly
@@ -141,14 +165,14 @@ def test_main_ctrl_c_exits_cleanly(mock_menu):
 
 
 # ------------------------------------------------------------------
-# Test 6: Quit selection breaks loop
+# Test 7: Quit selection breaks loop
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.sender.cli.console._show_main_menu")
+@patch("hdmi_exfil.interfaces.cli.sender_console._show_main_menu")
 def test_main_quit_breaks_loop(mock_menu):
     """Selecting Quit breaks the main loop."""
-    from hdmi_exfil.sender.cli.console import _MENU_QUIT, main
+    from hdmi_exfil.interfaces.cli.sender_console import _MENU_QUIT, main
 
     mock_menu.return_value = _MENU_QUIT
     main()  # Should return normally
@@ -156,14 +180,14 @@ def test_main_quit_breaks_loop(mock_menu):
 
 
 # ------------------------------------------------------------------
-# Test 7: Dispatch dispatches to correct handler
+# Test 8: Dispatch dispatches to correct handler
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.sender.cli.console._show_main_menu")
+@patch("hdmi_exfil.interfaces.cli.sender_console._show_main_menu")
 def test_main_dispatches_action(mock_menu):
     """main() dispatches a menu selection to the correct handler."""
-    from hdmi_exfil.sender.cli.console import (
+    from hdmi_exfil.interfaces.cli.sender_console import (
         _DISPATCH,
         _MENU_DETECT,
         _MENU_QUIT,
