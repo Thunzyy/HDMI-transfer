@@ -15,8 +15,10 @@ from pathlib import Path
 import cv2
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory
 
+from hdmi_exfil.adapters.capture.capture_manager import CaptureManager
+from hdmi_exfil.adapters.capture.device_registry import DeviceRegistry
 from hdmi_exfil.core.config import PROFILES
-from hdmi_exfil.receiver.capture.source import _try_open
+from hdmi_exfil.receiver.capture.source import open_capture
 from hdmi_exfil.web.receiver_worker import ReceiverWorker
 
 log = logging.getLogger(__name__)
@@ -25,6 +27,7 @@ CACHE_FILE = Path(__file__).resolve().parent / ".device_cache.json"
 
 
 def _load_disk_cache() -> list[dict] | None:
+    """Compatibility helper kept for tests and legacy callers."""
     try:
         if CACHE_FILE.exists():
             data = json.loads(CACHE_FILE.read_text())
@@ -36,6 +39,7 @@ def _load_disk_cache() -> list[dict] | None:
 
 
 def _save_disk_cache(devices: list[dict]) -> None:
+    """Compatibility helper kept for tests and legacy callers."""
     try:
         CACHE_FILE.write_text(json.dumps(devices))
     except Exception:
@@ -93,134 +97,22 @@ def create_app(output_dir: str = "received_files") -> Flask:
     app.config["SENDER_HTML"] = str(sender_html)
     app._receiver_worker: ReceiverWorker | None = None
     app._receiver_control_lock = threading.Lock()
-
-    # Device cache: memory + disk
-    app._devices: list[dict] = _load_disk_cache() or []
-    app._devices_lock = threading.Lock()
-
-    # Global device-open lock: prevents _detect_devices and persistent cap
-    # open from fighting over the same MSMF device simultaneously.
-    app._device_open_lock = threading.Lock()
-
-    # Persistent capture — stays open while the web app runs.
-    # Handed to the worker on START, returned on STOP. Zero open delay.
-    app._persistent_cap: cv2.VideoCapture | None = None
-    app._persistent_device_idx: int | None = None
-    app._persistent_backend: int | None = None
-    app._persistent_lock = threading.Lock()
-    app._persistent_ready = threading.Event()
-
-    def _open_persistent(device_idx: int, backend: int) -> None:
-        """Open a device and keep it as the persistent capture."""
-        log.info("[pcap] Opening persistent cap: device=%d backend=%d", device_idx, backend)
-        app._persistent_ready.clear()
-        with app._persistent_lock:
-            old = app._persistent_cap
-            app._persistent_cap = None
-            app._persistent_device_idx = None
-            app._persistent_backend = None
-        if old is not None:
-            log.info("[pcap] Releasing old persistent cap")
-            old.release()
-
-        try:
-            t0 = time.time()
-            with app._device_open_lock:
-                cap = _try_open(device_idx, backend, 1920, 1080, 60)
-            dt = time.time() - t0
-            if cap is not None:
-                with app._persistent_lock:
-                    app._persistent_cap = cap
-                    app._persistent_device_idx = device_idx
-                    app._persistent_backend = backend
-                log.info("[pcap] Persistent cap READY: device=%d (%.1fs)", device_idx, dt)
-            else:
-                log.warning("[pcap] FAILED to open persistent cap: device=%d (%.1fs)", device_idx, dt)
-        finally:
-            app._persistent_ready.set()
-
-    def _open_persistent_bg(device_idx: int, backend: int) -> None:
-        """Open the persistent cap in a background thread."""
-        log.info("[pcap] Starting background open: device=%d", device_idx)
-        threading.Thread(
-            target=_open_persistent,
-            args=(device_idx, backend),
-            daemon=True,
-        ).start()
-
-    def _release_persistent() -> None:
-        """Release the persistent capture."""
-        with app._persistent_lock:
-            cap = app._persistent_cap
-            app._persistent_cap = None
-            app._persistent_device_idx = None
-            app._persistent_backend = None
-        if cap is not None:
-            log.info("[pcap] Releasing persistent cap")
-            cap.release()
-
-    def _take_persistent(device_idx: int) -> tuple[cv2.VideoCapture | None, int | None]:
-        """Take the persistent cap if it matches the requested device.
-
-        Returns (cap, backend) or (None, None).
-        """
-        with app._persistent_lock:
-            log.info("[pcap] _take_persistent: requested=%d, have=%s (cap=%s)",
-                     device_idx, app._persistent_device_idx,
-                     "open" if app._persistent_cap and app._persistent_cap.isOpened() else "none")
-            if app._persistent_device_idx == device_idx and app._persistent_cap is not None:
-                cap = app._persistent_cap
-                backend = app._persistent_backend
-                app._persistent_cap = None
-                app._persistent_device_idx = None
-                app._persistent_backend = None
-                if cap.isOpened():
-                    log.info("[pcap] TAKEN persistent cap for device %d", device_idx)
-                    return cap, backend
-                log.warning("[pcap] Persistent cap was closed, releasing")
-                cap.release()
-        return None, None
-
-    def _return_cap(raw_cap: cv2.VideoCapture) -> None:
-        """Callback: worker returns its cap for reuse."""
-        with app._persistent_lock:
-            old = app._persistent_cap
-            app._persistent_cap = raw_cap
-            # Restore index/backend from what worker used
-            worker = app._receiver_worker
-            if worker is not None:
-                app._persistent_device_idx = worker._device
-                app._persistent_backend = worker._backend
-        if old is not None:
-            old.release()
-        app._persistent_ready.set()
-        log.info("Cap returned from worker — persistent again")
-
-    def _get_backend_for(device_idx: int) -> int | None:
-        """Look up the backend for a device index from the cache."""
-        with app._devices_lock:
-            for d in app._devices:
-                if d["index"] == device_idx:
-                    return d.get("backend")
-        return None
-
-    def _get_device_info(device_idx: int) -> dict | None:
-        """Look up full device entry for a cached device index."""
-        with app._devices_lock:
-            for d in app._devices:
-                if d["index"] == device_idx:
-                    return d
-        return None
+    app._device_registry = DeviceRegistry(CACHE_FILE)
+    preloaded_devices = _load_disk_cache()
+    if preloaded_devices is not None:
+        app._device_registry.replace(preloaded_devices)
+    app._capture_manager = CaptureManager(
+        opener=open_capture,
+        width=1920,
+        height=1080,
+        fps=60,
+        open_lock=app._device_registry.open_lock,
+    )
 
     def _detect_and_cache() -> list[dict]:
-        """Run device detection under the device-open lock and cache results."""
+        """Run device detection under the registry lock and cache results."""
         from hdmi_exfil.receiver.cli.console import _detect_devices
-        with app._device_open_lock:
-            devices = _detect_devices()
-        with app._devices_lock:
-            app._devices = devices
-        _save_disk_cache(devices)
-        return devices
+        return app._device_registry.detect(_detect_devices)
 
     def _resolve_output_file(filename: str) -> tuple[str, str]:
         safe = os.path.basename(filename)
@@ -228,9 +120,13 @@ def create_app(output_dir: str = "received_files") -> Flask:
         return safe, path
 
     # On startup, if we have a disk cache, open persistent cap for first device
-    if app._devices:
-        d0 = app._devices[0]
-        _open_persistent_bg(d0["index"], d0.get("backend", cv2.CAP_MSMF))
+    cached_devices = app._device_registry.list_devices()
+    if cached_devices:
+        d0 = cached_devices[0]
+        app._capture_manager.prime_async(
+            device=d0["index"],
+            backend=d0.get("backend", cv2.CAP_MSMF),
+        )
 
     # ── Page routes ──────────────────────────────────────────────
 
@@ -264,23 +160,29 @@ def create_app(output_dir: str = "received_files") -> Flask:
         force = request.args.get("force", "0") == "1"
         cached_only = request.args.get("cached_only", "0") == "1"
         log.info("[pcap] /api/devices called (force=%s cached_only=%s)", force, cached_only)
-        with app._devices_lock:
-            if app._devices and (cached_only or not force):
-                log.info("[pcap] /api/devices returning %d cached devices", len(app._devices))
-                return jsonify(app._devices)
-            if cached_only:
-                log.info("[pcap] /api/devices cached_only requested and cache empty")
-                return jsonify([])
+        cached_devices = app._device_registry.list_devices()
+        if cached_devices and (cached_only or not force):
+            log.info(
+                "[pcap] /api/devices returning %d cached devices",
+                len(cached_devices),
+            )
+            return jsonify(cached_devices)
+        if cached_only:
+            log.info("[pcap] /api/devices cached_only requested and cache empty")
+            return jsonify([])
 
         # Release persistent cap before detection (avoids camera contention)
         log.info("[pcap] /api/devices: releasing persistent for detection")
-        _release_persistent()
+        app._capture_manager.release()
         devices = _detect_and_cache()
 
         # Open persistent cap for the first device
         if devices:
             d0 = devices[0]
-            _open_persistent(d0["index"], d0.get("backend", cv2.CAP_MSMF))
+            app._capture_manager.prime(
+                device=d0["index"],
+                backend=d0.get("backend", cv2.CAP_MSMF),
+            )
         return jsonify(devices)
 
     @app.route("/api/devices/warm", methods=["POST"])
@@ -289,14 +191,16 @@ def create_app(output_dir: str = "received_files") -> Flask:
         data = request.get_json(force=True)
         device_idx = int(data.get("device", 0))
         log.info("[pcap] /api/devices/warm called: device=%d", device_idx)
-        with app._persistent_lock:
-            if app._persistent_device_idx == device_idx and app._persistent_cap is not None:
-                log.info("[pcap] /api/devices/warm: already open for device %d", device_idx)
-                return jsonify({"status": "already_open"})
-        backend = _get_backend_for(device_idx)
+        if app._capture_manager.is_primed(device=device_idx):
+            log.info(
+                "[pcap] /api/devices/warm: already open for device %d",
+                device_idx,
+            )
+            return jsonify({"status": "already_open"})
+        backend = app._device_registry.get_backend(device_idx)
         if backend is None:
             return jsonify({"status": "unknown_device"}), 400
-        _open_persistent_bg(device_idx, backend)
+        app._capture_manager.prime_async(device=device_idx, backend=backend)
         return jsonify({"status": "opening"})
 
     @app.route("/api/profiles")
@@ -350,8 +254,8 @@ def create_app(output_dir: str = "received_files") -> Flask:
             from dataclasses import replace
             profile = replace(base, bits_per_channel=bpc)
 
-            backend = _get_backend_for(device)
-            device_info = _get_device_info(device)
+            backend = app._device_registry.get_backend(device)
+            device_info = app._device_registry.get_device(device)
 
             decode_device = device
             decode_backend = backend
@@ -371,11 +275,11 @@ def create_app(output_dir: str = "received_files") -> Flask:
                 )
                 # Persistent cap currently tracks MSMF devices; release it before
                 # opening DSHOW to avoid backend contention on the same hardware.
-                _release_persistent()
+                app._capture_manager.release()
 
             # If backend unknown, detect devices now (race-condition fallback)
             if decode_backend is None:
-                _release_persistent()
+                app._capture_manager.release()
                 devices = _detect_and_cache()
                 for d in devices:
                     if d["index"] == device:
@@ -390,20 +294,28 @@ def create_app(output_dir: str = "received_files") -> Flask:
                 ):
                     decode_device = int(device_info["dshow_index"])
                     decode_backend = int(cv2.CAP_DSHOW)
-                    _release_persistent()
+                    app._capture_manager.release()
 
             precap = None
-            on_cap_return = _return_cap
+            on_cap_return = None
             if decode_backend == cv2.CAP_DSHOW:
                 # Do not reuse MSMF persistent capture path with DSHOW workers.
                 on_cap_return = None
             else:
                 # Wait for persistent cap if it's still opening (startup race)
                 log.info("[pcap] START: waiting for persistent_ready (device=%d)...", device)
-                ready = app._persistent_ready.wait(timeout=10.0)
+                ready = app._capture_manager.wait_until_ready(timeout=10.0)
                 log.info("[pcap] START: persistent_ready=%s", ready)
-                precap, _ = _take_persistent(device)
+                precap, _ = app._capture_manager.take(device=device)
                 log.info("[pcap] START: precap=%s", "YES" if precap else "NO")
+                on_cap_return = (
+                    lambda raw_cap, decode_device=decode_device, decode_backend=decode_backend:
+                    app._capture_manager.return_capture(
+                        capture=raw_cap,
+                        device=decode_device,
+                        backend=decode_backend,
+                    )
+                )
 
             worker = ReceiverWorker(
                 device=decode_device, profile=profile,
@@ -422,7 +334,7 @@ def create_app(output_dir: str = "received_files") -> Flask:
             if worker is None or not worker.is_alive():
                 return jsonify({"error": "Not receiving"}), 409
             worker.stop()
-            # Cap is returned via _return_cap callback automatically
+            # Capture is returned via the manager callback automatically.
             return jsonify({"status": "stopped"})
 
     @app.route("/api/receive/reset", methods=["POST"])
@@ -435,7 +347,7 @@ def create_app(output_dir: str = "received_files") -> Flask:
             app._receiver_worker = None
 
             # Tear down any stale persistent handle first.
-            _release_persistent()
+            app._capture_manager.release()
 
             data = request.get_json(silent=True) or {}
             target_device = data.get("device")
@@ -448,7 +360,7 @@ def create_app(output_dir: str = "received_files") -> Flask:
                     target_device = None
 
             if isinstance(target_device, int):
-                backend = _get_backend_for(target_device)
+                backend = app._device_registry.get_backend(target_device)
                 if backend is None:
                     devices = _detect_and_cache()
                     for d in devices:
@@ -456,16 +368,19 @@ def create_app(output_dir: str = "received_files") -> Flask:
                             backend = d.get("backend")
                             break
                 if backend is not None:
-                    _open_persistent_bg(target_device, backend)
+                    app._capture_manager.prime_async(
+                        device=target_device,
+                        backend=backend,
+                    )
                     opened = True
 
             if not opened:
-                with app._devices_lock:
-                    fallback = app._devices[0] if app._devices else None
+                devices = app._device_registry.list_devices()
+                fallback = devices[0] if devices else None
                 if fallback is not None:
-                    _open_persistent_bg(
-                        fallback["index"],
-                        fallback.get("backend", cv2.CAP_MSMF),
+                    app._capture_manager.prime_async(
+                        device=fallback["index"],
+                        backend=fallback.get("backend", cv2.CAP_MSMF),
                     )
                     opened = True
 
@@ -506,12 +421,7 @@ def create_app(output_dir: str = "received_files") -> Flask:
                     last_seq = seq
                 else:
                     # Idle preview: read directly from the persistent capture.
-                    ret = False
-                    frame = None
-                    with app._persistent_lock:
-                        cap = app._persistent_cap
-                        if cap is not None and cap.isOpened():
-                            ret, frame = cap.read()
+                    ret, frame = app._capture_manager.read()
                     if not ret or frame is None:
                         time.sleep(0.05)
                         continue

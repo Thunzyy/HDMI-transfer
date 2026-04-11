@@ -99,6 +99,17 @@ def _try_open(
     return cap
 
 
+def open_capture(
+    source: int | str,
+    backend: int,
+    width: int,
+    height: int,
+    fps: int,
+) -> cv2.VideoCapture | None:
+    """Public wrapper for opening a capture with backend validation."""
+    return _try_open(source, backend, width, height, fps)
+
+
 def _try_open_validated(
     source: int | str,
     backend: int,

@@ -73,12 +73,19 @@ class ThreadedCapture:
         Maximum frames in the ring buffer (default 16).
     """
 
-    def __init__(self, source: object, buffer_size: int = 16) -> None:
+    def __init__(
+        self,
+        source: object,
+        buffer_size: int = 16,
+        *,
+        failed_read_sleep_s: float = 0.005,
+    ) -> None:
         self._source = source
         self._buffer: deque = deque(maxlen=buffer_size)
         self._stopped = False
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._fps_reporter = FPSReporter()
+        self._failed_read_sleep_s = failed_read_sleep_s
 
     def start(self) -> ThreadedCapture:
         """Start the background capture thread."""
@@ -92,6 +99,8 @@ class ThreadedCapture:
             if ret:
                 self._buffer.append(frame)
                 self._fps_reporter.tick()
+            else:
+                time.sleep(self._failed_read_sleep_s)
 
     def read(self) -> tuple[bool, object]:
         """Non-blocking read of the next frame from the buffer.
