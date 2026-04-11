@@ -1,383 +1,172 @@
 # HDMI Exfil
 
-Transfert de fichiers via signal vidéo HDMI. Le sender encode des données dans des frames vidéo affichées à l'écran ; le receiver capture le flux via une carte de capture Elgato et décode le fichier original. Aucune trace réseau -- les données transitent uniquement par le câble HDMI.
+Transfert de fichiers par signal video HDMI. Le sender encode un payload dans des frames affichees sur un ecran, le receiver lit ce signal via une carte de capture et reconstruit le fichier sans canal reseau.
 
-Deux modes d'envoi :
-- **Sender navigateur** (`sender.html`) -- zéro installation, ouvrir dans un navigateur et passer en plein écran
-- **Sender Python** (`hdmi-send`) -- performance maximale, les deux protocoles
+Deux chemins d'envoi restent supportes :
+- `hdmi-send` pour le sender Python
+- `sender.html` pour le sender navigateur genere depuis la meme source protocolaire
 
-## Setup matériel (un seul PC)
+## Architecture
 
-Le projet fonctionne sur **un seul PC** avec une carte de capture en loopback :
+Le projet est maintenant organise autour d'une architecture cible explicite :
 
-```
-  ┌─────────────────────────────────────────────────┐
-  │                    PC unique                     │
-  │                                                  │
-  │   GPU ─── HDMI ──► Écran 2 (affichage sender)   │
-  │    │                                             │
-  │    └───── HDMI ──► Elgato 4K X (capture USB)     │
-  │                        │                         │
-  │                   hdmi-recv lit                   │
-  │                   la capture                     │
-  └─────────────────────────────────────────────────┘
+```text
+src/hdmi_exfil/
+  domain/          Manifest protocolaire canonique
+  application/     Sessions shared send/receive
+  adapters/        Capture manager, registry devices, bridges techniques
+  interfaces/      CLI, web Flask et sender navigateur
+  compat/          Shims legacy testes et uniformes
 ```
 
-| Composant | Détails |
-|-----------|---------|
-| **PC** | Windows/Linux avec GPU + 2 sorties HDMI (ou HDMI + DisplayPort) |
-| **Elgato 4K X** | Carte de capture USB branchée sur le même PC |
-| **Écran 2** | Moniteur secondaire -- l'affichage est **dupliqué** sur l'Elgato |
-| **Câble HDMI** | Sortie GPU -> entrée Elgato (+ un câble vers l'écran 2) |
+Points importants :
+- `hdmi_exfil.domain.protocol_manifest` est la source de verite des profils, headers et constantes partagees.
+- `SendSession` et `ReceiveSession` portent les machines d'etat communes.
+- `sender.html` est un artefact genere par `python tools/build_sender_html.py`, pas une implementation maintenue a la main.
+- Les anciens imports restent disponibles, mais tout nouveau code doit viser les modules canoniques.
 
-### Configuration Windows
-
-1. Ouvrir **Paramètres > Système > Affichage**
-2. L'Elgato apparaît comme un écran supplémentaire dans la liste
-3. Sélectionner l'Elgato et choisir **« Dupliquer avec l'écran 2 »**
-4. L'Elgato reçoit maintenant exactement la même image que l'écran 2
-5. Le sender affiche ses frames sur l'écran 2 (`--screen 0` ou `--screen 1` selon votre config)
-6. Le receiver lit le flux Elgato comme une caméra USB
+Documentation associee :
+- [Architecture](docs/architecture.md)
+- [Migration](docs/migration.md)
+- [Testing](docs/testing.md)
+- [Setup materiel](docs/hardware-setup.md)
 
 ## Installation
 
-Nécessite **Python >= 3.11**.
+Python 3.11+ requis.
 
 ```bash
 git clone git@github.com:Thunzyy/HDMI_exfil.git
 cd HDMI_exfil
 ```
 
-Le package est découpé en extras -- installer uniquement ce dont vous avez besoin :
+Extras disponibles :
 
-| Commande | Ce qu'elle installe | Quand l'utiliser |
-|----------|---------------------|------------------|
-| `pip install -e ".[sender]"` | numpy, numba, pygame-ce, screeninfo | PC qui **envoie** les fichiers |
-| `pip install -e ".[receiver]"` | numpy, numba, opencv-python | PC qui **reçoit** les fichiers |
-| `pip install -e ".[all]"` | sender + receiver | Un seul PC (loopback) |
-| `pip install -e ".[dev]"` | all + pytest, hypothesis | Développement et tests |
+| Commande | Usage |
+|----------|-------|
+| `pip install -e ".[sender]"` | sender Python uniquement |
+| `pip install -e ".[receiver]"` | receiver CLI uniquement |
+| `pip install -e ".[web]"` | web app + capture |
+| `pip install -e ".[all]"` | sender + receiver + web |
+| `pip install -e ".[dev]"` | stack complete + tests |
 
-**Loopback sur un seul PC (cas le plus courant) :**
+Pour un setup loopback sur un seul PC :
 
 ```bash
 pip install -e ".[all]"
 ```
 
-**Important :** le package `opencv-python` (avec GUI) est nécessaire pour l'affichage des fenêtres debug. Si `cv2.imshow` échoue :
+Si `cv2.imshow` ou les fenetres OpenCV echouent, installer la build non-headless :
 
 ```bash
 pip install opencv-python --force-reinstall
 ```
 
-## Démarrage rapide (test loopback un seul PC)
+## Demarrage rapide
 
-### Étape 1 -- Trouver l'index de l'Elgato
+1. Identifier l'index de la carte de capture.
+2. Identifier l'ecran duplique vers cette capture.
+3. Lancer la calibration.
+4. Lancer le receiver puis le sender.
 
-Plusieurs caméras/webcams peuvent être branchées. Il faut trouver quel index correspond à l'Elgato :
-
-```bash
-python -c "
-import cv2
-for i in range(10):
-    cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-    if cap.isOpened():
-        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        print(f'  Index {i}: {w}x{h}')
-        cap.release()
-"
-```
-
-Exemple de sortie :
-
-```
-  Index 0: 1920x1080    <-- Iriun Webcam
-  Index 1: 1920x1080    <-- Elgato 4K X
-  Index 2: 1920x1080    <-- HD Webcam eMeet C960
-  Index 3: 1920x1080    <-- Camera NVIDIA Broadcast
-```
-
-Pour identifier lequel est l'Elgato, utiliser ffmpeg :
-
-```bash
-ffmpeg -list_devices true -f dshow -i dummy 2>&1 | findstr "video"
-```
-
-Retenir l'index de l'Elgato (ex: `1`).
-
-### Étape 2 -- Identifier l'écran dupliqué vers l'Elgato
-
-```bash
-python -c "
-from hdmi_exfil.sender.display.monitors import get_monitors
-for i, m in enumerate(get_monitors()):
-    print(f'  Monitor {i}: {m[\"width\"]}x{m[\"height\"]} at ({m[\"left\"]}, {m[\"top\"]})')
-"
-```
-
-Exemple de sortie :
-
-```
-  Monitor 0: 1920x1080 at (2560, 0)    <-- Écran 2 (dupliqué vers Elgato)
-  Monitor 1: 2560x1080 at (0, 0)       <-- Écran principal (ultrawide)
-```
-
-Retenir l'index du moniteur dupliqué (ex: `0`).
-
-### Étape 3 -- Calibration loopback
-
-Vérifier que l'Elgato capture bien le signal de l'écran dupliqué :
+Commandes minimales :
 
 ```bash
 hdmi-calibrate --profile balanced loopback 1
-```
-
-> **Attention** : `--profile` doit être placé **avant** le subcommand `loopback`.
-
-Résultat attendu :
-
-```
-Calibration Results:
-  Alignment offset: (x, y) pixels
-  SNR: 60.0 dB
-  Signal quality: EXCELLENT
-```
-
-Si le SNR est < 20 dB, l'Elgato ne capture pas le bon écran (vérifier la duplication dans les paramètres d'affichage).
-
-### Étape 4 -- Transférer un fichier
-
-Ouvrir **deux terminaux** :
-
-**Terminal 1 -- Receiver :**
-
-```bash
 hdmi-recv 1 --profile balanced
-```
-
-(remplacer `1` par l'index Elgato trouvé à l'étape 1)
-
-**Terminal 2 -- Sender :**
-
-```bash
 hdmi-send monfichier.zip --mode fountain --profile balanced --screen 0
 ```
 
-(remplacer `0` par l'index moniteur trouvé à l'étape 2)
+Pour le detail materiel complet, voir [docs/hardware-setup.md](docs/hardware-setup.md).
 
-Le sender affiche les frames encodées sur l'écran 2, l'Elgato les capture, et le receiver décode le fichier.
+## Profils
 
-### Étape 5 -- Vérification
+| Profil | Resolution | FPS | Usage |
+|--------|------------|-----|-------|
+| `speed` | 1920x1080 | 240 | debit max, machine dediee |
+| `balanced` | 1920x1080 | 60 | choix recommande pour loopback |
+| `quality` | 3840x2160 | 30 | marge de signal plus large |
 
-Le receiver affiche la progression en temps réel :
-
-```
-Progress: 100% (5/5) | 109.7 KB/s | ETA: 0:00
-Download complete!
-SHA-256 verified OK.
-Saved to received_files/monfichier.zip
-```
-
-Le fichier reçu est dans `received_files/` avec vérification SHA-256.
-
-## Profils de résolution
-
-| Profil | Résolution | FPS | Débit estimé | Usage |
-|--------|-----------|-----|-------------|-------|
-| `speed` (défaut) | 1920x1080 | 240 | ~2.8 MB/s | Débit maximum |
-| `balanced` | 1920x1080 | 60 | ~0.7 MB/s | Fiabilité stable, recommandé pour les tests |
-| `quality` | 3840x2160 | 30 | ~1.4 MB/s | Meilleure marge de signal |
-
-> **Pour les tests sur un seul PC**, commencer avec `balanced` (60 FPS). Le profil `speed` (240 FPS) peut saturer le pipeline si le sender et le receiver tournent sur le même CPU/GPU.
+Sur un seul PC, commencer avec `balanced`.
 
 ## Protocoles
 
 ### Sequential
 
-Frames ordonnées avec cycle START/DATA/END. Fiable sur connexion stable.
+Frames ordonnees avec cycle START/DATA/END.
 
 ```bash
 hdmi-send file.zip --mode sequential --profile balanced --redundancy 3 --screen 0
 hdmi-recv 1 --mode sequential --profile balanced
 ```
 
-### Fountain (LT Codes)
+### Fountain
 
-Codage à effacement sans retour. Le sender émet des droplets XOR en continu ; le receiver collecte jusqu'à reconstitution complète. Pas de canal retour nécessaire -- parfait pour le HDMI unidirectionnel. Tolère les frames perdues.
+Codage a effacement sans canal retour, robuste aux pertes de frames.
 
 ```bash
 hdmi-send file.zip --mode fountain --profile balanced --screen 0
 hdmi-recv 1 --mode fountain --profile balanced
 ```
 
-## Référence CLI
+Les budgets de performance du mode fountain sont maintenant verrouilles par tests.
 
-### hdmi-send
+## Interfaces
 
-```
-hdmi-send <fichier> [OPTIONS]
+CLI publiques :
+- `hdmi-send`
+- `hdmi-recv`
+- `hdmi-calibrate`
+- `hdmi-bench`
+- `hdmi-web`
 
-Options:
-  --mode {sequential,fountain}        Protocole (défaut: sequential)
-  --profile {speed,balanced,quality}  Profil de résolution
-  --renderer {pygame,cv2}             Backend d'affichage (défaut: pygame)
-  --fps INT                           FPS cible (override le profil)
-  --redundancy INT                    Répétition par frame, sequential uniquement (défaut: 1)
-  --fountain-redundancy FLOAT         Arrêt après K*N droplets (ex: 1.05 = 5% overhead)
-  --screen INT                        Index du moniteur (défaut: 0)
-```
-
-### hdmi-recv
-
-```
-hdmi-recv <source> [OPTIONS]
-
-Arguments:
-  source                              Index caméra (0, 1, 2...) ou chemin vidéo
-
-Options:
-  --mode {auto,sequential,fountain}   Protocole (défaut: auto-detect)
-  --profile {speed,balanced,quality}  Doit correspondre au profil du sender
-  --output DIR                        Dossier de sortie (défaut: received_files)
-  --threaded / --no-threaded          Capture threadée avec ring buffer (défaut: on)
-  --buffer-size INT                   Taille du ring buffer (défaut: 16 frames)
-```
-
-### hdmi-calibrate
-
-Tester la qualité du signal avant un transfert.
-
-> **Attention** : `--profile` doit être placé **avant** le subcommand (`send`, `recv`, `loopback`).
-
-```
-hdmi-calibrate [--profile {speed,balanced,quality}] send [--renderer {cv2,pygame}]
-hdmi-calibrate [--profile {speed,balanced,quality}] recv <source> [--frames INT]
-hdmi-calibrate [--profile {speed,balanced,quality}] loopback <source> [--frames INT]
-```
-
-Exemples :
+Sender navigateur :
 
 ```bash
-# Afficher le pattern de calibration
-hdmi-calibrate --profile balanced send
-
-# Capturer et analyser depuis l'Elgato (index 1)
-hdmi-calibrate --profile balanced recv 1
-
-# Loopback complet : afficher + capturer + analyser
-hdmi-calibrate --profile balanced loopback 1
+python tools/build_sender_html.py
+python tools/build_sender_html.py --check
 ```
 
-Résultats : offset d'alignement, SNR en dB, qualité (EXCELLENT > 30 dB, GOOD > 20, FAIR > 10, POOR).
+Le fichier genere est servi par l'interface web sur `/sender/app` et peut aussi etre utilise en standalone.
 
-### hdmi-bench
+## Testing et quality gate
 
-Benchmark de débit en mémoire (pas de matériel requis).
+Commande locale canonique :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/run_quality_gate.ps1
+```
+
+Le gate execute :
+- la suite `pytest` hors tests `hardware`
+- les budgets fountain
+- la verification `python tools/build_sender_html.py --check`
+- un smoke benchmark `hdmi-bench --profile balanced --mode fountain --no-json`
+
+Dans les environnements ou le test loopback OpenCV natif est instable, utiliser :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/run_quality_gate.ps1 -SkipNativeLoopback
+```
+
+Le detail des commandes et de la validation hardware est dans [docs/testing.md](docs/testing.md).
+
+## Compatibilite
+
+Les anciens chemins d'import (`hdmi_exfil.protocols`, `hdmi_exfil.config`, `hdmi_exfil.cli.*`, etc.) continuent de fonctionner via la couche `compat`. Pour identifier les imports legacy a migrer :
 
 ```bash
-hdmi-bench --profile balanced --mode fountain --no-json
+set HDMI_EXFIL_WARN_LEGACY_IMPORTS=1
 ```
 
-```
-Options:
-  --profile {speed,balanced,quality}   Défaut: speed
-  --mode {sequential,fountain}         Défaut: fountain
-  --size INT                           Taille du payload en KB (défaut: 100)
-  --duration FLOAT                     Max secondes pour fountain (défaut: 10)
-  --no-json                            Sortie lisible (pas JSON)
-```
+## Depannage
 
-## Encodage
-
-Chaque bloc de 8x8 pixels encode **3 bits** (1 bit par canal RGB). Canal noir = 0, canal blanc = 255. Une frame 1920x1080 contient 240x135 = 32 400 blocs = 97 200 bits = **12 150 octets** par frame.
-
-Les headers consomment 17 octets (sequential) ou 12 octets (fountain), laissant 12 133 ou 12 138 octets de payload par frame.
-
-## Architecture
-
-Le code est organisé en trois sous-packages : **core** (pas de dépendance hardware), **sender** (pygame-ce) et **receiver** (opencv-python).
-
-```
-src/hdmi_exfil/
-  core/                  Partagé -- numpy + numba uniquement
-    config.py            Constantes, ResolutionProfile, PROFILES
-    constants.json       Source de vérité partagée (Python + JS)
-    prng.py              SplitMix32 PRNG (déterministe cross-language)
-    protocols/
-      base.py            EncodingProtocol ABC
-      sequential.py      Protocole séquentiel (START/DATA/END)
-      fountain.py        Fountain LT codes + FountainDecoder
-      degree.py          Robust Soliton Distribution
-      xor_ops.py         Opérations XOR optimisées
-    capture/
-      sampler.py         Frame -> grille de blocs
-      threaded.py        ThreadedCapture avec ring buffer
-    file_handling/
-      reader.py          Lecture fichier/dossier (auto-zip)
-      writer.py          Écriture fichier de sortie
-      metadata.py        Nom, taille, SHA-256
-    cli/
-      progress.py        ProgressTracker (vitesse, ETA)
-      benchmark.py       Point d'entrée hdmi-bench
-
-  sender/                Dépend de pygame-ce, screeninfo
-    display/
-      renderer.py        PygameRenderer (SDL2)
-      test_patterns.py   Patterns de calibration + analyse SNR
-      monitors.py        Détection multi-moniteur
-    cli/
-      send.py            Point d'entrée hdmi-send
-
-  receiver/              Dépend de opencv-python
-    capture/
-      source.py          CaptureSource (DirectShow / V4L2 / AVFoundation)
-    cli/
-      receive.py         Point d'entrée hdmi-recv
-      calibrate.py       Point d'entrée hdmi-calibrate
-
-sender.html              Sender navigateur fountain (zéro installation)
-```
-
-Les anciens chemins d'import (`hdmi_exfil.protocols`, `hdmi_exfil.config`, etc.) restent fonctionnels via des shims de compatibilité.
-
-## Dépannage
-
-**Le receiver ne reçoit rien :** Vérifier l'index de la capture card. Lancer `hdmi-calibrate --profile balanced loopback 1` pour tester le signal.
-
-**`hdmi-calibrate: error: unrecognized arguments` :** Le `--profile` doit être placé **avant** le subcommand. Écrire `hdmi-calibrate --profile balanced loopback 1` et non `hdmi-calibrate loopback 1 --profile balanced`.
-
-**`cv2.imshow` plante / "The function is not implemented" :** Vous avez `opencv-python-headless`. Installer la version complète : `pip install opencv-python --force-reinstall`.
-
-**L'Elgato n'apparaît pas :** Installer les drivers Elgato (4K Capture Utility). Sous Windows, l'Elgato doit apparaître dans le Gestionnaire de périphériques > Caméras.
-
-**Transferts corrompus :** Baisser le FPS (`--fps 30`), utiliser `--profile quality`, augmenter `--redundancy`, ou passer en mode fountain qui tolère les pertes de frames.
-
-**FPS faible en loopback :** Sur un seul PC le sender et le receiver partagent le CPU/GPU. Utiliser `--profile balanced` (60 FPS) au lieu de `speed` (240 FPS). Fermer les autres applications gourmandes.
-
-**Le sender ne s'affiche pas sur le bon écran :** Vérifier l'index `--screen`. Lancer le script de l'étape 2 pour voir les moniteurs détectés et leurs index.
-
-**SNR < 20 dB à la calibration :** L'Elgato ne capture pas le bon écran. Vérifier que l'affichage est bien dupliqué dans les paramètres Windows. Si le SNR est entre 10-20 dB, essayer `--profile quality` (blocs plus gros).
-
-## Tests validés
-
-### Tests unitaires (pas de matériel requis)
-
-```bash
-pip install -e ".[dev]"   # installe tout + pytest + hypothesis
-pytest                    # 170 tests pass
-hdmi-bench --no-json      # benchmark en mémoire
-```
-
-### Tests loopback hardware (Elgato requis)
-
-Résultats réels obtenus sur un seul PC (Windows 11, Elgato 4K X, écran 1080p dupliqué) :
-
-| Test | Taille | Résultat | Détails |
-|------|--------|----------|---------|
-| Calibration loopback | -- | SNR 60.0 dB (EXCELLENT) | Pattern checkerboard 1080p balanced |
-| Transfert fountain | 2.6 KB | SHA-256 OK | K=1, 2 droplets, 0.14s |
-| Transfert fountain | 50 KB | SHA-256 OK | K=5, 7 droplets, 0.46s, ~110 KB/s |
+Problemes courants :
+- Receiver muet : verifier l'index de capture et refaire `hdmi-calibrate --profile balanced loopback <index>`.
+- `hdmi-calibrate` rejette `--profile` : l'option doit etre placee avant le subcommand.
+- FPS insuffisant en loopback : baisser le profil a `balanced` ou `quality`.
+- SNR faible : verifier la duplication d'ecran vers l'Elgato et le cablage.
 
 ## Licence
 
-Ce projet est destiné à des fins éducatives et de recherche en sécurité autorisée uniquement.
+Projet destine a des fins educatives et de recherche en securite autorisee uniquement.

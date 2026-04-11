@@ -7,6 +7,7 @@ name = "hdmi-exfil"
 version = "0.1.0"
 description = "Maximum throughput data transfer over HDMI signal encoding"
 requires-python = ">= 3.11"
+readme = "README.md"
 dependencies = [
     "numpy >= 1.24",
     "numba >= 0.60.0",
@@ -56,7 +57,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["--strict-markers", "-v", "--import-mode=importlib"]
+addopts = ["--strict-markers", "-v", "--import-mode=importlib", "-p", "no:xonsh"]
 markers = [
     "hardware: marks tests requiring Elgato capture card (deselect with '-m \"not hardware\"')",
     "slow: marks tests that take >10s (deselect with '-k \"not slow\"')",

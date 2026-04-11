@@ -49,6 +49,28 @@ def build_sender_assets(
     return protocol_path, sender_path
 
 
+def check_sender_assets(
+    *,
+    protocol_output: Path = _DEFAULT_PROTOCOL_OUTPUT,
+    sender_output: Path = _DEFAULT_SENDER_OUTPUT,
+) -> list[Path]:
+    """Return generated assets that are missing or out of date."""
+    expected_assets = {
+        protocol_output: render_protocol_javascript(),
+        sender_output: render_sender_html(),
+    }
+    stale_paths: list[Path] = []
+    for path, expected in expected_assets.items():
+        try:
+            actual = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            stale_paths.append(path)
+            continue
+        if actual != expected:
+            stale_paths.append(path)
+    return stale_paths
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Build the standalone browser sender HTML and protocol assets.",
@@ -65,7 +87,24 @@ def main(argv: list[str] | None = None) -> int:
         default=_DEFAULT_PROTOCOL_OUTPUT,
         help="Output path for the generated protocol JavaScript module.",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Check generated assets without rewriting them.",
+    )
     args = parser.parse_args(argv)
+    if args.check:
+        stale_paths = check_sender_assets(
+            protocol_output=args.protocol_output,
+            sender_output=args.sender_output,
+        )
+        if stale_paths:
+            for path in stale_paths:
+                print(f"outdated generated asset: {path}")
+            print("run `python tools/build_sender_html.py` to regenerate them")
+            return 1
+        print("browser sender assets are up to date")
+        return 0
     build_sender_assets(
         protocol_output=args.protocol_output,
         sender_output=args.sender_output,
