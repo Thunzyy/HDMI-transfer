@@ -10,8 +10,8 @@ Functions:
     sample_degree(cdf, prng)   -- Sample a degree from the CDF using PRNG
 
 Constants:
-    DEFAULT_C     = 0.1   -- ripple tuning constant
-    DEFAULT_DELTA = 0.05  -- failure probability bound
+    DEFAULT_C     -- ripple tuning constant from fountain_tuning
+    DEFAULT_DELTA -- failure probability bound from fountain_tuning
 """
 
 from __future__ import annotations
@@ -20,29 +20,20 @@ import bisect
 import math
 from functools import lru_cache
 
+from hdmi_exfil.core.protocols.fountain_tuning import DEFAULT_FOUNTAIN_TUNING
+
 # ---------------------------------------------------------------------------
 # Default parameters
 # ---------------------------------------------------------------------------
 #
-# Tuned parameters (Phase 5, 2026-02-17):
-# Benchmarked with RSD + Gaussian elimination hybrid decoder over 20 runs
-# per K value.  Results (avg overhead = droplets_needed / K):
-#
-#   K=10:   avg overhead ~1.20  (20% -- GE assists small K)
-#   K=50:   avg overhead ~1.06  (6%)
-#   K=100:  avg overhead ~1.02  (2%)
-#   K=500:  avg overhead ~1.01  (1%)
-#   K=1000: avg overhead ~1.003 (0.3%)
-#
-# Target: <10% overhead for K >= 100.  Achieved with c=0.1, delta=0.05.
-# No parameter change needed -- defaults meet all targets.
-# See tests/test_fountain_overhead.py for reproducible benchmarks.
+# RSD defaults are owned by the fountain tuning module.
+# Performance claims belong in tests, not comments.
 # ---------------------------------------------------------------------------
 
-DEFAULT_C: float = 0.1
+DEFAULT_C: float = DEFAULT_FOUNTAIN_TUNING.degree_c
 """Ripple tuning constant for the robust soliton distribution."""
 
-DEFAULT_DELTA: float = 0.05
+DEFAULT_DELTA: float = DEFAULT_FOUNTAIN_TUNING.degree_delta
 """Failure probability bound for the robust soliton distribution."""
 
 
