@@ -21,26 +21,17 @@ import time
 import cv2
 import numpy as np
 
+from hdmi_exfil.application.receive_session import ReceiveSession
 from hdmi_exfil.core.capture.sampler import sample_frame
 from hdmi_exfil.core.cli.progress import ProgressTracker
 from hdmi_exfil.receiver.capture.source import CaptureSource
 from hdmi_exfil.core.capture.threaded import FPSReporter, ThreadedCapture
 from hdmi_exfil.core.config import (
     DEFAULT_PROFILE,
-    FRAME_TYPE_DATA,
-    FRAME_TYPE_END,
-    FRAME_TYPE_START,
     PROFILES,
     ResolutionProfile,
 )
-from hdmi_exfil.core.file_handling.metadata import (
-    parse_fountain_metadata,
-    parse_start_metadata,
-)
-from hdmi_exfil.core.file_handling.writer import verify_integrity, write_output
-from hdmi_exfil.core.protocols import get_protocol
-from hdmi_exfil.core.protocols.fountain import FountainDecoder
-from hdmi_exfil.core.protocols.sequential import TransferState
+from hdmi_exfil.core.file_handling.writer import write_output
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -91,33 +82,31 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 # ------------------------------------------------------------------
-# Sequential receive loop
+# Shared receive loop
 # ------------------------------------------------------------------
 
-def _receive_sequential(
-    seq_protocol: object,
+def _receive_with_session(
     cap: object,
     output_dir: str,
     profile: ResolutionProfile,
+    *,
+    mode: str,
 ) -> None:
-    """Run the sequential receive loop (START -> DATA -> END).
-
-    Accumulates frames across multiple sender passes.  Progress is shown
-    on a single ``\\r``-overwritten line that never resets.
-    """
-    expected_sha256: bytes | None = None
-    expected_file_size: int | None = None
-    expected_filename: str | None = None
-    received_chunks: dict[int, bytes] = {}
-    total_frames_expected: int | None = None
-    start_time: float = time.time()
+    """Run the shared receive loop driven by ``ReceiveSession`` events."""
+    session = ReceiveSession(mode=mode, profile=profile)
     fps_reporter = FPSReporter(report_interval_s=2.0)
     capture_fps_str = ""
-    got_start = False
-    bytes_received = 0
-    pass_count = 0
-
-    print("Sequential mode: capturing frames...")
+    intro_message = {
+        "auto": "Auto mode: probing frames for protocol magic number...",
+        "sequential": "Sequential mode: capturing frames...",
+        "fountain": "Fountain mode: waiting for first valid droplet...",
+    }[mode]
+    print(intro_message)
+    window_name = {
+        "auto": "Receiver (auto-detect)",
+        "sequential": "Receiver View",
+        "fountain": "Receiver Fountain",
+    }[mode]
 
     while True:
         ret, frame = cap.read()
@@ -133,319 +122,144 @@ def _receive_sequential(
             frame = cv2.resize(frame, (profile.width, profile.height))
 
         sampled = sample_frame(frame, profile.rows, profile.cols, profile.block_size)
-        result = seq_protocol.decode_frame(sampled)
-
-        if result.is_valid:
-            ftype = result.frame_type
-            data = result.data
-            total = result.total_frames
-            idx = result.frame_index
-
-            if ftype == FRAME_TYPE_START:
-                if not got_start:
-                    file_size, sha256_hash, filename = parse_start_metadata(data)
-                    if file_size is not None:
-                        expected_sha256 = sha256_hash
-                        expected_file_size = file_size
-                        expected_filename = filename
-                        total_frames_expected = total
-                        got_start = True
-                        print(f"  File: '{filename}' ({file_size} bytes, {total} frames)")
-
-            elif ftype == FRAME_TYPE_DATA:
-                # Accept DATA frames even before START
-                if total_frames_expected is None and total is not None and total > 0:
-                    total_frames_expected = total
-
-                if idx not in received_chunks:
-                    received_chunks[idx] = data
-                    bytes_received += len(data)
-
-                # Single cumulative progress line (\r only, never \n)
-                if total_frames_expected:
-                    count = len(received_chunks)
-                    pct = count / total_frames_expected
-                    elapsed = time.time() - start_time
-                    if elapsed > 2.0 and bytes_received > 0:
-                        speed = bytes_received / elapsed
-                        avg_chunk = bytes_received / count if count else 1
-                        remaining = (total_frames_expected - count) * avg_chunk
-                        eta = remaining / speed if speed > 0 else float("inf")
-                        speed_str = f"{speed / 1024:.1f} KB/s"
-                        eta_str = ProgressTracker._format_eta(eta)
-                    else:
-                        speed_str = "-- KB/s"
-                        eta_str = "--:--"
-                    pass_str = f" | Pass {pass_count + 1}" if pass_count > 0 else ""
-                    sys.stdout.write(
-                        f"\rFrames: {count}/{total_frames_expected} "
-                        f"({pct:.1%}) | {speed_str} | ETA: {eta_str}"
-                        f"{pass_str}{capture_fps_str}    "
-                    )
-                    sys.stdout.flush()
-
-            elif ftype == FRAME_TYPE_END:
-                pass_count += 1
-                if total_frames_expected and len(received_chunks) >= total_frames_expected:
+        events = session.feed_sampled_grid(sampled)
+        for event in events:
+            if event.kind == "status":
+                message = str(event.data.get("message", ""))
+                if message:
+                    prefix = "\n" if event.data.get("state") == "detected" else ""
+                    print(f"{prefix}{message}")
+            elif event.kind == "progress":
+                _print_cli_progress(event.data, capture_fps_str)
+            elif event.kind == "complete":
+                protocol = event.data.get("protocol")
+                if protocol == "sequential":
                     print("\n\nAll frames received. Reassembling...")
-                    _finalize_sequential(
-                        received_chunks, total_frames_expected,
-                        expected_file_size, expected_sha256,
-                        expected_filename, output_dir, start_time,
-                        bytes_per_frame=profile.seq_bytes_per_frame,
-                    )
-                    _print_capture_stats(cap)
-                    break
-                # Missing frames — progress line keeps updating silently
+                else:
+                    print("\nDownload complete!")
+                _handle_cli_complete(event.data, output_dir)
+                _print_capture_stats(cap)
+                cv2.destroyAllWindows()
+                return
 
         # Debug window
         debug_frame = frame.copy()
-        _draw_grid_overlay(
-            debug_frame, sequential=True,
-            rows=profile.rows, cols=profile.cols,
-            block_size=profile.block_size,
-            width=profile.width, height=profile.height,
-        )
-        cv2.imshow("Receiver View", debug_frame)
+        if session.detected_protocol in {"sequential", "fountain"}:
+            _draw_grid_overlay(
+                debug_frame,
+                sequential=(session.detected_protocol == "sequential"),
+                rows=profile.rows,
+                cols=profile.cols,
+                block_size=profile.block_size,
+                width=profile.width,
+                height=profile.height,
+            )
+        cv2.imshow(window_name, debug_frame)
         if cv2.waitKey(1) & 0xFF == 27:
-            if received_chunks and total_frames_expected:
+            partial = session.finalize_partial()
+            if partial is not None:
                 print("\n\nESC pressed. Saving partial transfer...")
-                _finalize_sequential(
-                    received_chunks, total_frames_expected,
-                    expected_file_size, expected_sha256,
-                    expected_filename, output_dir, start_time,
-                    bytes_per_frame=profile.seq_bytes_per_frame,
-                )
+                _handle_cli_complete(partial.data, output_dir)
             break
 
     cv2.destroyAllWindows()
 
 
-def _finalize_sequential(
-    received_chunks: dict[int, bytes],
-    total_frames: int | None,
-    expected_size: int | None,
-    expected_sha256: bytes | None,
-    expected_filename: str | None,
-    output_dir: str,
-    start_time: float | None,
-    *,
-    bytes_per_frame: int,
-) -> None:
-    """Reassemble chunks and save file for sequential transfers."""
-    if total_frames is None or expected_size is None:
-        print("Error: missing transfer metadata.")
+def _print_cli_progress(data: dict[str, object], capture_fps_str: str) -> None:
+    """Render a progress event on the CLI status line."""
+    protocol = data.get("protocol")
+    if protocol == "sequential":
+        total_chunks = int(data.get("total_chunks", 0) or 0)
+        chunks_decoded = int(data.get("chunks_decoded", 0) or 0)
+        percent = (chunks_decoded / total_chunks) if total_chunks else 0.0
+        speed_kbps = float(data.get("speed_kbps", 0) or 0)
+        eta_seconds = float(data.get("eta_seconds", -1) or -1)
+        speed_str = f"{speed_kbps:.1f} KB/s" if speed_kbps > 0 else "-- KB/s"
+        eta_str = (
+            ProgressTracker._format_eta(eta_seconds)
+            if eta_seconds >= 0
+            else "--:--"
+        )
+        pass_count = int(data.get("pass_count", 0) or 0)
+        pass_str = f" | Pass {pass_count + 1}" if pass_count > 0 else ""
+        sys.stdout.write(
+            f"\rFrames: {chunks_decoded}/{total_chunks} ({percent:.1%}) "
+            f"| {speed_str} | ETA: {eta_str}{pass_str}{capture_fps_str}    "
+        )
+        sys.stdout.flush()
         return
 
-    full_data = bytearray()
-    missing: list[int] = []
-    for i in range(total_frames):
-        if i in received_chunks:
-            full_data.extend(received_chunks[i])
-        else:
-            missing.append(i)
-            full_data.extend(b"\x00" * bytes_per_frame)
-
-    if missing:
-        print(f"WARNING: Missing frames: {missing}")
-
-    file_content = bytes(full_data[:expected_size])
-
-    if expected_sha256 and not verify_integrity(file_content, expected_sha256):
-        print("ERROR: SHA-256 MISMATCH -- file corrupted!")
+    total_chunks = int(data.get("total_chunks", 0) or 0)
+    chunks_decoded = int(data.get("chunks_decoded", 0) or 0)
+    percent = float(data.get("percent", 0) or 0)
+    speed_kbps = float(data.get("speed_kbps", 0) or 0)
+    eta_seconds = float(data.get("eta_seconds", -1) or -1)
+    if speed_kbps > 0 and eta_seconds >= 0:
+        extra = (
+            f" | {speed_kbps:.1f} KB/s"
+            f" | ETA: {ProgressTracker._format_eta(eta_seconds)}"
+        )
     else:
-        print("SHA-256 verified OK.")
+        extra = " | ETA: --:--"
+    sys.stdout.write(
+        f"\rProgress: {percent:.1f}% ({chunks_decoded}/{total_chunks})"
+        f"{extra}{capture_fps_str}    "
+    )
+    sys.stdout.flush()
 
-    filename = expected_filename or f"received_{int(time.time())}.bin"
+
+def _handle_cli_complete(
+    data: dict[str, object],
+    output_dir: str,
+) -> None:
+    """Persist a completed receive event and print final stats."""
+    file_content = bytes(data["file_content"])
+    filename = str(data["filename"])
+    protocol = str(data.get("protocol", ""))
+    sha256_available = bool(data.get("sha256_available"))
+    sha256_ok = bool(data.get("sha256_ok"))
+
+    if sha256_available:
+        if sha256_ok:
+            print("SHA-256 verified OK.")
+        else:
+            print("ERROR: SHA-256 MISMATCH -- file corrupted!")
+    elif protocol == "fountain":
+        print("Metadata decode failed. Saving raw payload.")
+
+    missing_frames = data.get("missing_frames")
+    if isinstance(missing_frames, list) and missing_frames:
+        print(f"WARNING: Missing frames: {missing_frames}")
+
     save_path = write_output(file_content, filename, output_dir)
     print(f"Saved to {save_path}")
+    duration = float(data.get("duration_s", 0) or 0)
+    speed = float(data.get("speed_mbps", 0) or 0)
+    print(f"Time: {duration:.2f}s, Speed: {speed:.2f} Mbps")
 
-    if start_time is not None:
-        _print_receive_stats(len(file_content), start_time)
 
-
-# ------------------------------------------------------------------
-# Fountain receive loop
-# ------------------------------------------------------------------
-
-def _receive_fountain(
-    fount_protocol: object,
+def _receive_sequential(
     cap: object,
     output_dir: str,
     profile: ResolutionProfile,
 ) -> None:
-    """Run the fountain receive loop (continuous droplets until complete)."""
-    decoder: FountainDecoder | None = None
-    tracker: ProgressTracker | None = None
-    start_time: float | None = None
-    start_ns: int | None = None
-    bytes_received: int = 0
-    fps_reporter = FPSReporter(report_interval_s=2.0)
-    capture_fps_str = ""
-
-    print("Fountain mode: waiting for first valid droplet...")
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            time.sleep(0.001)  # avoid CPU spin when buffer is empty
-            continue
-
-        fps = fps_reporter.tick()
-        if fps is not None:
-            capture_fps_str = f" | Capture: {fps:.1f} FPS"
-
-        if frame.shape[0] != profile.height or frame.shape[1] != profile.width:
-            frame = cv2.resize(frame, (profile.width, profile.height))
-
-        sampled = sample_frame(frame, profile.rows, profile.cols, profile.block_size)
-        result = fount_protocol.decode_frame(sampled)
-
-        if result.is_valid and result.data is not None:
-            seed = result.frame_index  # fountain uses frame_index as seed
-            K = result.total_frames
-            payload = result.data
-
-            if K is None or K == 0 or K > 60000:
-                continue
-
-            # Initialize decoder on first valid packet
-            if decoder is None:
-                print(f"\nDetected transmission! K={K} chunks.")
-                decoder = FountainDecoder(K, len(payload))
-                start_time = time.time()
-                start_ns = time.perf_counter_ns()
-                estimated_bytes = K * len(payload)
-                tracker = ProgressTracker(K, estimated_bytes)
-
-            if decoder.K == K:
-                decoder.add_droplet(seed, payload)
-                bytes_received += len(payload)
-                progress = len(decoder.chunks) / K
-
-                # Build speed/ETA string using ProgressTracker
-                if tracker is not None and start_ns is not None:
-                    elapsed = time.perf_counter_ns() - start_ns
-                    if elapsed > 2e9:  # after 2s warmup
-                        speed = bytes_received / (elapsed / 1e9)
-                        remaining = (K - len(decoder.chunks)) * len(payload)
-                        eta = remaining / speed if speed > 0 else float("inf")
-                        eta_str = (
-                            f" | {speed / 1024:.1f} KB/s"
-                            f" | ETA: {ProgressTracker._format_eta(eta)}"
-                        )
-                    else:
-                        eta_str = " | ETA: --:--"
-                else:
-                    eta_str = ""
-
-                sys.stdout.write(
-                    f"\rProgress: {progress:.1%} ({len(decoder.chunks)}/{K})"
-                    f"{eta_str}{capture_fps_str}"
-                )
-                sys.stdout.flush()
-
-                if decoder.is_complete():
-                    print("\nDownload complete!")
-                    _finalize_fountain(decoder, output_dir, start_time)
-                    _print_capture_stats(cap)
-                    break
-
-        # Debug window
-        debug_frame = frame.copy()
-        _draw_grid_overlay(
-            debug_frame, sequential=False,
-            rows=profile.rows, cols=profile.cols,
-            block_size=profile.block_size,
-            width=profile.width, height=profile.height,
-        )
-        cv2.imshow("Receiver Fountain", debug_frame)
-        if cv2.waitKey(1) & 0xFF == 27:
-            break
-
-    cv2.destroyAllWindows()
+    _receive_with_session(cap, output_dir, profile, mode="sequential")
 
 
-def _finalize_fountain(
-    decoder: FountainDecoder,
+def _receive_fountain(
+    cap: object,
     output_dir: str,
-    start_time: float | None,
+    profile: ResolutionProfile,
 ) -> None:
-    """Parse metadata, verify integrity, and save file for fountain transfers."""
-    full_data = decoder.get_file_data()
+    _receive_with_session(cap, output_dir, profile, mode="fountain")
 
-    file_size, expected_sha256, filename, content_offset = parse_fountain_metadata(
-        full_data,
-    )
-
-    if file_size is not None and filename is not None:
-        file_content = bytes(full_data[content_offset:content_offset + file_size])
-
-        if expected_sha256 and not verify_integrity(file_content, expected_sha256):
-            print("ERROR: SHA-256 MISMATCH -- file corrupted!")
-        else:
-            print("SHA-256 verified OK.")
-
-        print(f"Detected filename: {filename} ({file_size} bytes)")
-    else:
-        print("Metadata decode failed. Saving raw payload.")
-        file_content = bytes(full_data)
-        filename = f"received_{int(time.time())}.bin"
-
-    save_path = write_output(file_content, filename, output_dir)
-    print(f"Saved to {save_path}")
-
-    if start_time is not None:
-        _print_receive_stats(len(file_content), start_time)
-
-
-# ------------------------------------------------------------------
-# Auto-detect mode
-# ------------------------------------------------------------------
 
 def _receive_auto(
     cap: object,
     output_dir: str,
     profile: ResolutionProfile,
 ) -> None:
-    """Auto-detect protocol from magic number and delegate."""
-    seq = get_protocol("sequential", profile=profile)
-    fount = get_protocol("fountain", profile=profile)
-
-    print("Auto mode: probing frames for protocol magic number...")
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            time.sleep(0.001)  # avoid CPU spin when buffer is empty
-            continue
-
-        if frame.shape[0] != profile.height or frame.shape[1] != profile.width:
-            frame = cv2.resize(frame, (profile.width, profile.height))
-
-        sampled = sample_frame(frame, profile.rows, profile.cols, profile.block_size)
-
-        # Try sequential first (3-bit encoding)
-        seq_result = seq.decode_frame(sampled)
-        if seq_result.is_valid:
-            print("Detected SEQUENTIAL protocol.")
-            _receive_sequential(seq, cap, output_dir, profile)
-            return
-
-        # Try fountain (3-bit encoding)
-        fount_result = fount.decode_frame(sampled)
-        if fount_result.is_valid:
-            print("Detected FOUNTAIN protocol.")
-            _receive_fountain(fount, cap, output_dir, profile)
-            return
-
-        # Debug window while probing
-        debug_frame = frame.copy()
-        cv2.imshow("Receiver (auto-detect)", debug_frame)
-        if cv2.waitKey(1) & 0xFF == 27:
-            break
-
-    cv2.destroyAllWindows()
+    _receive_with_session(cap, output_dir, profile, mode="auto")
 
 
 # ------------------------------------------------------------------
@@ -498,11 +312,9 @@ def _run_receiver(
     if mode == "auto":
         _receive_auto(source, output, profile)
     elif mode == "sequential":
-        seq = get_protocol("sequential", profile=profile)
-        _receive_sequential(seq, source, output, profile)
+        _receive_sequential(source, output, profile)
     else:
-        fount = get_protocol("fountain", profile=profile)
-        _receive_fountain(fount, source, output, profile)
+        _receive_fountain(source, output, profile)
 
 
 # ------------------------------------------------------------------
