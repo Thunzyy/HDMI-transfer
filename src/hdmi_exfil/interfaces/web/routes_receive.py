@@ -10,6 +10,10 @@ from dataclasses import replace
 
 from flask import Flask, Response, jsonify, request
 
+from hdmi_exfil.adapters.capture.device_registry import (
+    list_device_open_targets,
+    resolve_device_open_target,
+)
 from hdmi_exfil.core.config import PROFILES
 
 from .preview_stream import create_preview_response
@@ -58,43 +62,37 @@ def register_receive_routes(app: Flask) -> None:
             profile = replace(base_profile, bits_per_channel=bpc)
             backend = app._device_registry.get_backend(device)
             device_info = app._device_registry.get_device(device)
-
             decode_device = device
             decode_backend = backend
-            prefer_dshow = bool(
-                sys.platform == "win32"
-                and device_info is not None
-                and device_info.get("prefer_dshow")
-                and device_info.get("dshow_index") is not None
-            )
-            if prefer_dshow:
-                decode_device = int(device_info["dshow_index"])
-                decode_backend = int(cv2.CAP_DSHOW)
-                log.info(
-                    "[pcap] START: using DSHOW path for capture card "
-                    "(logical_index=%d -> dshow_index=%d)",
-                    device,
-                    decode_device,
-                )
-                app._capture_manager.release()
+            fallback_targets: list[tuple[int, int | None]] = []
+            if device_info is not None:
+                targets = list_device_open_targets(device_info)
+                decode_device, decode_backend = targets[0]
+                fallback_targets = targets[1:]
+                if decode_device != device or decode_backend != backend:
+                    log.info(
+                        "[pcap] START: remapped capture target "
+                        "(logical_index=%d -> open_index=%d, backend=%s)",
+                        device,
+                        decode_device,
+                        decode_backend,
+                    )
+                if decode_backend == int(cv2.CAP_DSHOW):
+                    app._capture_manager.release()
 
             if decode_backend is None:
                 app._capture_manager.release()
                 devices = app._detect_and_cache()
                 for detected in devices:
                     if detected["index"] == device:
-                        decode_backend = detected.get("backend")
                         device_info = detected
                         break
-                if (
-                    sys.platform == "win32"
-                    and device_info is not None
-                    and device_info.get("prefer_dshow")
-                    and device_info.get("dshow_index") is not None
-                ):
-                    decode_device = int(device_info["dshow_index"])
-                    decode_backend = int(cv2.CAP_DSHOW)
-                    app._capture_manager.release()
+                if device_info is not None:
+                    targets = list_device_open_targets(device_info)
+                    decode_device, decode_backend = targets[0]
+                    fallback_targets = targets[1:]
+                    if decode_backend == int(cv2.CAP_DSHOW):
+                        app._capture_manager.release()
 
             precap = None
             on_cap_return = None
@@ -108,7 +106,8 @@ def register_receive_routes(app: Flask) -> None:
                     lambda raw_cap, decode_device=decode_device, decode_backend=decode_backend:
                     app._capture_manager.return_capture(
                         capture=raw_cap,
-                        device=decode_device,
+                        device=device,
+                        open_device=decode_device,
                         backend=decode_backend,
                     )
                 )
@@ -123,6 +122,7 @@ def register_receive_routes(app: Flask) -> None:
                 backend=decode_backend,
                 precap=precap,
                 on_cap_return=on_cap_return,
+                fallback_targets=fallback_targets,
             )
             app._receiver_worker = worker
             worker.start()
@@ -160,16 +160,22 @@ def register_receive_routes(app: Flask) -> None:
                     target_device = None
 
             if isinstance(target_device, int):
-                backend = app._device_registry.get_backend(target_device)
+                device_info = app._device_registry.get_device(target_device)
+                backend = None
+                open_device = target_device
+                if device_info is not None:
+                    open_device, backend = resolve_device_open_target(device_info)
                 if backend is None:
                     devices = app._detect_and_cache()
                     for detected in devices:
                         if detected["index"] == target_device:
-                            backend = detected.get("backend")
+                            device_info = detected
+                            open_device, backend = resolve_device_open_target(detected)
                             break
                 if backend is not None:
                     app._capture_manager.prime_async(
                         device=target_device,
+                        open_device=open_device,
                         backend=backend,
                     )
                     opened = True
@@ -178,9 +184,11 @@ def register_receive_routes(app: Flask) -> None:
                 devices = app._device_registry.list_devices()
                 fallback = devices[0] if devices else None
                 if fallback is not None:
+                    open_device, backend = resolve_device_open_target(fallback)
                     app._capture_manager.prime_async(
                         device=fallback["index"],
-                        backend=fallback.get("backend", cv2.CAP_MSMF),
+                        open_device=open_device,
+                        backend=int(backend or cv2.CAP_MSMF),
                     )
                     opened = True
 

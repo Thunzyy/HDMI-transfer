@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import cv2
 import numpy as np
 
 from hdmi_exfil.core.config import FRAME_TYPE_DATA, PROFILES
@@ -15,6 +16,22 @@ class _FakeCap:
 
     def read(self) -> tuple[bool, np.ndarray]:
         return True, self._frame.copy()
+
+
+class _IdleCaptureSource:
+    def __init__(self, source, width, height, fps, backend=None, **kwargs) -> None:
+        self.actual_width = width
+        self.actual_height = height
+        self.actual_fps = float(fps)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def detach(self):
+        return None
 
 
 def test_reassemble_sequential_data_preserves_partial_last_chunk() -> None:
@@ -102,3 +119,47 @@ def test_sequential_finalizes_after_wrap_without_end_frame(
     assert complete["data"]["save_path"] == str(tmp_path / saved["filename"])
     assert saved["file_content"] == (b"A" * 8) + (b"B" * 4)
     assert saved["output_dir"] == str(tmp_path)
+
+
+def test_worker_retries_alternate_capture_target_when_runtime_fallback_requested(
+    monkeypatch,
+) -> None:
+    profile = replace(PROFILES["balanced"], bits_per_channel=1)
+    worker = ReceiverWorker(
+        device=1,
+        profile=profile,
+        mode="sequential",
+        backend=int(cv2.CAP_DSHOW),
+        fallback_targets=[(0, int(cv2.CAP_MSMF))],
+    )
+
+    open_attempts: list[tuple[int, int | None]] = []
+    events: list[tuple[str, dict]] = []
+    attempts = {"count": 0}
+
+    class FakeCaptureSource(_IdleCaptureSource):
+        def __init__(self, source, width, height, fps, backend=None, **kwargs) -> None:
+            open_attempts.append((source, backend))
+            super().__init__(source, width, height, fps, backend=backend, **kwargs)
+
+    def fake_run_sequential(cap) -> None:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            worker._request_capture_fallback("retry")
+        worker._publish("complete", {"filename": "ok.bin"})
+
+    monkeypatch.setattr("hdmi_exfil.web.receiver_worker.CaptureSource", FakeCaptureSource)
+    monkeypatch.setattr(worker, "_run_sequential", fake_run_sequential)
+    worker._publish = lambda event_type, data: events.append((event_type, data))
+
+    worker.run()
+
+    assert open_attempts == [
+        (1, int(cv2.CAP_DSHOW)),
+        (0, int(cv2.CAP_MSMF)),
+    ]
+    assert any(
+        event_type == "status" and data.get("state") == "fallback"
+        for event_type, data in events
+    )
+    assert events[-1] == ("complete", {"filename": "ok.bin"})

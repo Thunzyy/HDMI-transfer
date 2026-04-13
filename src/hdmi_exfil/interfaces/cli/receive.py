@@ -15,14 +15,21 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import os
+import queue
 import sys
 import time
 
 import cv2
 import numpy as np
 
+from hdmi_exfil.adapters.capture.resolver import resolve_capture_target
+from hdmi_exfil.application.receive_geometry import (
+    build_geometry_candidates,
+    decode_with_sampling_fallbacks,
+    ensure_frame_size,
+)
 from hdmi_exfil.application.receive_session import ReceiveSession
-from hdmi_exfil.core.capture.sampler import sample_frame
 from hdmi_exfil.core.cli.progress import ProgressTracker
 from hdmi_exfil.receiver.capture.source import CaptureSource
 from hdmi_exfil.core.capture.threaded import FPSReporter, ThreadedCapture
@@ -41,7 +48,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "source",
-        help="Video source (camera index e.g. '0' or file path)",
+        help=(
+            "Video source: logical capture id (e.g. '0'), "
+            "'raw:1' to force an OpenCV index, 'name:Elgato' to match by name, "
+            "or a file path"
+        ),
     )
     parser.add_argument(
         "--output",
@@ -96,6 +107,12 @@ def _receive_with_session(
     session = ReceiveSession(mode=mode, profile=profile)
     fps_reporter = FPSReporter(report_interval_s=2.0)
     capture_fps_str = ""
+    preview_enabled = _preview_enabled()
+    geometry_candidates = build_geometry_candidates(profile)
+    geometry_cursor = 0
+    sampling = (0, 0, 1.0, 1.0)
+    sequential_protocol = session._sequential_protocol
+    fountain_protocol = session._fountain_protocol
     intro_message = {
         "auto": "Auto mode: probing frames for protocol magic number...",
         "sequential": "Sequential mode: capturing frames...",
@@ -118,11 +135,62 @@ def _receive_with_session(
         if fps is not None:
             capture_fps_str = f" | Capture: {fps:.1f} FPS"
 
-        if frame.shape[0] != profile.height or frame.shape[1] != profile.width:
-            frame = cv2.resize(frame, (profile.width, profile.height))
+        frame = ensure_frame_size(frame, profile)
+        events = []
 
-        sampled = sample_frame(frame, profile.rows, profile.cols, profile.block_size)
-        events = session.feed_sampled_grid(sampled)
+        if mode == "sequential":
+            result, geometry_cursor, matched_sampling = decode_with_sampling_fallbacks(
+                frame,
+                profile,
+                sequential_protocol.decode_frame,
+                sampling,
+                geometry_candidates,
+                geometry_cursor,
+            )
+            if matched_sampling is not None:
+                sampling = matched_sampling
+            if result is not None and result.is_valid:
+                events = session.feed_frame_result("sequential", result)
+        elif mode == "fountain":
+            result, geometry_cursor, matched_sampling = decode_with_sampling_fallbacks(
+                frame,
+                profile,
+                fountain_protocol.decode_frame,
+                sampling,
+                geometry_candidates,
+                geometry_cursor,
+            )
+            if matched_sampling is not None:
+                sampling = matched_sampling
+            if result is not None and result.is_valid:
+                events = session.feed_frame_result("fountain", result)
+        else:
+            protocol_order = (
+                [("sequential", sequential_protocol)]
+                if session.detected_protocol == "sequential"
+                else [("fountain", fountain_protocol)]
+                if session.detected_protocol == "fountain"
+                else [
+                    ("sequential", sequential_protocol),
+                    ("fountain", fountain_protocol),
+                ]
+            )
+
+            for protocol_name, protocol in protocol_order:
+                result, geometry_cursor, matched_sampling = decode_with_sampling_fallbacks(
+                    frame,
+                    profile,
+                    protocol.decode_frame,
+                    sampling,
+                    geometry_candidates,
+                    geometry_cursor,
+                )
+                if matched_sampling is not None:
+                    sampling = matched_sampling
+                if result is not None and result.is_valid:
+                    events = session.feed_frame_result(protocol_name, result)
+                    break
+
         for event in events:
             if event.kind == "status":
                 message = str(event.data.get("message", ""))
@@ -142,27 +210,28 @@ def _receive_with_session(
                 cv2.destroyAllWindows()
                 return
 
-        # Debug window
-        debug_frame = frame.copy()
-        if session.detected_protocol in {"sequential", "fountain"}:
-            _draw_grid_overlay(
-                debug_frame,
-                sequential=(session.detected_protocol == "sequential"),
-                rows=profile.rows,
-                cols=profile.cols,
-                block_size=profile.block_size,
-                width=profile.width,
-                height=profile.height,
-            )
-        cv2.imshow(window_name, debug_frame)
-        if cv2.waitKey(1) & 0xFF == 27:
-            partial = session.finalize_partial()
-            if partial is not None:
-                print("\n\nESC pressed. Saving partial transfer...")
-                _handle_cli_complete(partial.data, output_dir)
-            break
+        if preview_enabled:
+            debug_frame = frame.copy()
+            if session.detected_protocol in {"sequential", "fountain"}:
+                _draw_grid_overlay(
+                    debug_frame,
+                    sequential=(session.detected_protocol == "sequential"),
+                    rows=profile.rows,
+                    cols=profile.cols,
+                    block_size=profile.block_size,
+                    width=profile.width,
+                    height=profile.height,
+                )
+            cv2.imshow(window_name, debug_frame)
+            if cv2.waitKey(1) & 0xFF == 27:
+                partial = session.finalize_partial()
+                if partial is not None:
+                    print("\n\nESC pressed. Saving partial transfer...")
+                    _handle_cli_complete(partial.data, output_dir)
+                break
 
-    cv2.destroyAllWindows()
+    if preview_enabled:
+        cv2.destroyAllWindows()
 
 
 def _print_cli_progress(data: dict[str, object], capture_fps_str: str) -> None:
@@ -238,6 +307,32 @@ def _handle_cli_complete(
     print(f"Time: {duration:.2f}s, Speed: {speed:.2f} Mbps")
 
 
+def _handle_cli_worker_complete(data: dict[str, object]) -> None:
+    """Render a completion event already persisted by ``ReceiverWorker``."""
+    protocol = str(data.get("protocol", ""))
+    sha256_available = bool(data.get("sha256_available"))
+    sha256_ok = bool(data.get("sha256_ok"))
+
+    if sha256_available:
+        if sha256_ok:
+            print("SHA-256 verified OK.")
+        else:
+            print("ERROR: SHA-256 MISMATCH -- file corrupted!")
+    elif protocol == "fountain":
+        print("Metadata decode failed. Saving raw payload.")
+
+    missing_frames = data.get("missing_frames")
+    if isinstance(missing_frames, list) and missing_frames:
+        print(f"WARNING: Missing frames: {missing_frames}")
+
+    save_path = str(data.get("save_path", ""))
+    if save_path:
+        print(f"Saved to {save_path}")
+    duration = float(data.get("duration_s", 0) or 0)
+    speed = float(data.get("speed_mbps", 0) or 0)
+    print(f"Time: {duration:.2f}s, Speed: {speed:.2f} Mbps")
+
+
 def _receive_sequential(
     cap: object,
     output_dir: str,
@@ -288,6 +383,14 @@ def _draw_grid_overlay(
         cv2.line(frame, (x, 0), (x, height), color, 1)
 
 
+def _preview_enabled() -> bool:
+    """Enable the debug preview only for interactive terminals by default."""
+    raw = os.environ.get("HDMI_EXFIL_RECEIVER_PREVIEW")
+    if raw is not None:
+        return raw.strip().casefold() not in {"0", "false", "no", "off"}
+    return bool(sys.stdin.isatty() and sys.stdout.isatty())
+
+
 def _print_receive_stats(total_bytes: int, start_time: float) -> None:
     """Print timing and throughput statistics."""
     duration = time.time() - start_time
@@ -315,6 +418,66 @@ def _run_receiver(
         _receive_sequential(source, output, profile)
     else:
         _receive_fountain(source, output, profile)
+
+
+def _run_receiver_worker(
+    *,
+    resolved_source,
+    mode: str,
+    output: str,
+    profile: ResolutionProfile,
+) -> None:
+    """Run the validated web receiver worker as the CLI capture engine."""
+    from hdmi_exfil.web.receiver_worker import ReceiverWorker
+
+    worker = ReceiverWorker(
+        device=resolved_source.open_source,
+        profile=profile,
+        mode=mode,
+        output_dir=output,
+        backend=resolved_source.backend,
+        fallback_targets=list(resolved_source.fallback_targets),
+    )
+    event_queue = worker.subscribe()
+    worker.start()
+
+    try:
+        while True:
+            try:
+                event = event_queue.get(timeout=1.0)
+            except queue.Empty:
+                if not worker.is_alive():
+                    print("Receiver worker ended without completion event.")
+                    return
+                continue
+
+            event_type = event["type"]
+            data = event["data"]
+            if event_type == "status":
+                message = str(data.get("message", ""))
+                if message:
+                    prefix = "\n" if data.get("state") == "detected" else ""
+                    print(f"{prefix}{message}")
+            elif event_type == "progress":
+                _print_cli_progress(data, "")
+            elif event_type == "complete":
+                protocol = data.get("protocol")
+                if protocol == "sequential":
+                    print("\n\nAll frames received. Reassembling...")
+                else:
+                    print("\nDownload complete!")
+                _handle_cli_worker_complete(data)
+                return
+            elif event_type == "error":
+                print(f"\nError: {data.get('message', 'Unknown receiver error')}")
+                return
+            elif event_type == "stopped":
+                print(f"\n{data.get('message', 'Stopped')}")
+                return
+    except KeyboardInterrupt:
+        print("\nStopping receiver...")
+    finally:
+        worker.stop()
 
 
 # ------------------------------------------------------------------
@@ -351,16 +514,21 @@ def run_receive(
     """
     profile = profile or DEFAULT_PROFILE
 
-    # Parse source: numeric string -> camera index
-    if isinstance(source, str) and source.isdigit():
-        source = int(source)
+    try:
+        resolved = resolve_capture_target(source)
+    except RuntimeError as exc:
+        print(f"Error: {exc}")
+        return
 
-    print(f"Opening video source: {source}")
+    print(resolved.describe())
 
     try:
         cap = CaptureSource(
-            source, width=profile.width, height=profile.height,
+            resolved.open_source,
+            width=profile.width,
+            height=profile.height,
             fps=profile.target_fps,
+            backend=resolved.backend,
         )
     except RuntimeError as exc:
         print(f"Error: {exc}")
@@ -370,6 +538,17 @@ def run_receive(
         f"Camera: {cap.actual_width}x{cap.actual_height} "
         f"@ {cap.actual_fps} FPS"
     )
+
+    if resolved.backend is not None:
+        cap.release()
+        print("Using unified receiver worker path for resolved capture device.")
+        _run_receiver_worker(
+            resolved_source=resolved,
+            mode=mode,
+            output=output,
+            profile=profile,
+        )
+        return
 
     with cap:
         if threaded:

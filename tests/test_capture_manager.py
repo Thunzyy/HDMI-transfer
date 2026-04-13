@@ -42,3 +42,23 @@ def test_capture_manager_release_clears_persistent_handle() -> None:
     assert taken_capture is None
     assert backend is None
     assert capture.released is True
+
+
+def test_capture_manager_opens_distinct_open_source_for_logical_device() -> None:
+    from hdmi_exfil.adapters.capture.capture_manager import CaptureManager
+
+    calls = []
+    capture = _FakeCapture()
+
+    def opener(device, backend, width, height, fps):
+        calls.append((device, backend, width, height, fps))
+        return capture
+
+    manager = CaptureManager(opener=opener)
+
+    manager.prime(device=7, open_device=1, backend=42)
+    taken_capture, backend = manager.take(device=7)
+
+    assert calls == [(1, 42, 1920, 1080, 60)]
+    assert taken_capture is capture
+    assert backend == 42

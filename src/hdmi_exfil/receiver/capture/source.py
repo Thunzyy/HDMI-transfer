@@ -83,16 +83,17 @@ def _try_open(
         return None
 
     # DSHOW-specific: if resolution jumped from a low default after set(),
-    # the driver may be lying (claims 1920x1080 but delivers all-zero frames).
-    # Read several test frames to catch this.
+    # the driver may be lying. Require at least one readable frame, but do
+    # not reject valid all-black frames because capture cards legitimately
+    # output black while waiting for HDMI signal.
     if backend == cv2.CAP_DSHOW and pre_w <= 640 and pre_h <= 480 and actual_w > 640:
-        all_zero = True
+        got_frame = False
         for _ in range(8):
             ret, frame = cap.read()
-            if ret and isinstance(frame, np.ndarray) and frame.max() > 0:
-                all_zero = False
+            if ret and isinstance(frame, np.ndarray):
+                got_frame = True
                 break
-        if all_zero:
+        if not got_frame:
             cap.release()
             return None
 

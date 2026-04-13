@@ -93,7 +93,10 @@ def create_app(
         import cv2
 
         from hdmi_exfil.adapters.capture.capture_manager import CaptureManager
-        from hdmi_exfil.adapters.capture.device_registry import DeviceRegistry
+        from hdmi_exfil.adapters.capture.device_registry import (
+            DeviceRegistry,
+            resolve_device_open_target,
+        )
         from hdmi_exfil.receiver.capture.source import open_capture
 
         app._device_registry = DeviceRegistry(CACHE_FILE)
@@ -120,9 +123,11 @@ def create_app(
         cached_devices = app._device_registry.list_devices()
         if cached_devices:
             device = cached_devices[0]
+            open_device, backend = resolve_device_open_target(device)
             app._capture_manager.prime_async(
                 device=device["index"],
-                backend=device.get("backend", cv2.CAP_MSMF),
+                open_device=open_device,
+                backend=int(backend or cv2.CAP_MSMF),
             )
     else:
         app._device_registry = None

@@ -22,6 +22,7 @@ from InquirerPy import inquirer
 from InquirerPy.separator import Separator
 
 from hdmi_exfil.adapters.capture.device_registry import detect_devices
+from hdmi_exfil.adapters.capture.resolver import resolve_saved_capture_target
 from hdmi_exfil.core.config import PROFILES, ResolutionProfile
 from hdmi_exfil.core import settings
 from hdmi_exfil.interfaces.cli.receive import run_receive
@@ -164,20 +165,21 @@ def _action_receive() -> None:
     saved_index = cfg.get("device_index")
     if saved_name and saved_index is not None:
         try:
-            from hdmi_exfil.receiver.capture.source import CaptureSource
-
             with _suppress_stderr():
-                cap = CaptureSource(
-                    saved_index,
-                    width=profile.width,
-                    height=profile.height,
-                    fps=profile.target_fps,
+                resolved = resolve_saved_capture_target(
+                    saved_name=saved_name,
+                    saved_index=saved_index,
+                    detector=_detect_devices,
                 )
-            print(f"  Device: {saved_name} ({cap.actual_width}x{cap.actual_height}"
-                  f" @ {cap.actual_fps:.0f} FPS)")
-            cap.release()
-            source = saved_index
-        except Exception:
+            print(f"  {resolved.describe()}")
+            if resolved.logical_index is not None and resolved.logical_index != saved_index:
+                settings.set_value("receiver", "device_index", resolved.logical_index)
+                print(
+                    f"  Auto-updated saved device index: "
+                    f"{saved_index} -> {resolved.logical_index}"
+                )
+            source = f"name:{saved_name}"
+        except RuntimeError:
             print(f"  Saved device '{saved_name}' not available. Detecting...")
 
     # Slow path: full detection (no saved device, or saved device failed)

@@ -70,6 +70,39 @@ class DeviceRegistry:
             pass
 
 
+def resolve_device_open_target(device: dict) -> tuple[int, int | None]:
+    """Return the raw source/backend pair that should actually be opened."""
+    import cv2
+
+    backend = _maybe_int(device.get("backend"))
+    dshow_index = _maybe_int(device.get("dshow_index"))
+    prefers_dshow = bool(device.get("prefer_dshow"))
+
+    if dshow_index is not None and (prefers_dshow or backend == int(cv2.CAP_DSHOW)):
+        return dshow_index, int(cv2.CAP_DSHOW)
+    return int(device["index"]), backend
+
+
+def list_device_open_targets(device: dict) -> list[tuple[int, int | None]]:
+    """Return preferred then fallback capture targets for a logical device."""
+    import cv2
+
+    targets: list[tuple[int, int | None]] = []
+
+    def add_target(source: int | None, backend: int | None) -> None:
+        if source is None:
+            return
+        candidate = (int(source), backend)
+        if candidate not in targets:
+            targets.append(candidate)
+
+    primary_source, primary_backend = resolve_device_open_target(device)
+    add_target(primary_source, primary_backend)
+    add_target(_maybe_int(device.get("index")), _maybe_int(device.get("backend")))
+    add_target(_maybe_int(device.get("dshow_index")), int(cv2.CAP_DSHOW))
+    return targets
+
+
 def detect_devices(max_index: int = 10) -> list[dict]:
     """Probe capture device indices and return available devices with names."""
     import contextlib
@@ -139,6 +172,7 @@ def detect_devices(max_index: int = 10) -> list[dict]:
         return None
 
     dshow_names = get_device_names_ffmpeg() or get_device_names_wmi() or []
+    capture_card_names = [name for name in dshow_names if _is_capture_card_name(name)]
 
     if sys.platform != "win32":
         for backend in _get_backends():
@@ -178,18 +212,14 @@ def detect_devices(max_index: int = 10) -> list[dict]:
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = cap.get(cv2.CAP_PROP_FPS)
-            brightness = 0.0
-            for _ in range(10):
-                ret, frame = cap.read()
-                if ret and isinstance(frame, np.ndarray):
-                    brightness = max(brightness, float(frame.mean()))
+            stats = _probe_stream_stats(cap, np, cv2)
             cap.release()
             msmf_devices.append({
                 "msmf_index": index,
                 "width": width,
                 "height": height,
                 "fps": fps,
-                "brightness": brightness,
+                "stats": stats,
             })
 
     if not msmf_devices:
@@ -203,59 +233,69 @@ def detect_devices(max_index: int = 10) -> list[dict]:
                 continue
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-            best_brightness = -1.0
-            is_zero = True
-            got_frame = False
-            for _ in range(10):
-                ret, frame = cap.read()
-                if not ret or not isinstance(frame, np.ndarray):
-                    continue
-                got_frame = True
-                best_brightness = max(best_brightness, float(frame.mean()))
-                if int(frame.max()) > 0:
-                    is_zero = False
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = cap.get(cv2.CAP_PROP_FPS)
+            stats = _probe_stream_stats(cap, np, cv2)
             cap.release()
             name = (
                 dshow_names[index]
                 if index < len(dshow_names)
                 else f"Device {index}"
             )
-            if not got_frame:
-                best_brightness = -1.0
-                is_zero = True
-            dshow_frames[index] = (
-                name,
-                best_brightness,
-                is_zero,
-                width,
-                height,
-                fps,
-            )
+            dshow_frames[index] = {
+                "name": name,
+                "width": width,
+                "height": height,
+                "fps": fps,
+                "stats": stats,
+            }
 
     dshow_zero = {
-        index: name
-        for index, (name, _, is_zero, _, _, _) in dshow_frames.items()
-        if is_zero
+        index: info["name"]
+        for index, info in dshow_frames.items()
+        if info["stats"]["is_zero"]
     }
     dshow_nonzero = {
-        index: (name, brightness, width, height, fps)
-        for index, (name, brightness, is_zero, width, height, fps) in dshow_frames.items()
-        if not is_zero
+        index: info
+        for index, info in dshow_frames.items()
+        if not info["stats"]["is_zero"]
     }
 
     devices = []
     used_dshow: set[int] = set()
+    used_names: set[str] = set()
 
     for msmf in msmf_devices:
         msmf_index = msmf["msmf_index"]
-        msmf_brightness = msmf["brightness"]
+        msmf_stats = msmf["stats"]
+        msmf_brightness = float(msmf_stats["brightness"])
         name = None
         matched_dshow = None
 
-        if msmf_brightness > 10:
+        similar_dshow = _find_similar_dshow_match(
+            msmf_stats=msmf_stats,
+            dshow_frames=dshow_frames,
+            used_dshow=used_dshow,
+        )
+        if similar_dshow is not None:
+            name = str(dshow_frames[similar_dshow]["name"])
+            matched_dshow = similar_dshow
+            used_dshow.add(similar_dshow)
+
+        if name is None and msmf_brightness <= 10:
+            for dshow_index, dshow_name in dshow_zero.items():
+                if dshow_index in used_dshow:
+                    continue
+                candidate_name = _claim_unused_name(capture_card_names, used_names)
+                if candidate_name is None:
+                    continue
+                name = candidate_name
+                matched_dshow = dshow_index
+                used_dshow.add(dshow_index)
+                break
+
+        if name is None and msmf_brightness > 10:
             for dshow_index, dshow_name in dshow_zero.items():
                 if dshow_index in used_dshow:
                     continue
@@ -280,36 +320,37 @@ def detect_devices(max_index: int = 10) -> list[dict]:
             if name is None:
                 best_dshow = None
                 best_diff = float("inf")
-                for dshow_index, (dshow_name, brightness, _, _, _) in dshow_nonzero.items():
+                for dshow_index, info in dshow_nonzero.items():
                     if dshow_index in used_dshow:
                         continue
-                    diff = abs(brightness - msmf_brightness)
+                    diff = abs(float(info["stats"]["brightness"]) - msmf_brightness)
                     if diff < best_diff:
                         best_diff = diff
                         best_dshow = dshow_index
                 if best_dshow is not None:
-                    name = dshow_nonzero[best_dshow][0]
+                    name = str(dshow_nonzero[best_dshow]["name"])
                     matched_dshow = best_dshow
                     used_dshow.add(best_dshow)
-        else:
-            for dshow_index, (dshow_name, _, _, _, _) in dshow_nonzero.items():
+        elif name is None:
+            for dshow_index, info in dshow_nonzero.items():
                 if dshow_index in used_dshow:
                     continue
-                name = dshow_name
+                name = str(info["name"])
                 matched_dshow = dshow_index
                 used_dshow.add(dshow_index)
                 break
 
         if name is None:
-            for dshow_index, (dshow_name, _, _, _, _, _) in dshow_frames.items():
+            for dshow_index, info in dshow_frames.items():
                 if dshow_index not in used_dshow:
-                    name = dshow_name
+                    name = str(info["name"])
                     matched_dshow = dshow_index
                     used_dshow.add(dshow_index)
                     break
 
         if name is None:
             name = f"Device {msmf_index}"
+        used_names.add(_normalize_name(name))
 
         out_width = msmf["width"]
         out_height = msmf["height"]
@@ -333,10 +374,17 @@ def detect_devices(max_index: int = 10) -> list[dict]:
                 )
             )
             if is_capture_card and matched_dshow in dshow_frames:
-                _, _, is_zero, width, height, fps = dshow_frames[matched_dshow]
-                if not is_zero:
-                    dshow_index = matched_dshow
-                    prefer_dshow = True
+                dshow_info = dshow_frames[matched_dshow]
+                width = int(dshow_info["width"])
+                height = int(dshow_info["height"])
+                fps = float(dshow_info["fps"])
+                dshow_index = matched_dshow
+                prefer_dshow = _should_prefer_dshow(
+                    name=name,
+                    msmf_stats=msmf_stats,
+                    dshow_stats=dshow_info["stats"],
+                )
+                if prefer_dshow:
                     if width > 0 and height > 0:
                         out_width = width
                         out_height = height
@@ -354,4 +402,209 @@ def detect_devices(max_index: int = 10) -> list[dict]:
             "prefer_dshow": prefer_dshow,
         })
 
+    next_index = (max((int(device["index"]) for device in devices), default=-1) + 1)
+    for dshow_index, info in sorted(dshow_frames.items()):
+        preferred_name = str(info["name"])
+        width = int(info["width"])
+        height = int(info["height"])
+        fps = float(info["fps"])
+        if dshow_index in dshow_zero:
+            capture_name = next(
+                (
+                    candidate
+                    for candidate in capture_card_names
+                    if _normalize_name(candidate) not in used_names
+                ),
+                None,
+            )
+            if capture_name is not None:
+                preferred_name = capture_name
+
+        normalized = _normalize_name(preferred_name)
+        if dshow_index in used_dshow or normalized in used_names:
+            continue
+
+        devices.append({
+            "index": next_index,
+            "name": preferred_name,
+            "width": width if width > 0 else 1920,
+            "height": height if height > 0 else 1080,
+            "fps": fps if fps > 0 else 60.0,
+            "backend": int(cv2.CAP_DSHOW),
+            "dshow_index": dshow_index,
+            "prefer_dshow": _is_capture_card_name(preferred_name),
+        })
+        used_names.add(normalized)
+        next_index += 1
+
     return devices
+
+
+def _probe_stream_stats(cap, np, cv2) -> dict[str, float | bool | object]:
+    brightness = 0.0
+    max_value = 0
+    nonzero_ratio = 0.0
+    motion = 0.0
+    frame_means: list[float] = []
+    got_frame = False
+    previous_sample = None
+    texture_std = 0.0
+    fingerprint = None
+
+    for _ in range(10):
+        ret, frame = cap.read()
+        if not ret or not isinstance(frame, np.ndarray):
+            continue
+
+        got_frame = True
+        sample = frame[::16, ::16]
+        gray = cv2.cvtColor(sample, cv2.COLOR_BGR2GRAY)
+        brightness = max(brightness, float(gray.mean()))
+        max_value = max(max_value, int(sample.max()))
+        nonzero_ratio = max(
+            nonzero_ratio,
+            float(np.count_nonzero(sample)) / float(sample.size),
+        )
+        frame_means.append(float(gray.mean()))
+        texture_std = max(texture_std, float(gray.std()))
+        fingerprint = cv2.resize(
+            gray,
+            (32, 18),
+            interpolation=cv2.INTER_AREA,
+        ).astype(np.float32) / 255.0
+
+        sample_i16 = sample.astype(np.int16, copy=False)
+        if previous_sample is not None:
+            motion = max(
+                motion,
+                float(np.abs(sample_i16 - previous_sample).mean()),
+            )
+        previous_sample = sample_i16
+
+    frame_std = float(np.std(frame_means)) if len(frame_means) > 1 else 0.0
+    signal_score = 0.0
+    signal_score += min(max_value / 64.0, 1.0)
+    signal_score += min(nonzero_ratio * 4.0, 1.0)
+    signal_score += min(brightness / 32.0, 1.0)
+    signal_score += min(motion / 12.0, 1.0)
+    signal_score += min(frame_std / 8.0, 1.0)
+
+    return {
+        "got_frame": got_frame,
+        "brightness": brightness,
+        "max_value": float(max_value),
+        "nonzero_ratio": nonzero_ratio,
+        "motion": motion,
+        "frame_std": frame_std,
+        "texture_std": texture_std,
+        "signal_score": signal_score,
+        "is_zero": max_value == 0,
+        "fingerprint": fingerprint,
+    }
+
+
+def _should_prefer_dshow(
+    *,
+    name: str,
+    msmf_stats: dict[str, float | bool],
+    dshow_stats: dict[str, float | bool],
+) -> bool:
+    if not _is_capture_card_name(name):
+        return False
+
+    if not bool(dshow_stats.get("got_frame")):
+        return False
+
+    dshow_signal = float(dshow_stats.get("signal_score", 0.0))
+    msmf_signal = float(msmf_stats.get("signal_score", 0.0))
+
+    if dshow_signal >= 1.0 and dshow_signal + 0.75 >= msmf_signal:
+        return True
+    if msmf_signal >= 1.0 and dshow_signal + 0.5 < msmf_signal:
+        return False
+    return dshow_signal >= msmf_signal
+
+
+def _find_similar_dshow_match(
+    *,
+    msmf_stats: dict[str, float | bool | object],
+    dshow_frames: dict[int, dict[str, object]],
+    used_dshow: set[int],
+) -> int | None:
+    candidates: list[tuple[float, int]] = []
+    for dshow_index, info in dshow_frames.items():
+        if dshow_index in used_dshow:
+            continue
+        score = _frame_similarity_score(msmf_stats, info["stats"])
+        if score is None:
+            continue
+        candidates.append((score, dshow_index))
+
+    if not candidates:
+        return None
+
+    candidates.sort()
+    best_score, best_index = candidates[0]
+    second_score = candidates[1][0] if len(candidates) > 1 else float("inf")
+
+    if best_score <= 0.08 and second_score >= (best_score + 0.08):
+        return best_index
+    return None
+
+
+def _frame_similarity_score(
+    a_stats: dict[str, float | bool | object],
+    b_stats: dict[str, float | bool | object],
+) -> float | None:
+    import numpy as np
+
+    a_fp = a_stats.get("fingerprint")
+    b_fp = b_stats.get("fingerprint")
+    if not isinstance(a_fp, np.ndarray) or not isinstance(b_fp, np.ndarray):
+        return None
+
+    score = float(np.mean(np.abs(a_fp - b_fp)))
+    score += abs(float(a_stats.get("max_value", 0.0)) - float(b_stats.get("max_value", 0.0))) / 255.0 * 0.8
+    score += abs(float(a_stats.get("nonzero_ratio", 0.0)) - float(b_stats.get("nonzero_ratio", 0.0))) * 0.6
+    score += abs(float(a_stats.get("texture_std", 0.0)) - float(b_stats.get("texture_std", 0.0))) / 64.0 * 0.6
+    score += abs(float(a_stats.get("brightness", 0.0)) - float(b_stats.get("brightness", 0.0))) / 255.0 * 0.4
+    return score
+
+
+def _is_capture_card_name(name: str) -> bool:
+    lower = name.casefold()
+    return any(
+        keyword in lower
+        for keyword in (
+            "elgato",
+            "avermedia",
+            "capture",
+            "hdmi",
+            "cam link",
+            "magewell",
+            "blackmagic",
+            "4k",
+        )
+    )
+
+
+def _normalize_name(value: str) -> str:
+    return " ".join(value.casefold().split())
+
+
+def _claim_unused_name(candidates: list[str], used_names: set[str]) -> str | None:
+    for candidate in candidates:
+        normalized = _normalize_name(candidate)
+        if normalized not in used_names:
+            used_names.add(normalized)
+            return candidate
+    return None
+
+
+def _maybe_int(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

@@ -31,6 +31,7 @@ class CaptureManager:
         self._ready.set()
         self._capture: Any | None = None
         self._device: int | None = None
+        self._open_device: int | None = None
         self._backend: int | None = None
 
     @property
@@ -52,17 +53,20 @@ class CaptureManager:
         self,
         *,
         device: int,
+        open_device: int | None = None,
         backend: int,
         capture: Any | None = None,
     ) -> None:
         """Store a ready capture or open one immediately."""
         self._ready.clear()
         previous: Any | None = None
+        source_to_open = int(open_device if open_device is not None else device)
 
         with self._lock:
             previous = self._capture
             self._capture = None
             self._device = None
+            self._open_device = None
             self._backend = None
 
         if previous is not None:
@@ -76,7 +80,7 @@ class CaptureManager:
                     )
                 if self._open_lock is None:
                     capture = self._opener(
-                        device,
+                        source_to_open,
                         backend,
                         self._width,
                         self._height,
@@ -85,7 +89,7 @@ class CaptureManager:
                 else:
                     with self._open_lock:
                         capture = self._opener(
-                            device,
+                            source_to_open,
                             backend,
                             self._width,
                             self._height,
@@ -96,17 +100,28 @@ class CaptureManager:
                 with self._lock:
                     self._capture = capture
                     self._device = device
+                    self._open_device = source_to_open
                     self._backend = backend
             elif capture is not None:
                 capture.release()
         finally:
             self._ready.set()
 
-    def prime_async(self, *, device: int, backend: int) -> None:
+    def prime_async(
+        self,
+        *,
+        device: int,
+        open_device: int | None = None,
+        backend: int,
+    ) -> None:
         """Open a persistent capture in a background thread."""
         threading.Thread(
             target=self.prime,
-            kwargs={"device": device, "backend": backend},
+            kwargs={
+                "device": device,
+                "open_device": open_device,
+                "backend": backend,
+            },
             daemon=True,
         ).start()
 
@@ -119,6 +134,7 @@ class CaptureManager:
             backend = self._backend
             self._capture = None
             self._device = None
+            self._open_device = None
             self._backend = None
 
         if capture.isOpened():
@@ -132,10 +148,16 @@ class CaptureManager:
         *,
         capture: Any,
         device: int,
+        open_device: int | None = None,
         backend: int | None,
     ) -> None:
         """Return a capture handle to the persistent pool."""
-        self.prime(device=device, backend=int(backend or 0), capture=capture)
+        self.prime(
+            device=device,
+            open_device=open_device,
+            backend=int(backend or 0),
+            capture=capture,
+        )
 
     def read(self) -> tuple[bool, Any | None]:
         """Read one frame from the persistent capture if present."""
@@ -152,6 +174,7 @@ class CaptureManager:
             capture = self._capture
             self._capture = None
             self._device = None
+            self._open_device = None
             self._backend = None
         if capture is not None:
             capture.release()

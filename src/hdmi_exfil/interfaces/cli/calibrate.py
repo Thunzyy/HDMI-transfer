@@ -22,7 +22,9 @@ import time
 import cv2
 import numpy as np
 
+from hdmi_exfil.adapters.capture.resolver import resolve_capture_target
 from hdmi_exfil.core.config import DEFAULT_PROFILE, PROFILES, ResolutionProfile
+from hdmi_exfil.receiver.capture.source import CaptureSource
 from hdmi_exfil.sender.display.test_patterns import (
     compute_alignment,
     compute_snr,
@@ -59,7 +61,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     recv_parser.add_argument(
         "source",
-        help="Camera index (integer) or video file path",
+        help=(
+            "Capture source: logical id (e.g. '0'), 'raw:1' to force an "
+            "OpenCV index, 'name:Elgato' to match by name, or a file path"
+        ),
     )
     recv_parser.add_argument(
         "--frames",
@@ -79,7 +84,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     lb_parser.add_argument(
         "source",
-        help="Camera index (integer) or video file path",
+        help=(
+            "Capture source: logical id (e.g. '0'), 'raw:1' to force an "
+            "OpenCV index, 'name:Elgato' to match by name, or a file path"
+        ),
     )
     lb_parser.add_argument(
         "--frames",
@@ -116,19 +124,31 @@ def _recommend_block_size(snr_db: float, current_bs: int) -> str:
     return f"Poor signal -- try block_size={suggestion} or check HDMI connection"
 
 
-def _open_capture(source: str) -> cv2.VideoCapture:
-    """Open a video capture source (camera index or file path)."""
+def _open_capture(
+    source: str,
+    *,
+    profile: ResolutionProfile,
+) -> CaptureSource:
+    """Open a resolved video capture source (logical id, raw id, or file path)."""
     try:
-        idx = int(source)
-        cap = cv2.VideoCapture(idx)
-    except ValueError:
-        cap = cv2.VideoCapture(source)
-
-    if not cap.isOpened():
-        print(f"Error: cannot open capture source '{source}'")
+        resolved = resolve_capture_target(source)
+    except RuntimeError as exc:
+        print(f"Error: {exc}")
         sys.exit(1)
 
-    return cap
+    print(resolved.describe())
+
+    try:
+        return CaptureSource(
+            resolved.open_source,
+            width=profile.width,
+            height=profile.height,
+            fps=profile.target_fps,
+            backend=resolved.backend,
+        )
+    except RuntimeError:
+        print(f"Error: cannot open capture source '{source}'")
+        sys.exit(1)
 
 
 def _capture_averaged_frame(
@@ -222,7 +242,7 @@ def _cmd_recv(profile: ResolutionProfile, args: argparse.Namespace) -> None:
     """Execute the ``recv`` subcommand -- capture and analyze."""
     expected = generate_checkerboard(profile)
 
-    cap = _open_capture(args.source)
+    cap = _open_capture(args.source, profile=profile)
     print(f"Capturing {args.frames} frames from source '{args.source}'...")
 
     captured = _capture_averaged_frame(cap, args.frames, profile)
@@ -261,7 +281,7 @@ def _cmd_loopback(profile: ResolutionProfile, args: argparse.Namespace) -> None:
     time.sleep(2)
 
     # Capture
-    cap = _open_capture(args.source)
+    cap = _open_capture(args.source, profile=profile)
     print(f"Capturing {args.frames} frames...")
     captured = _capture_averaged_frame(cap, args.frames, profile)
     cap.release()

@@ -6,6 +6,7 @@ import logging
 
 from flask import Flask, jsonify, request
 
+from hdmi_exfil.adapters.capture.device_registry import resolve_device_open_target
 from hdmi_exfil.core.config import PROFILES
 
 log = logging.getLogger(__name__)
@@ -37,9 +38,11 @@ def register_device_routes(app: Flask) -> None:
             import cv2
 
             device = devices[0]
+            open_device, backend = resolve_device_open_target(device)
             app._capture_manager.prime(
                 device=device["index"],
-                backend=device.get("backend", cv2.CAP_MSMF),
+                open_device=open_device,
+                backend=int(backend or cv2.CAP_MSMF),
             )
         return jsonify(devices)
 
@@ -56,11 +59,16 @@ def register_device_routes(app: Flask) -> None:
             )
             return jsonify({"status": "already_open"})
 
-        backend = app._device_registry.get_backend(device_idx)
-        if backend is None:
+        device = app._device_registry.get_device(device_idx)
+        if device is None:
             return jsonify({"status": "unknown_device"}), 400
+        open_device, backend = resolve_device_open_target(device)
 
-        app._capture_manager.prime_async(device=device_idx, backend=backend)
+        app._capture_manager.prime_async(
+            device=device_idx,
+            open_device=open_device,
+            backend=int(backend or 0),
+        )
         return jsonify({"status": "opening"})
 
     @app.route("/api/profiles")

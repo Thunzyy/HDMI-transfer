@@ -24,8 +24,14 @@ import time
 import cv2
 import numpy as np
 
+from hdmi_exfil.application.receive_geometry import (
+    build_geometry_candidates,
+    decode_with_sampling_fallbacks,
+    ensure_frame_size,
+    estimate_sampling_from_frame,
+    sample_grid,
+)
 from hdmi_exfil.application.receive_session import ReceiveSession
-from hdmi_exfil.core.capture.sampler import sample_frame
 from hdmi_exfil.core.config import (
     FRAME_TYPE_DATA,
     FRAME_TYPE_END,
@@ -40,6 +46,10 @@ from hdmi_exfil.core.file_handling.writer import verify_integrity, write_output
 from hdmi_exfil.core.protocols import get_protocol
 from hdmi_exfil.core.protocols.fountain import FountainDecoder
 from hdmi_exfil.receiver.capture.source import CaptureSource
+
+
+class _CaptureFallbackRequested(RuntimeError):
+    """Internal control-flow exception used to retry another capture target."""
 
 
 class ReceiverWorker(threading.Thread):
@@ -66,6 +76,7 @@ class ReceiverWorker(threading.Thread):
         backend: int | None = None,
         precap: "cv2.VideoCapture | None" = None,
         on_cap_return: "callable | None" = None,
+        fallback_targets: list[tuple[int, int | None]] | None = None,
     ) -> None:
         super().__init__(daemon=True)
         self._device = device
@@ -75,6 +86,14 @@ class ReceiverWorker(threading.Thread):
         self._backend = backend
         self._precap = precap
         self._on_cap_return = on_cap_return
+        self._capture_targets = [(int(device), backend)]
+        for source, alt_backend in fallback_targets or []:
+            candidate = (int(source), alt_backend)
+            if candidate not in self._capture_targets:
+                self._capture_targets.append(candidate)
+        self._active_device = int(device)
+        self._active_backend = backend
+        self._fallback_targets: list[tuple[int, int | None]] = []
         self._stop_event = threading.Event()
         self._subscribers: list[queue.Queue] = []
         self._lock = threading.Lock()
@@ -180,49 +199,72 @@ class ReceiverWorker(threading.Thread):
     # -- main entry ------------------------------------------------------
 
     def run(self) -> None:
-        cap = None
-        try:
-            self._publish("status", {
-                "state": "opening",
-                "message": "Opening capture device...",
-            })
-            keep_alive = self._on_cap_return is not None
-            cap = CaptureSource(
-                self._device,
-                width=self._profile.width,
-                height=self._profile.height,
-                fps=self._profile.target_fps,
-                backend=self._backend,
-                _precap=self._precap,
-                _keep_alive=keep_alive,
-            )
-            self._precap = None  # ownership transferred
-            self._publish("status", {
-                "state": "ready",
-                "message": (
-                    f"Device opened: {cap.actual_width}x{cap.actual_height}"
-                    f" @ {cap.actual_fps:.0f} FPS"
-                ),
-            })
+        pending_targets = list(self._capture_targets)
 
-            with cap:
-                dispatch = {
-                    "fountain": self._run_fountain,
-                    "sequential": self._run_sequential,
-                }
-                handler = dispatch.get(self._mode, self._run_auto)
-                handler(cap)
+        while pending_targets and not self._stop_event.is_set():
+            device, backend = pending_targets[0]
+            self._active_device = device
+            self._active_backend = backend
+            self._fallback_targets = list(pending_targets[1:])
 
-            # Return the cap to the server for reuse
-            if self._on_cap_return is not None:
-                raw = cap.detach()
-                if raw is not None and raw.isOpened():
-                    self._on_cap_return(raw)
-        except Exception as exc:
-            self._publish("error", {"message": str(exc)})
-        finally:
-            with self._preview_condition:
-                self._preview_condition.notify_all()
+            try:
+                self._publish("status", {
+                    "state": "opening",
+                    "message": "Opening capture device...",
+                })
+                keep_alive = self._on_cap_return is not None and len(pending_targets) == 1
+                cap = CaptureSource(
+                    device,
+                    width=self._profile.width,
+                    height=self._profile.height,
+                    fps=self._profile.target_fps,
+                    backend=backend,
+                    _precap=self._precap,
+                    _keep_alive=keep_alive,
+                )
+                self._precap = None
+                self._publish("status", {
+                    "state": "ready",
+                    "message": (
+                        f"Device opened: {cap.actual_width}x{cap.actual_height}"
+                        f" @ {cap.actual_fps:.0f} FPS"
+                    ),
+                })
+
+                with cap:
+                    dispatch = {
+                        "fountain": self._run_fountain,
+                        "sequential": self._run_sequential,
+                    }
+                    handler = dispatch.get(self._mode, self._run_auto)
+                    handler(cap)
+
+                if keep_alive and self._on_cap_return is not None:
+                    raw = cap.detach()
+                    if raw is not None and raw.isOpened():
+                        self._on_cap_return(raw)
+                return
+            except _CaptureFallbackRequested:
+                pending_targets = pending_targets[1:]
+                self._precap = None
+                continue
+            except Exception as exc:
+                pending_targets = pending_targets[1:]
+                self._precap = None
+                if pending_targets:
+                    self._publish("status", {
+                        "state": "fallback",
+                        "message": (
+                            f"{exc} Retrying alternate capture target "
+                            f"({self._describe_capture_target(*pending_targets[0])})."
+                        ),
+                    })
+                    continue
+                self._publish("error", {"message": str(exc)})
+                break
+            finally:
+                with self._preview_condition:
+                    self._preview_condition.notify_all()
 
     # -- fountain mode ---------------------------------------------------
 
@@ -230,6 +272,7 @@ class ReceiverWorker(threading.Thread):
         protocol = get_protocol("fountain", profile=self._profile)
         session = ReceiveSession(mode="fountain", profile=self._profile)
         frames_captured = 0
+        low_signal_streak = 0
         last_progress = 0.0
         last_waiting_emit = 0.0
         geometry_candidates = self._build_geometry_candidates(self._profile)
@@ -250,6 +293,7 @@ class ReceiverWorker(threading.Thread):
             frames_captured += 1
 
             self._maybe_publish_preview(frame)
+            low_signal_streak = self._update_low_signal_streak(frame, low_signal_streak)
 
             now = time.time()
             if session.detected_protocol is None and (now - last_waiting_emit) >= 1.0:
@@ -274,8 +318,15 @@ class ReceiverWorker(threading.Thread):
             )
 
             if result is None or not result.is_valid or result.data is None:
+                self._maybe_request_runtime_fallback(
+                    protocol_name="fountain",
+                    frames_captured=frames_captured,
+                    has_progress=session._fountain_decoder is not None,
+                    low_signal_streak=low_signal_streak,
+                )
                 continue
 
+            low_signal_streak = 0
             events = session.feed_frame_result("fountain", result)
             for event in events:
                 data = dict(event.data)
@@ -400,6 +451,7 @@ class ReceiverWorker(threading.Thread):
         protocol = get_protocol("sequential", profile=self._profile)
         session = ReceiveSession(mode="sequential", profile=self._profile)
         frames_captured = 0
+        low_signal_streak = 0
         geometry_candidates = self._build_geometry_candidates(self._profile)
         geometry_cursor = 0
 
@@ -418,6 +470,7 @@ class ReceiverWorker(threading.Thread):
             frames_captured += 1
 
             self._maybe_publish_preview(frame)
+            low_signal_streak = self._update_low_signal_streak(frame, low_signal_streak)
 
             frame = self._ensure_size(frame)
             result, geometry_cursor, _ = self._decode_with_sampling_fallbacks(
@@ -429,8 +482,20 @@ class ReceiverWorker(threading.Thread):
             )
 
             if result is None or not result.is_valid:
+                self._maybe_request_runtime_fallback(
+                    protocol_name="sequential",
+                    frames_captured=frames_captured,
+                    has_progress=(
+                        session._seq_saw_start
+                        or session._seq_saw_end
+                        or session._seq_total_expected is not None
+                        or bool(session._seq_received)
+                    ),
+                    low_signal_streak=low_signal_streak,
+                )
                 continue
 
+            low_signal_streak = 0
             events = session.feed_frame_result("sequential", result)
             for event in events:
                 data = dict(event.data)
@@ -574,6 +639,13 @@ class ReceiverWorker(threading.Thread):
                         "message": "Signal restored. Auto-detecting protocol and bpc...",
                     })
 
+            self._maybe_request_runtime_fallback(
+                protocol_name="auto",
+                frames_captured=frames_probed,
+                has_progress=False,
+                low_signal_streak=black_streak,
+            )
+
             # Keep per-frame probing bounded: identity + a rotating subset of
             # alternate geometry candidates.
             batch = [geometry_candidates[0]]
@@ -633,15 +705,7 @@ class ReceiverWorker(threading.Thread):
     # -- helpers ---------------------------------------------------------
 
     def _ensure_size(self, frame):
-        if (frame.shape[0] != self._profile.height
-                or frame.shape[1] != self._profile.width):
-            # Nearest-neighbor keeps block symbols stable for 2/3 bpc decoding.
-            return cv2.resize(
-                frame,
-                (self._profile.width, self._profile.height),
-                interpolation=cv2.INTER_NEAREST,
-            )
-        return frame
+        return ensure_frame_size(frame, self._profile)
 
     def _decode_with_sampling_fallbacks(
         self,
@@ -653,49 +717,18 @@ class ReceiverWorker(threading.Thread):
         *,
         extra_candidates: int = 5,
     ):
-        """Try the current sampling first, then probe browser-style fallbacks.
-
-        Manual Web UI modes need the same geometry resilience as auto-detect:
-        browser fullscreen can still leave slight viewport offsets/scales that
-        make exact block-centre sampling miss valid frames.
-        """
-        batch: list[tuple[int, int, float, float]] = []
-        seen: set[tuple[int, int, float, float]] = set()
-
-        def add(sampling: tuple[int, int, float, float]) -> None:
-            key = (
-                int(sampling[0]),
-                int(sampling[1]),
-                round(float(sampling[2]), 6),
-                round(float(sampling[3]), 6),
-            )
-            if key in seen:
-                return
-            seen.add(key)
-            batch.append(sampling)
-
-        add(self._sampling)
-        add((0, 0, 1.0, 1.0))
-
-        dynamic_sampling = self._estimate_sampling_from_frame(frame, profile)
-        if dynamic_sampling is not None:
-            add(dynamic_sampling)
-
-        if len(geometry_candidates) > 1:
-            for _ in range(extra_candidates):
-                geometry_cursor = (geometry_cursor + 1) % len(geometry_candidates)
-                if geometry_cursor == 0:
-                    geometry_cursor = 1
-                add(geometry_candidates[geometry_cursor])
-
-        for sampling in batch:
-            sampled = self._sample_grid(frame, profile, sampling=sampling)
-            result = decode_frame(sampled)
-            if getattr(result, "is_valid", False):
-                self._sampling = sampling
-                return result, geometry_cursor, sampling
-
-        return None, geometry_cursor, None
+        result, geometry_cursor, matched_sampling = decode_with_sampling_fallbacks(
+            frame,
+            profile,
+            decode_frame,
+            self._sampling,
+            geometry_candidates,
+            geometry_cursor,
+            extra_candidates=extra_candidates,
+        )
+        if matched_sampling is not None:
+            self._sampling = matched_sampling
+        return result, geometry_cursor, matched_sampling
 
     def _sample_grid(
         self,
@@ -703,107 +736,20 @@ class ReceiverWorker(threading.Thread):
         profile: ResolutionProfile,
         sampling: tuple[int, int, float, float] | None = None,
     ):
-        offset_x, offset_y, scale_x, scale_y = sampling or self._sampling
-        return sample_frame(
-            frame,
-            profile.rows,
-            profile.cols,
-            profile.block_size,
-            offset_x=offset_x,
-            offset_y=offset_y,
-            scale_x=scale_x,
-            scale_y=scale_y,
-        )
+        return sample_grid(frame, profile, sampling or self._sampling)
 
     def _build_geometry_candidates(
         self,
         profile: ResolutionProfile,
     ) -> list[tuple[int, int, float, float]]:
-        width = int(profile.width)
-        height = int(profile.height)
-        candidates: list[tuple[int, int, float, float]] = [(0, 0, 1.0, 1.0)]
-        seen = {candidates[0]}
-
-        def push(vw: int, vh: int, align_x: str, align_y: str) -> None:
-            if vw <= 0 or vh <= 0:
-                return
-            sx = float(vw / width)
-            sy = float(vh / height)
-            ox = 0 if align_x == "left" else max(0, (width - vw) // 2)
-            oy = 0 if align_y == "top" else max(0, (height - vh) // 2)
-            key = (int(ox), int(oy), round(sx, 6), round(sy, 6))
-            if key in seen:
-                return
-            seen.add(key)
-            candidates.append((int(ox), int(oy), sx, sy))
-
-        # Common browser/content-box reductions on 1080p outputs.
-        h_candidates = [
-            height - d
-            for d in (8, 16, 24, 32, 40, 48, 52, 56, 64, 80, 96, 120, 128, 144, 147, 160, 180, 200)
-        ]
-        w_candidates = [width - d for d in (8, 16, 24, 32, 40, 64, 80, 96, 120, 160, 192)]
-
-        for vh in h_candidates:
-            push(width, vh, "left", "top")
-            push(width, vh, "left", "center")
-
-        for vw in w_candidates:
-            push(vw, height, "left", "top")
-            push(vw, height, "center", "top")
-
-        # Typical combined reductions (both axes) when browser chrome remains.
-        for vw in (width - 16, width - 24, width - 32, width - 64, width - 96):
-            for vh in (height - 48, height - 52, height - 56, height - 64, height - 96, height - 120, height - 147):
-                push(vw, vh, "center", "center")
-
-        # Explicit viewport sizes seen in Chromium windows on 1080p displays.
-        for vw, vh in ((1904, 933), (1904, 989), (1904, 1028), (1920, 1028), (1920, 1032)):
-            push(vw, vh, "center", "center")
-
-        return candidates
+        return build_geometry_candidates(profile)
 
     def _estimate_sampling_from_frame(
         self,
         frame,
         profile: ResolutionProfile,
     ) -> tuple[int, int, float, float] | None:
-        """Estimate active content area from frame variance.
-
-        Browser/window borders are usually low-variance while the encoded HDMI
-        grid has high spatial variance. This gives a robust fallback geometry
-        when the sender is not perfectly fullscreen.
-        """
-        try:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            row_std = gray.std(axis=1)
-            col_std = gray.std(axis=0)
-
-            # Adaptive thresholds with conservative floor values.
-            row_thr = max(6.0, float(np.percentile(row_std, 70) * 0.5))
-            col_thr = max(6.0, float(np.percentile(col_std, 70) * 0.5))
-
-            rows = np.where(row_std >= row_thr)[0]
-            cols = np.where(col_std >= col_thr)[0]
-            if rows.size == 0 or cols.size == 0:
-                return None
-
-            top = int(rows[0])
-            bottom = int(rows[-1])
-            left = int(cols[0])
-            right = int(cols[-1])
-            vh = max(1, bottom - top + 1)
-            vw = max(1, right - left + 1)
-
-            # Ignore implausibly small boxes (noise / random motion).
-            if vh < int(profile.height * 0.55) or vw < int(profile.width * 0.55):
-                return None
-
-            sx = float(vw / profile.width)
-            sy = float(vh / profile.height)
-            return (left, top, sx, sy)
-        except Exception:
-            return None
+        return estimate_sampling_from_frame(frame, profile)
 
     def _detected_message(
         self,
@@ -824,3 +770,52 @@ class ReceiverWorker(threading.Thread):
                 f"— switching from bpc={selected_bpc}{geom_suffix}"
             )
         return f"{protocol_name} protocol detected (bpc={detected_bpc}){geom_suffix}"
+
+    def _update_low_signal_streak(self, frame, streak: int) -> int:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        if float(gray.mean()) < 3.0 and float(gray.std()) < 2.0:
+            return streak + 1
+        return 0
+
+    def _maybe_request_runtime_fallback(
+        self,
+        *,
+        protocol_name: str,
+        frames_captured: int,
+        has_progress: bool,
+        low_signal_streak: int,
+    ) -> None:
+        if self._active_backend != cv2.CAP_DSHOW or not self._fallback_targets:
+            return
+        if has_progress:
+            return
+        if low_signal_streak >= 120:
+            self._request_capture_fallback(
+                "Current DSHOW source is black or low-signal.",
+            )
+        if frames_captured >= 360:
+            self._request_capture_fallback(
+                f"No decodable {protocol_name} frames found on current DSHOW source.",
+            )
+
+    def _request_capture_fallback(self, reason: str) -> None:
+        if not self._fallback_targets:
+            return
+        next_device, next_backend = self._fallback_targets[0]
+        self._publish("status", {
+            "state": "fallback",
+            "message": (
+                f"{reason} Retrying alternate capture target "
+                f"({self._describe_capture_target(next_device, next_backend)})."
+            ),
+        })
+        raise _CaptureFallbackRequested(reason)
+
+    def _describe_capture_target(self, device: int, backend: int | None) -> str:
+        if backend == cv2.CAP_DSHOW:
+            return f"source {device} via DSHOW"
+        if backend == cv2.CAP_MSMF:
+            return f"source {device} via MSMF"
+        if backend is None:
+            return f"source {device}"
+        return f"source {device} via backend {backend}"
