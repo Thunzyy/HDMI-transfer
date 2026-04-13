@@ -26,3 +26,12 @@ def test_sender_html_defaults_match_python_sender_behavior() -> None:
     text = sender_html.read_text(encoding="utf-8")
     assert 'sequentialRedundancy: 1,' in text
     assert 'fpsMode: "profile"' in text
+
+
+def test_sender_html_contains_preflight_handshake_logic() -> None:
+    sender_html = Path(__file__).resolve().parents[1] / "sender.html"
+    text = sender_html.read_text(encoding="utf-8")
+
+    assert "PREFLIGHT_FILENAME" in text
+    assert 'fetch("/api/receive/status"' in text
+    assert "preflight_state" in text

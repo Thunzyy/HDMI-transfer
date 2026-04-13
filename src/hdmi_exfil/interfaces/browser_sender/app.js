@@ -126,6 +126,8 @@
   const hudTime = document.getElementById("hudTime");
 
   const textEncoder = new TextEncoder();
+  const preflightNameBytes = textEncoder.encode(PREFLIGHT_FILENAME);
+  let preflightPayloadPromise = null;
 
   // ── State ──────────────────────────────
   const state = {
@@ -141,6 +143,9 @@
     // Sequential state
     seqPhase: "start", // "start" | "data" | "end"
     seqDataIdx: 0, seqRepeat: 0,
+    phase: "idle",
+    preflightFrames: 0,
+    preflightPayload: null,
   };
 
   // ── Config ─────────────────────────────
@@ -277,7 +282,7 @@
 
   function updateDebugTitle() {
     if (!runtimeOptions.debugTitle) return;
-    const status = state.running ? "TX" : "IDLE";
+    const status = !state.running ? "IDLE" : (state.phase === "preflight" ? "PREFLIGHT" : "TX");
     document.title =
       `HDMI Exfil — Sender [${status}] ` +
       `f=${state.frame} k=${state.K} ` +
@@ -366,6 +371,61 @@
     out.set(nameBytes, offset); offset += nameBytes.length;
     out.set(rawBytes, offset);
     return out;
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  async function getPreflightPayload() {
+    if (!preflightPayloadPromise) {
+      preflightPayloadPromise = computeSHA256(PREFLIGHT_FILE_BYTES).then((sha256Hash) => {
+        const total = 4 + 32 + 2 + preflightNameBytes.length;
+        const payload = new Uint8Array(total);
+        const view = new DataView(payload.buffer);
+        let offset = 0;
+        view.setUint32(offset, PREFLIGHT_FILE_BYTES.length, false);
+        offset += 4;
+        payload.set(sha256Hash, offset);
+        offset += 32;
+        view.setUint16(offset, preflightNameBytes.length, false);
+        offset += 2;
+        payload.set(preflightNameBytes, offset);
+        return payload;
+      });
+    }
+    return new Uint8Array(await preflightPayloadPromise);
+  }
+
+  async function getReceiverStatus() {
+    const response = await fetch("/api/receive/status", { cache: "no-store" });
+    if (!response.ok) throw new Error(`Receiver status unavailable (${response.status})`);
+    return response.json();
+  }
+
+  async function shouldUseReceiverPreflight() {
+    try {
+      const status = await getReceiverStatus();
+      return status.active && status.preflight_required === true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function waitForReceiverPreflight() {
+    const deadline = performance.now() + PREFLIGHT_TIMEOUT_MS;
+    while (state.running && state.phase === "preflight") {
+      try {
+        const status = await getReceiverStatus();
+        if (status.preflight_state === "ok") return true;
+        if (status.active === false) return false;
+      } catch {
+        // Keep rendering the preflight frame while the receiver catches up.
+      }
+      if (performance.now() >= deadline) return false;
+      await sleep(PREFLIGHT_POLL_INTERVAL_MS);
+    }
+    return false;
   }
 
   function sliceIntoChunks(bytes) {
@@ -578,7 +638,35 @@
     bytesToValues(frameBytes); drawValues(state.vals);
   }
 
+  function renderPreflightFrame() {
+    if (!state.preflightPayload) return;
+    const frameBytes = buildSeqFrame(
+      FRAME_TYPE_START,
+      0,
+      PREFLIGHT_TOTAL_FRAMES,
+      state.preflightPayload,
+    );
+    bytesToValues(frameBytes);
+    drawValues(state.vals);
+  }
+
   function renderFrame() {
+    if (state.phase === "preflight") {
+      renderPreflightFrame();
+      state.preflightFrames += 1;
+      state.lastRenderAt = performance.now();
+      if (state.preflightFrames % 20 === 0) {
+        hudFrames.textContent = state.preflightFrames;
+        headerFrames.textContent = state.preflightFrames;
+        const elapsed = (performance.now() - state.startTime) / 1000;
+        const m = Math.floor(elapsed / 60), s = Math.floor(elapsed % 60);
+        const t = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        hudTime.textContent = t;
+        headerTime.textContent = t;
+        updateDebugTitle();
+      }
+      return;
+    }
     if (config.protocol === "fountain") renderFountainFrame();
     else renderSeqFrame();
     state.frame += 1;
@@ -642,25 +730,67 @@
   }
 
   // ── Start / Stop ───────────────────────
-  function startSending() {
-    if (!state.chunks.length || !validateConfig()) return;
+  async function startSending() {
+    if (!state.chunks.length || !validateConfig() || state.running) return;
     state.running = true; state.seed = 1; state.frame = 0;
     state.seqPhase = "start"; state.seqDataIdx = 0; state.seqRepeat = 0;
+    state.phase = "idle";
+    state.preflightFrames = 0;
+    state.preflightPayload = null;
     startBtn.disabled = true; stopBtn.disabled = false;
     setSettingsEnabled(false);
-    statusLabel.textContent = "Transmitting";
+    statusLabel.textContent = "Starting";
     statusLabel.classList.remove("dim");
-    statusLabel.style.color = "var(--green)";
+    statusLabel.style.color = "var(--yellow)";
     canvasWrap.classList.add("active");
     hud.classList.add("active");
     updateDebugTitle();
-    const begin = () => {
+    const begin = async () => {
       if (!state.running) return;
       checkViewportGeometry();
       state.startTime = performance.now();
       state.lastRenderAt = state.startTime;
       lastFrameTime = 0;
-      renderLoop(0);
+      const shouldPreflight = await shouldUseReceiverPreflight();
+      if (shouldPreflight) {
+        state.preflightPayload = await getPreflightPayload();
+        state.phase = "preflight";
+        state.preflightFrames = 0;
+        statusLabel.textContent = "Preflight";
+        statusLabel.style.color = "var(--yellow)";
+        configWarningEl.className = "side-note";
+        configWarningEl.style.display = "";
+        configWarningEl.textContent = "Validating HDMI path on receiver...";
+        renderLoop(0);
+        const ok = await waitForReceiverPreflight();
+        if (!ok) {
+          if (state.running) {
+            stopSending({
+              saveHistory: false,
+              statusText: "Preflight failed",
+              warningText: (
+                "Receiver did not confirm the HDMI preflight frame. "
+                + "Check the HDMI duplication path."
+              ),
+            });
+          }
+          return;
+        }
+        await sleep(PREFLIGHT_SETTLE_MS);
+      }
+      if (!state.running) return;
+      state.phase = "transmitting";
+      state.frame = 0;
+      state.startTime = performance.now();
+      state.lastRenderAt = state.startTime;
+      headerFrames.textContent = "0";
+      hudFrames.textContent = "0";
+      statusLabel.textContent = "Transmitting";
+      statusLabel.style.color = "var(--green)";
+      if (configWarningEl.textContent === "Validating HDMI path on receiver...") {
+        configWarningEl.style.display = "none";
+      }
+      if (!state.raf) renderLoop(0);
     };
     const fsReq = document.documentElement.requestFullscreen
       ? document.documentElement.requestFullscreen()
@@ -668,22 +798,37 @@
     Promise.resolve(fsReq).catch(() => {}).finally(() => setTimeout(begin, 120));
   }
 
-  function stopSending() {
+  function stopSending(options = {}) {
+    const {
+      saveHistory = state.phase === "transmitting" && state.frame > 0 && !!state.fileName,
+      statusText = "Stopped",
+      warningText = "",
+    } = options;
+    const finalFrames = state.phase === "transmitting" ? state.frame : state.preflightFrames;
     state.running = false;
     if (state.raf) cancelAnimationFrame(state.raf);
+    state.raf = null;
     if (document.fullscreenElement) document.exitFullscreen();
     drawValues(new Uint8Array(config.rows * config.cols * 3));
     canvasWrap.classList.remove("active");
     hud.classList.remove("active");
     startBtn.disabled = !state.chunks.length; stopBtn.disabled = true;
     setSettingsEnabled(true);
-    statusLabel.textContent = "Stopped";
+    state.phase = "idle";
+    state.preflightFrames = 0;
+    state.preflightPayload = null;
+    statusLabel.textContent = statusText;
     statusLabel.classList.add("dim");
     statusLabel.style.color = "";
-    headerFrames.textContent = state.frame;
+    headerFrames.textContent = finalFrames;
     const elapsed = (performance.now() - state.startTime) / 1000;
+    if (warningText) {
+      configWarningEl.className = "side-note warn";
+      configWarningEl.style.display = "";
+      configWarningEl.textContent = warningText;
+    }
     updateDebugTitle();
-    if (state.frame > 0 && state.fileName) {
+    if (saveHistory) {
       saveHistory({
         type: "sent", filename: state.fileName, size: state.fileSize,
         duration: elapsed, speed: elapsed > 0 ? state.fileSize / elapsed : 0,

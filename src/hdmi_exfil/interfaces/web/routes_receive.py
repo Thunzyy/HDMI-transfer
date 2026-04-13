@@ -31,8 +31,16 @@ def register_receive_routes(app: Flask) -> None:
                 payload.update(worker.get_preview_health())
             except Exception:
                 pass
+            try:
+                payload.update(worker.get_runtime_state())
+            except Exception:
+                pass
             return jsonify(payload)
-        return jsonify({"active": False})
+        return jsonify({
+            "active": False,
+            "preflight_required": False,
+            "preflight_state": "inactive",
+        })
 
     @app.route("/api/receive/start", methods=["POST"])
     def api_receive_start():
@@ -50,6 +58,7 @@ def register_receive_routes(app: Flask) -> None:
             profile_name = data.get("profile", "speed")
             mode = data.get("mode", "auto")
             output = data.get("output", app.config["OUTPUT_DIR"])
+            require_preflight = bool(data.get("preflight", False))
 
             bpc = int(data.get("bpc", 1))
             if bpc not in (1, 2, 3):
@@ -123,6 +132,7 @@ def register_receive_routes(app: Flask) -> None:
                 precap=precap,
                 on_cap_return=on_cap_return,
                 fallback_targets=fallback_targets,
+                require_preflight=require_preflight,
             )
             app._receiver_worker = worker
             worker.start()

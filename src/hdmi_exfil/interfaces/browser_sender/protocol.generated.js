@@ -10,6 +10,12 @@ const SEQ_HEADER_LEN = 17;
 const FRAME_TYPE_START = 0x01;
 const FRAME_TYPE_DATA = 0x02;
 const FRAME_TYPE_END = 0x03;
+const PREFLIGHT_FILENAME = "__hdmi_preflight__.bin";
+const PREFLIGHT_FILE_BYTES = new Uint8Array([72, 68, 77, 73, 95, 69, 88, 70, 73, 76, 95, 80, 82, 69, 70, 76, 73, 71, 72, 84, 95, 86, 49]);
+const PREFLIGHT_TOTAL_FRAMES = 1;
+const PREFLIGHT_TIMEOUT_MS = 15000;
+const PREFLIGHT_POLL_INTERVAL_MS = 300;
+const PREFLIGHT_SETTLE_MS = 200;
 
 const PROFILES = {
   speed: { name: "speed", width: 1920, height: 1080, blockSize: 8, targetFps: 240 },

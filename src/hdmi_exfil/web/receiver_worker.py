@@ -24,6 +24,7 @@ import time
 import cv2
 import numpy as np
 
+from hdmi_exfil.application.preflight import is_preflight_start_result
 from hdmi_exfil.application.receive_geometry import (
     build_geometry_candidates,
     decode_with_sampling_fallbacks,
@@ -77,6 +78,7 @@ class ReceiverWorker(threading.Thread):
         precap: "cv2.VideoCapture | None" = None,
         on_cap_return: "callable | None" = None,
         fallback_targets: list[tuple[int, int | None]] | None = None,
+        require_preflight: bool = False,
     ) -> None:
         super().__init__(daemon=True)
         self._device = device
@@ -94,9 +96,19 @@ class ReceiverWorker(threading.Thread):
         self._active_device = int(device)
         self._active_backend = backend
         self._fallback_targets: list[tuple[int, int | None]] = []
+        self._require_preflight = bool(require_preflight)
         self._stop_event = threading.Event()
         self._subscribers: list[queue.Queue] = []
         self._lock = threading.Lock()
+        self._runtime_state: dict[str, object] = {
+            "state": "idle",
+            "message": "",
+            "protocol": None,
+            "preflight_required": self._require_preflight,
+            "preflight_state": "waiting" if self._require_preflight else "disabled",
+            "active_device": self._active_device,
+            "active_backend": self._active_backend,
+        }
         # Latest frame for MJPEG preview stream
         self._preview_frame: bytes | None = None
         self._preview_condition = threading.Condition()
@@ -124,6 +136,7 @@ class ReceiverWorker(threading.Thread):
                 self._subscribers.remove(q)
 
     def _publish(self, event_type: str, data: dict) -> None:
+        self._mirror_runtime_state(event_type, data)
         event = {"type": event_type, "data": data}
         with self._lock:
             for q in self._subscribers:
@@ -196,6 +209,11 @@ class ReceiverWorker(threading.Thread):
             "preview_age_s": age_s,
         }
 
+    def get_runtime_state(self) -> dict[str, object]:
+        """Return the latest lightweight runtime state for web polling."""
+        with self._lock:
+            return dict(self._runtime_state)
+
     # -- main entry ------------------------------------------------------
 
     def run(self) -> None:
@@ -206,6 +224,10 @@ class ReceiverWorker(threading.Thread):
             self._active_device = device
             self._active_backend = backend
             self._fallback_targets = list(pending_targets[1:])
+            self._set_runtime_state(
+                active_device=device,
+                active_backend=backend,
+            )
 
             try:
                 self._publish("status", {
@@ -232,6 +254,8 @@ class ReceiverWorker(threading.Thread):
                 })
 
                 with cap:
+                    if self._require_preflight and not self._wait_for_preflight(cap):
+                        return
                     dispatch = {
                         "fountain": self._run_fountain,
                         "sequential": self._run_sequential,
@@ -267,6 +291,100 @@ class ReceiverWorker(threading.Thread):
                     self._preview_condition.notify_all()
 
     # -- fountain mode ---------------------------------------------------
+
+    def _wait_for_preflight(self, cap: CaptureSource) -> bool:
+        selected_bpc = int(self._profile.bits_per_channel)
+        candidate_bpcs = [selected_bpc] + [b for b in (1, 2, 3) if b != selected_bpc]
+        probe_candidates: list[tuple[int, ResolutionProfile, object]] = []
+        for bpc in candidate_bpcs:
+            profile = (
+                self._profile
+                if bpc == selected_bpc
+                else replace(self._profile, bits_per_channel=bpc)
+            )
+            probe_candidates.append((
+                bpc,
+                profile,
+                get_protocol("sequential", profile=profile),
+            ))
+
+        frames_captured = 0
+        low_signal_streak = 0
+        last_waiting_emit = 0.0
+        geometry_candidates = self._build_geometry_candidates(self._profile)
+        geometry_cursor = 0
+
+        self._publish("status", {
+            "state": "preflight_wait",
+            "message": "Waiting for HDMI preflight frame...",
+            "preflight_required": True,
+            "preflight_state": "waiting",
+        })
+
+        while not self._stop_event.is_set():
+            ret, frame = cap.read()
+            if not ret:
+                time.sleep(0.001)
+                continue
+
+            frames_captured += 1
+            self._maybe_publish_preview(frame)
+            low_signal_streak = self._update_low_signal_streak(frame, low_signal_streak)
+
+            now = time.time()
+            if (now - last_waiting_emit) >= 1.0:
+                last_waiting_emit = now
+                self._publish("status", {
+                    "state": "preflight_wait",
+                    "message": (
+                        "Waiting for HDMI preflight frame... "
+                        f"({frames_captured:,} frames scanned)"
+                    ),
+                    "frames_captured": frames_captured,
+                    "preflight_required": True,
+                    "preflight_state": "waiting",
+                })
+
+            frame = self._ensure_size(frame)
+            for bpc, profile, protocol in probe_candidates:
+                result, geometry_cursor, _ = self._decode_with_sampling_fallbacks(
+                    frame,
+                    profile,
+                    protocol.decode_frame,
+                    geometry_candidates,
+                    geometry_cursor,
+                )
+                if result is None or not result.is_valid:
+                    continue
+                if not is_preflight_start_result(result):
+                    continue
+                low_signal_streak = 0
+                self._profile = profile
+                self._publish("status", {
+                    "state": "preflight_ok",
+                    "message": self._preflight_detected_message(
+                        selected_bpc=selected_bpc,
+                        detected_bpc=bpc,
+                        sampling=self._sampling,
+                    ),
+                    "frames_captured": frames_captured,
+                    "preflight_required": True,
+                    "preflight_state": "ok",
+                })
+                return True
+
+            self._maybe_request_runtime_fallback(
+                protocol_name="preflight",
+                frames_captured=frames_captured,
+                has_progress=False,
+                low_signal_streak=low_signal_streak,
+            )
+
+        self._publish("stopped", {
+            "message": "Stopped by user",
+            "frames_captured": frames_captured,
+        })
+        return False
 
     def _run_fountain(self, cap: CaptureSource) -> None:
         protocol = get_protocol("fountain", profile=self._profile)
@@ -494,6 +612,8 @@ class ReceiverWorker(threading.Thread):
                     low_signal_streak=low_signal_streak,
                 )
                 continue
+            if is_preflight_start_result(result):
+                continue
 
             low_signal_streak = 0
             events = session.feed_frame_result("sequential", result)
@@ -665,6 +785,8 @@ class ReceiverWorker(threading.Thread):
 
                     sr = seq.decode_frame(sampled)
                     if sr.is_valid:
+                        if is_preflight_start_result(sr):
+                            continue
                         self._sampling = sampling
                         self._profile = profile
                         self._publish("status", {
@@ -771,6 +893,27 @@ class ReceiverWorker(threading.Thread):
             )
         return f"{protocol_name} protocol detected (bpc={detected_bpc}){geom_suffix}"
 
+    def _preflight_detected_message(
+        self,
+        *,
+        selected_bpc: int,
+        detected_bpc: int,
+        sampling: tuple[int, int, float, float],
+    ) -> str:
+        ox, oy, sx, sy = sampling
+        geom_suffix = ""
+        if sampling != (0, 0, 1.0, 1.0):
+            geom_suffix = (
+                f" | geometry offset=({ox},{oy}) scale=({sx:.4f},{sy:.4f})"
+            )
+        if detected_bpc != selected_bpc:
+            return (
+                "HDMI preflight detected on capture path "
+                f"(bpc={detected_bpc}) — switching from bpc={selected_bpc}"
+                f"{geom_suffix}"
+            )
+        return f"HDMI preflight detected on capture path (bpc={detected_bpc}){geom_suffix}"
+
     def _update_low_signal_streak(self, frame, streak: int) -> int:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         if float(gray.mean()) < 3.0 and float(gray.std()) < 2.0:
@@ -819,3 +962,37 @@ class ReceiverWorker(threading.Thread):
         if backend is None:
             return f"source {device}"
         return f"source {device} via backend {backend}"
+
+    def _set_runtime_state(self, **kwargs: object) -> None:
+        with self._lock:
+            self._runtime_state.update(kwargs)
+
+    def _mirror_runtime_state(self, event_type: str, data: dict) -> None:
+        updates: dict[str, object] = {
+            "preflight_required": self._require_preflight,
+            "active_device": self._active_device,
+            "active_backend": self._active_backend,
+        }
+        if event_type == "status":
+            updates.update(data)
+            updates.setdefault(
+                "preflight_state",
+                self._runtime_state.get("preflight_state", "disabled"),
+            )
+        elif event_type == "complete":
+            updates.update({
+                "state": "complete",
+                "message": f"Complete: {data.get('filename', 'output')}",
+                "protocol": data.get("protocol"),
+            })
+        elif event_type == "error":
+            updates.update({
+                "state": "error",
+                "message": data.get("message", "Error"),
+            })
+        elif event_type == "stopped":
+            updates.update({
+                "state": "stopped",
+                "message": data.get("message", "Stopped"),
+            })
+        self._set_runtime_state(**updates)

@@ -697,7 +697,13 @@ html,body{
     try {
       const r = await fetch("/api/receive/start", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({device:+deviceSelect.value, profile:profileSelect.value, mode:modeSelect.value, bpc:+bpcSelect.value}),
+        body: JSON.stringify({
+          device:+deviceSelect.value,
+          profile:profileSelect.value,
+          mode:modeSelect.value,
+          bpc:+bpcSelect.value,
+          preflight:true,
+        }),
       });
       if (!r.ok) { const e = await r.json(); statusMsg.textContent = "Error: " + (e.error||"Failed"); log("error", e.error||"Start failed"); return; }
     } catch (e) { statusMsg.textContent = "Network error: " + e.message; log("error", "Network: " + e.message); return; }
@@ -850,11 +856,19 @@ html,body{
       markPreviewHeartbeat();
       setLink(d.state);
       statusMsg.textContent = d.message || "";
-      if (d.state === "waiting" && Number.isFinite(Number(d.frames_captured))) {
+      if (
+        (d.state === "waiting" || d.state === "preflight_wait")
+        && Number.isFinite(Number(d.frames_captured))
+      ) {
         badgeFrm.textContent = "FRM: " + Number(d.frames_captured).toLocaleString();
       }
       // Waiting heartbeats are frequent; keep only the initial waiting line.
-      if (!(d.state === "waiting" && Number.isFinite(Number(d.frames_captured)))) {
+      if (
+        !(
+          (d.state === "waiting" || d.state === "preflight_wait")
+          && Number.isFinite(Number(d.frames_captured))
+        )
+      ) {
         log(d.state === "error" ? "error" : "info", d.message);
       }
       if (d.total_chunks) {
@@ -928,7 +942,7 @@ html,body{
   /* ── Helpers ────────────────────────────── */
   function setLink(s) {
     linkDot.className = "h-dot";
-    if (s === "idle" || s === "opening" || s === "probing" || s === "waiting") { linkDot.classList.add("idle"); linkLabel.textContent = "Idle"; }
+    if (s === "idle" || s === "opening" || s === "probing" || s === "waiting" || s === "preflight_wait") { linkDot.classList.add("idle"); linkLabel.textContent = "Idle"; }
     else if (s === "error") { linkDot.classList.add("error"); linkLabel.textContent = "Error"; }
     else { linkLabel.textContent = "Receiving"; }
   }

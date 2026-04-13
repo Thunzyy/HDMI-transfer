@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from importlib.resources import files
 from typing import Final
 
+from hdmi_exfil.application.preflight import (
+    PREFLIGHT_FILENAME,
+    PREFLIGHT_FILE_BYTES,
+    PREFLIGHT_POLL_INTERVAL_MS,
+    PREFLIGHT_SETTLE_MS,
+    PREFLIGHT_TIMEOUT_MS,
+    PREFLIGHT_TOTAL_FRAMES,
+)
 from hdmi_exfil.core.config import FRAME_TYPE_DATA, FRAME_TYPE_END, FRAME_TYPE_START
 from hdmi_exfil.domain.protocol_manifest import get_protocol_manifest
 
@@ -33,6 +42,14 @@ def render_protocol_javascript() -> str:
         f"const FRAME_TYPE_START = 0x{FRAME_TYPE_START:02X};",
         f"const FRAME_TYPE_DATA = 0x{FRAME_TYPE_DATA:02X};",
         f"const FRAME_TYPE_END = 0x{FRAME_TYPE_END:02X};",
+        f"const PREFLIGHT_FILENAME = {json.dumps(PREFLIGHT_FILENAME)};",
+        "const PREFLIGHT_FILE_BYTES = new Uint8Array(["
+        + ", ".join(str(byte) for byte in PREFLIGHT_FILE_BYTES)
+        + "]);",
+        f"const PREFLIGHT_TOTAL_FRAMES = {PREFLIGHT_TOTAL_FRAMES};",
+        f"const PREFLIGHT_TIMEOUT_MS = {PREFLIGHT_TIMEOUT_MS};",
+        f"const PREFLIGHT_POLL_INTERVAL_MS = {PREFLIGHT_POLL_INTERVAL_MS};",
+        f"const PREFLIGHT_SETTLE_MS = {PREFLIGHT_SETTLE_MS};",
         "",
         "const PROFILES = {",
     ]

@@ -5,7 +5,7 @@ from dataclasses import replace
 import cv2
 import numpy as np
 
-from hdmi_exfil.core.config import FRAME_TYPE_DATA, PROFILES
+from hdmi_exfil.core.config import FRAME_TYPE_DATA, FRAME_TYPE_START, PROFILES
 from hdmi_exfil.core.protocols.base import FrameResult
 from hdmi_exfil.web.receiver_worker import ReceiverWorker
 
@@ -150,7 +150,13 @@ def test_worker_retries_alternate_capture_target_when_runtime_fallback_requested
 
     monkeypatch.setattr("hdmi_exfil.web.receiver_worker.CaptureSource", FakeCaptureSource)
     monkeypatch.setattr(worker, "_run_sequential", fake_run_sequential)
-    worker._publish = lambda event_type, data: events.append((event_type, data))
+    original_publish = worker._publish
+
+    def capture_publish(event_type, data):
+        events.append((event_type, data))
+        original_publish(event_type, data)
+
+    worker._publish = capture_publish  # type: ignore[method-assign]
 
     worker.run()
 
@@ -163,3 +169,58 @@ def test_worker_retries_alternate_capture_target_when_runtime_fallback_requested
         for event_type, data in events
     )
     assert events[-1] == ("complete", {"filename": "ok.bin"})
+
+
+def test_worker_waits_for_preflight_before_receive_loop(monkeypatch) -> None:
+    from hdmi_exfil.application.preflight import build_preflight_start_payload
+
+    profile = replace(PROFILES["balanced"], bits_per_channel=1)
+    worker = ReceiverWorker(
+        device=0,
+        profile=profile,
+        mode="sequential",
+        require_preflight=True,
+    )
+    cap = _FakeCap(np.zeros((profile.height, profile.width, 3), dtype=np.uint8))
+    events: list[tuple[str, dict]] = []
+
+    results = iter([
+        FrameResult(
+            data=b"\x00",
+            frame_type=FRAME_TYPE_DATA,
+            frame_index=0,
+            total_frames=1,
+            is_valid=False,
+        ),
+        FrameResult(
+            data=build_preflight_start_payload(),
+            frame_type=FRAME_TYPE_START,
+            frame_index=0,
+            total_frames=1,
+            is_valid=True,
+        ),
+    ])
+
+    original_publish = worker._publish
+
+    def capture_publish(event_type, data):
+        events.append((event_type, data))
+        original_publish(event_type, data)
+
+    worker._publish = capture_publish  # type: ignore[method-assign]
+
+    def fake_decode(frame, profile, decode_frame, geometry_candidates, geometry_cursor):
+        try:
+            return next(results), geometry_cursor, worker._sampling
+        except StopIteration:
+            worker._stop_event.set()
+            return None, geometry_cursor, None
+
+    worker._decode_with_sampling_fallbacks = fake_decode  # type: ignore[method-assign]
+
+    assert worker._wait_for_preflight(cap) is True
+    assert worker.get_runtime_state()["preflight_state"] == "ok"
+    assert any(
+        event_type == "status" and data.get("state") == "preflight_ok"
+        for event_type, data in events
+    )
