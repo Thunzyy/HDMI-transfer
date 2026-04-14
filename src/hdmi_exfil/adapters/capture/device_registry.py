@@ -74,12 +74,15 @@ def resolve_device_open_target(device: dict) -> tuple[int, int | None]:
     """Return the raw source/backend pair that should actually be opened."""
     import cv2
 
+    ffmpeg_name = _ffmpeg_dshow_name(device)
     backend = _maybe_int(device.get("backend"))
     dshow_index = _maybe_int(device.get("dshow_index"))
     prefers_dshow = bool(device.get("prefer_dshow"))
 
     if dshow_index is not None and (prefers_dshow or backend == int(cv2.CAP_DSHOW)):
         return dshow_index, int(cv2.CAP_DSHOW)
+    if ffmpeg_name is not None:
+        return f"ffmpeg-dshow:{ffmpeg_name}", int(cv2.CAP_DSHOW)
     return int(device["index"]), backend
 
 
@@ -89,17 +92,22 @@ def list_device_open_targets(device: dict) -> list[tuple[int, int | None]]:
 
     targets: list[tuple[int, int | None]] = []
 
-    def add_target(source: int | None, backend: int | None) -> None:
+    def add_target(source: int | str | None, backend: int | None) -> None:
         if source is None:
             return
-        candidate = (int(source), backend)
+        candidate = (source, backend)
         if candidate not in targets:
             targets.append(candidate)
 
     primary_source, primary_backend = resolve_device_open_target(device)
     add_target(primary_source, primary_backend)
-    add_target(_maybe_int(device.get("index")), _maybe_int(device.get("backend")))
+    if not (
+        isinstance(primary_source, str)
+        and primary_source.startswith("ffmpeg-dshow:")
+    ):
+        add_target(_ffmpeg_target(device), int(cv2.CAP_DSHOW))
     add_target(_maybe_int(device.get("dshow_index")), int(cv2.CAP_DSHOW))
+    add_target(_maybe_int(device.get("index")), _maybe_int(device.get("backend")))
     return targets
 
 
@@ -256,6 +264,10 @@ def detect_devices(max_index: int = 10) -> list[dict]:
         for index, info in dshow_frames.items()
         if info["stats"]["is_zero"]
     }
+    dshow_name_to_index = {
+        _normalize_name(str(info["name"])): index
+        for index, info in dshow_frames.items()
+    }
     dshow_nonzero = {
         index: info
         for index, info in dshow_frames.items()
@@ -284,16 +296,9 @@ def detect_devices(max_index: int = 10) -> list[dict]:
             used_dshow.add(similar_dshow)
 
         if name is None and msmf_brightness <= 10:
-            for dshow_index, dshow_name in dshow_zero.items():
-                if dshow_index in used_dshow:
-                    continue
-                candidate_name = _claim_unused_name(capture_card_names, used_names)
-                if candidate_name is None:
-                    continue
+            candidate_name = _claim_unused_name(capture_card_names, used_names)
+            if candidate_name is not None:
                 name = candidate_name
-                matched_dshow = dshow_index
-                used_dshow.add(dshow_index)
-                break
 
         if name is None and msmf_brightness > 10:
             for dshow_index, dshow_name in dshow_zero.items():
@@ -314,8 +319,6 @@ def detect_devices(max_index: int = 10) -> list[dict]:
                     )
                 ):
                     name = dshow_name
-                    matched_dshow = dshow_index
-                    used_dshow.add(dshow_index)
                     break
             if name is None:
                 best_dshow = None
@@ -390,6 +393,28 @@ def detect_devices(max_index: int = 10) -> list[dict]:
                         out_height = height
                     if fps > 0:
                         out_fps = fps
+        elif _is_capture_card_name(name):
+            named_dshow = dshow_name_to_index.get(_normalize_name(name))
+            if named_dshow is not None:
+                dshow_info = dshow_frames[named_dshow]
+                if not _is_low_signal_stats(dshow_info["stats"]):
+                    dshow_index = named_dshow
+                    prefer_dshow = _should_prefer_dshow(
+                        name=name,
+                        msmf_stats=msmf_stats,
+                        dshow_stats=dshow_info["stats"],
+                    )
+                    if prefer_dshow:
+                        width = int(dshow_info["width"])
+                        height = int(dshow_info["height"])
+                        fps = float(dshow_info["fps"])
+                        if width > 0 and height > 0:
+                            out_width = width
+                            out_height = height
+                        if fps > 0:
+                            out_fps = fps
+            if not prefer_dshow:
+                prefer_dshow = True
 
         devices.append({
             "index": msmf_index,
@@ -400,6 +425,7 @@ def detect_devices(max_index: int = 10) -> list[dict]:
             "backend": int(cv2.CAP_MSMF),
             "dshow_index": dshow_index,
             "prefer_dshow": prefer_dshow,
+            "ffmpeg_dshow_name": name if _is_capture_card_name(name) else None,
         })
 
     next_index = (max((int(device["index"]) for device in devices), default=-1) + 1)
@@ -433,6 +459,9 @@ def detect_devices(max_index: int = 10) -> list[dict]:
             "backend": int(cv2.CAP_DSHOW),
             "dshow_index": dshow_index,
             "prefer_dshow": _is_capture_card_name(preferred_name),
+            "ffmpeg_dshow_name": (
+                preferred_name if _is_capture_card_name(preferred_name) else None
+            ),
         })
         used_names.add(normalized)
         next_index += 1
@@ -531,9 +560,14 @@ def _find_similar_dshow_match(
     dshow_frames: dict[int, dict[str, object]],
     used_dshow: set[int],
 ) -> int | None:
+    if _is_low_signal_stats(msmf_stats):
+        return None
+
     candidates: list[tuple[float, int]] = []
     for dshow_index, info in dshow_frames.items():
         if dshow_index in used_dshow:
+            continue
+        if _is_low_signal_stats(info["stats"]):
             continue
         score = _frame_similarity_score(msmf_stats, info["stats"])
         if score is None:
@@ -571,6 +605,12 @@ def _frame_similarity_score(
     return score
 
 
+def _is_low_signal_stats(stats: dict[str, float | bool | object]) -> bool:
+    if bool(stats.get("is_zero")):
+        return True
+    return float(stats.get("signal_score", 0.0)) < 0.5
+
+
 def _is_capture_card_name(name: str) -> bool:
     lower = name.casefold()
     return any(
@@ -599,6 +639,22 @@ def _claim_unused_name(candidates: list[str], used_names: set[str]) -> str | Non
             used_names.add(normalized)
             return candidate
     return None
+
+
+def _ffmpeg_dshow_name(device: dict) -> str | None:
+    value = device.get("ffmpeg_dshow_name")
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped:
+            return stripped
+    return None
+
+
+def _ffmpeg_target(device: dict) -> str | None:
+    name = _ffmpeg_dshow_name(device)
+    if name is None:
+        return None
+    return f"ffmpeg-dshow:{name}"
 
 
 def _maybe_int(value: object) -> int | None:

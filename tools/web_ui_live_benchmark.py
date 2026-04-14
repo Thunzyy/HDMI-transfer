@@ -185,8 +185,9 @@ def _run_case(
                 sender_driver.find_element(By.ID, "startBtn").click()
                 metrics = _wait_for_receiver_completion(
                     receiver_driver,
+                    base_url=base_url,
                     timeout_s=900.0,
-                    sender_debug=_sender_debug_state(sender_driver),
+                    sender_debug=lambda: _sender_debug_state(sender_driver),
                 )
                 duration_s = time.perf_counter() - started
 

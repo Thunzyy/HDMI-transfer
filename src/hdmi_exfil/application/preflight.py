@@ -11,9 +11,15 @@ from hdmi_exfil.core.protocols.base import FrameResult
 PREFLIGHT_FILENAME = "__hdmi_preflight__.bin"
 PREFLIGHT_FILE_BYTES = b"HDMI_EXFIL_PREFLIGHT_V1"
 PREFLIGHT_TOTAL_FRAMES = 1
+PREFLIGHT_BITS_PER_CHANNEL = 1
 PREFLIGHT_TIMEOUT_MS = 15_000
 PREFLIGHT_POLL_INTERVAL_MS = 300
 PREFLIGHT_SETTLE_MS = 200
+PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS = 4_000
+PREFLIGHT_FILLER_BYTES = bytes(
+    (((index * 73) + 19) ^ (index * 29)) & 0xFF
+    for index in range(256)
+)
 
 
 @lru_cache(maxsize=1)
@@ -53,3 +59,28 @@ def is_preflight_start_result(result: FrameResult | None) -> bool:
         return False
     return is_preflight_start_payload(result.data)
 
+
+def apply_preflight_visual_filler(
+    frame_bytes: bytearray,
+    *,
+    used_prefix_len: int,
+) -> bytearray:
+    """Fill the unused tail of a preflight frame with a dense visual pattern.
+
+    The sequential decoder only consumes the leading header + payload bytes
+    announced by ``payload_len``. This helper keeps that canonical prefix
+    untouched and fills the remainder with a deterministic high-contrast
+    pattern so HDMI capture and geometry alignment have more signal.
+    """
+    start = max(0, int(used_prefix_len))
+    if start >= len(frame_bytes):
+        return frame_bytes
+
+    pattern = PREFLIGHT_FILLER_BYTES
+    write_offset = start
+    while write_offset < len(frame_bytes):
+        remaining = len(frame_bytes) - write_offset
+        chunk = pattern[:remaining]
+        frame_bytes[write_offset : write_offset + len(chunk)] = chunk
+        write_offset += len(chunk)
+    return frame_bytes

@@ -7,11 +7,14 @@ from importlib.resources import files
 from typing import Final
 
 from hdmi_exfil.application.preflight import (
+    PREFLIGHT_BITS_PER_CHANNEL,
     PREFLIGHT_FILENAME,
     PREFLIGHT_FILE_BYTES,
+    PREFLIGHT_FILLER_BYTES,
     PREFLIGHT_POLL_INTERVAL_MS,
     PREFLIGHT_SETTLE_MS,
     PREFLIGHT_TIMEOUT_MS,
+    PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS,
     PREFLIGHT_TOTAL_FRAMES,
 )
 from hdmi_exfil.core.config import FRAME_TYPE_DATA, FRAME_TYPE_END, FRAME_TYPE_START
@@ -46,10 +49,15 @@ def render_protocol_javascript() -> str:
         "const PREFLIGHT_FILE_BYTES = new Uint8Array(["
         + ", ".join(str(byte) for byte in PREFLIGHT_FILE_BYTES)
         + "]);",
+        "const PREFLIGHT_FILLER_BYTES = new Uint8Array(["
+        + ", ".join(str(byte) for byte in PREFLIGHT_FILLER_BYTES)
+        + "]);",
         f"const PREFLIGHT_TOTAL_FRAMES = {PREFLIGHT_TOTAL_FRAMES};",
+        f"const PREFLIGHT_BITS_PER_CHANNEL = {PREFLIGHT_BITS_PER_CHANNEL};",
         f"const PREFLIGHT_TIMEOUT_MS = {PREFLIGHT_TIMEOUT_MS};",
         f"const PREFLIGHT_POLL_INTERVAL_MS = {PREFLIGHT_POLL_INTERVAL_MS};",
         f"const PREFLIGHT_SETTLE_MS = {PREFLIGHT_SETTLE_MS};",
+        f"const PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS = {PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS};",
         "",
         "const PROFILES = {",
     ]

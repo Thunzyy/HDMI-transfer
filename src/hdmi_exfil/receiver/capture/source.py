@@ -20,9 +20,112 @@ Usage::
 from __future__ import annotations
 
 import contextlib
+import queue
+import subprocess
 import sys
+import threading
 
 import cv2
+import numpy as np
+
+
+_FFMPEG_DSHOW_PREFIX = "ffmpeg-dshow:"
+
+
+class _FFmpegDshowCapture:
+    """Minimal raw-frame capture wrapper backed by ffmpeg dshow."""
+
+    def __init__(self, device_name: str, width: int, height: int, fps: int) -> None:
+        self._device_name = device_name
+        self._width = int(width)
+        self._height = int(height)
+        self._fps = float(fps)
+        self._frame_size = self._width * self._height * 3
+        self._closed = False
+        self._frames: queue.Queue[np.ndarray] = queue.Queue(maxsize=2)
+        self._process = subprocess.Popen(
+            _build_ffmpeg_dshow_command(
+                device_name=device_name,
+                width=self._width,
+                height=self._height,
+                fps=int(self._fps),
+            ),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            bufsize=0,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        self._reader = threading.Thread(target=self._reader_loop, daemon=True)
+        self._reader.start()
+
+    def isOpened(self) -> bool:
+        return not self._closed and self._process.poll() is None
+
+    def get(self, prop: int) -> float:
+        if prop == cv2.CAP_PROP_FRAME_WIDTH:
+            return float(self._width)
+        if prop == cv2.CAP_PROP_FRAME_HEIGHT:
+            return float(self._height)
+        if prop == cv2.CAP_PROP_FPS:
+            return float(self._fps)
+        return 0.0
+
+    def read(self, timeout_s: float = 1.0) -> tuple[bool, np.ndarray | None]:
+        if self._closed:
+            return False, None
+        try:
+            frame = self._frames.get(timeout=timeout_s)
+        except queue.Empty:
+            if self._process.poll() is not None:
+                return False, None
+            return False, None
+        return True, frame
+
+    def release(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        with contextlib.suppress(Exception):
+            if self._process.poll() is None:
+                self._process.terminate()
+        with contextlib.suppress(Exception):
+            self._process.wait(timeout=1.0)
+        with contextlib.suppress(Exception):
+            if self._process.poll() is None:
+                self._process.kill()
+        with contextlib.suppress(Exception):
+            if self._process.stdout is not None:
+                self._process.stdout.close()
+
+    def _reader_loop(self) -> None:
+        stdout = self._process.stdout
+        if stdout is None:
+            return
+
+        while not self._closed:
+            payload = self._read_exact(stdout, self._frame_size)
+            if payload is None:
+                break
+            frame = np.frombuffer(payload, dtype=np.uint8).reshape(
+                (self._height, self._width, 3),
+            ).copy()
+            while self._frames.full():
+                with contextlib.suppress(queue.Empty):
+                    self._frames.get_nowait()
+            with contextlib.suppress(queue.Full):
+                self._frames.put_nowait(frame)
+
+    def _read_exact(self, stream, expected_size: int) -> bytes | None:
+        chunks = bytearray()
+        while len(chunks) < expected_size and not self._closed:
+            chunk = stream.read(expected_size - len(chunks))
+            if not chunk:
+                return None
+            chunks.extend(chunk)
+        if len(chunks) != expected_size:
+            return None
+        return bytes(chunks)
 
 
 def _get_backends() -> list[int]:
@@ -57,7 +160,18 @@ def _try_open(
     Some DSHOW drivers claim high resolution after ``set()`` but deliver
     all-zero frames.  Reading a test frame catches this.
     """
-    import numpy as np
+    if _is_ffmpeg_dshow_source(source, backend):
+        cap = _FFmpegDshowCapture(
+            _ffmpeg_dshow_device_name(str(source)),
+            width,
+            height,
+            fps,
+        )
+        ret, frame = cap.read(timeout_s=3.0)
+        if not ret or not isinstance(frame, np.ndarray):
+            cap.release()
+            return None
+        return cap
 
     cap = cv2.VideoCapture(source, backend)
     if not cap.isOpened():
@@ -123,8 +237,6 @@ def _try_open_validated(
     Like ``_try_open`` but additionally reads a test frame to confirm
     the device is fully functional.  Used by device detection.
     """
-    import numpy as np
-
     cap = _try_open(source, backend, width, height, fps)
     if cap is None:
         return None
@@ -160,10 +272,10 @@ class CaptureSource:
         height: int = 1080,
         fps: int = 60,
         backend: int | None = None,
-        _precap: cv2.VideoCapture | None = None,
+        _precap: object | None = None,
         _keep_alive: bool = False,
     ) -> None:
-        self._cap: cv2.VideoCapture | None = None
+        self._cap: object | None = None
         self._keep_alive = _keep_alive
 
         if _precap is not None and _precap.isOpened():
@@ -239,3 +351,47 @@ class CaptureSource:
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
         self.release()
+
+
+def _is_ffmpeg_dshow_source(source: int | str, backend: int) -> bool:
+    return (
+        backend == cv2.CAP_DSHOW
+        and isinstance(source, str)
+        and source.startswith(_FFMPEG_DSHOW_PREFIX)
+    )
+
+
+def _ffmpeg_dshow_device_name(source: str) -> str:
+    return source.split(":", 1)[1]
+
+
+def _build_ffmpeg_dshow_command(
+    *,
+    device_name: str,
+    width: int,
+    height: int,
+    fps: int,
+) -> list[str]:
+    return [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-fflags",
+        "nobuffer",
+        "-flags",
+        "low_delay",
+        "-f",
+        "dshow",
+        "-video_size",
+        f"{width}x{height}",
+        "-framerate",
+        str(fps),
+        "-i",
+        f"video={device_name}",
+        "-pix_fmt",
+        "bgr24",
+        "-f",
+        "rawvideo",
+        "pipe:1",
+    ]

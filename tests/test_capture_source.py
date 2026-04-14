@@ -77,3 +77,85 @@ def test_capture_source_rejects_dshow_when_no_frames_are_read(monkeypatch):
         assert "Could not open video source 3" in str(exc)
     else:
         raise AssertionError("CaptureSource should reject DSHOW sources with no readable frames")
+
+
+def test_capture_source_opens_named_ffmpeg_dshow_source(monkeypatch):
+    from hdmi_exfil.receiver.capture.source import CaptureSource
+
+    frame = np.arange(4 * 2 * 3, dtype=np.uint8).reshape((2, 4, 3))
+    frame_bytes = frame.tobytes()
+
+    class _FakePipe:
+        def __init__(self, payload: bytes) -> None:
+            self._payload = bytearray(payload)
+            self.closed = False
+
+        def read(self, size: int) -> bytes:
+            if size <= 0:
+                return b""
+            if not self._payload:
+                return b""
+            chunk = bytes(self._payload[:size])
+            del self._payload[:size]
+            return chunk
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _FakeProcess:
+        def __init__(self, cmd, **kwargs) -> None:
+            self.cmd = cmd
+            self.stdout = _FakePipe(frame_bytes * 3)
+            self.stderr = _FakePipe(b"")
+            self._returncode = None
+
+        def poll(self):
+            return self._returncode
+
+        def wait(self, timeout=None):
+            self._returncode = 0
+            return 0
+
+        def terminate(self):
+            self._returncode = 0
+
+        def kill(self):
+            self._returncode = -9
+
+    created = {}
+
+    def fake_popen(cmd, **kwargs):
+        created["cmd"] = cmd
+        return _FakeProcess(cmd, **kwargs)
+
+    monkeypatch.setattr(cv2, "VideoCapture", lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("cv2.VideoCapture should not be used for ffmpeg-dshow named sources"),
+    ))
+    import subprocess
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+    cap = CaptureSource(
+        "ffmpeg-dshow:Elgato 4K X",
+        width=4,
+        height=2,
+        fps=60,
+        backend=cv2.CAP_DSHOW,
+    )
+
+    ret, decoded = cap.read()
+
+    assert created["cmd"][:6] == [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-fflags",
+        "nobuffer",
+    ]
+    assert "video=Elgato 4K X" in created["cmd"]
+    assert cap.actual_width == 4
+    assert cap.actual_height == 2
+    assert ret is True
+    assert np.array_equal(decoded, frame)
+    cap.release()

@@ -93,6 +93,9 @@ def test_api_receive_status_exposes_runtime_preflight_state(monkeypatch, tmp_pat
                 "protocol": "sequential",
                 "preflight_required": True,
                 "preflight_state": "waiting",
+                "preflight_stage": "transfer",
+                "requested_transfer_bpc": 3,
+                "transfer_bpc": None,
             }
 
     app._receiver_worker = FakeWorker()
@@ -101,6 +104,7 @@ def test_api_receive_status_exposes_runtime_preflight_state(monkeypatch, tmp_pat
     response = client.get("/api/receive/status")
 
     assert response.status_code == 200
+    assert response.headers["Access-Control-Allow-Origin"] == "*"
     assert response.json == {
         "active": True,
         "preview_seq": 12,
@@ -109,4 +113,55 @@ def test_api_receive_status_exposes_runtime_preflight_state(monkeypatch, tmp_pat
         "protocol": "sequential",
         "preflight_required": True,
         "preflight_state": "waiting",
+        "preflight_stage": "transfer",
+        "requested_transfer_bpc": 3,
+        "transfer_bpc": None,
+    }
+
+
+def test_api_receive_status_preserves_terminal_state_after_worker_exit(monkeypatch, tmp_path) -> None:
+    app = server.create_app(output_dir=str(tmp_path), runtime=False)
+
+    class FakeWorker:
+        def is_alive(self) -> bool:
+            return False
+
+        def get_preview_health(self) -> dict[str, object]:
+            return {"preview_seq": 88, "preview_age_s": 1.2}
+
+        def get_runtime_state(self) -> dict[str, object]:
+            return {
+                "state": "complete",
+                "protocol": "fountain",
+                "filename": "payload.bin",
+                "download_url": "/api/receive/download/payload.bin",
+                "speed_mbps": 4.2,
+                "preflight_required": True,
+                "preflight_state": "ok",
+                "preflight_stage": "done",
+                "requested_transfer_bpc": 2,
+                "transfer_bpc": 1,
+            }
+
+    app._receiver_worker = FakeWorker()
+    client = app.test_client()
+
+    response = client.get("/api/receive/status")
+
+    assert response.status_code == 200
+    assert response.headers["Access-Control-Allow-Origin"] == "*"
+    assert response.json == {
+        "active": False,
+        "preview_seq": 88,
+        "preview_age_s": 1.2,
+        "state": "complete",
+        "protocol": "fountain",
+        "filename": "payload.bin",
+        "download_url": "/api/receive/download/payload.bin",
+        "speed_mbps": 4.2,
+        "preflight_required": True,
+        "preflight_state": "ok",
+        "preflight_stage": "done",
+        "requested_transfer_bpc": 2,
+        "transfer_bpc": 1,
     }

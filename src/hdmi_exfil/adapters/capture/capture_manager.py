@@ -6,7 +6,7 @@ import threading
 from typing import Any, Callable
 
 
-CaptureOpener = Callable[[int, int, int, int, int], Any]
+CaptureOpener = Callable[[int | str, int, int, int, int], Any]
 
 
 class CaptureManager:
@@ -53,14 +53,14 @@ class CaptureManager:
         self,
         *,
         device: int,
-        open_device: int | None = None,
+        open_device: int | str | None = None,
         backend: int,
         capture: Any | None = None,
     ) -> None:
         """Store a ready capture or open one immediately."""
         self._ready.clear()
         previous: Any | None = None
-        source_to_open = int(open_device if open_device is not None else device)
+        source_to_open = open_device if open_device is not None else device
 
         with self._lock:
             previous = self._capture
@@ -111,7 +111,7 @@ class CaptureManager:
         self,
         *,
         device: int,
-        open_device: int | None = None,
+        open_device: int | str | None = None,
         backend: int,
     ) -> None:
         """Open a persistent capture in a background thread."""
@@ -148,7 +148,7 @@ class CaptureManager:
         *,
         capture: Any,
         device: int,
-        open_device: int | None = None,
+        open_device: int | str | None = None,
         backend: int | None,
     ) -> None:
         """Return a capture handle to the persistent pool."""

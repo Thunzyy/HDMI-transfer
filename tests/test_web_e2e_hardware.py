@@ -18,7 +18,7 @@ import pytest
 import requests
 from screeninfo import get_monitors
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -402,15 +402,19 @@ def _upload_file(driver: webdriver.Chrome, payload_path: Path) -> None:
 def _receiver_debug_state(driver: webdriver.Chrome) -> dict[str, Any]:
     return driver.execute_script(
         """
+        function textOr(selector, fallback = "") {
+          const node = document.querySelector(selector);
+          return node ? node.textContent.trim() : fallback;
+        }
         const logLines = Array.from(document.querySelectorAll("#logBody .log-msg"))
           .slice(-8)
           .map((node) => node.textContent.trim());
         return {
-          status: document.getElementById("statusMsg").textContent.trim(),
-          pct: document.getElementById("pctBig").textContent.trim(),
-          name: document.getElementById("metricName").textContent.trim(),
-          sha: document.getElementById("metricSha").textContent.trim(),
-          speed: document.getElementById("metricSpeed").textContent.trim(),
+          status: textOr("#statusMsg"),
+          pct: textOr("#pctBig"),
+          name: textOr("#metricName", "--"),
+          sha: textOr("#metricSha", "--"),
+          speed: textOr("#metricSpeed", "--"),
           counts: Array.from(document.querySelectorAll(".fountain-counts span")).map((node) => node.textContent.trim()),
           logs: logLines,
         };
@@ -480,37 +484,186 @@ def _sender_frame_count(driver: webdriver.Chrome) -> int:
         return 0
 
 
+def _receiver_status_snapshot(base_url: str) -> dict[str, Any]:
+    response = requests.get(f"{base_url}/api/receive/status", timeout=5.0)
+    response.raise_for_status()
+    return response.json()
+
+
+def _receiver_status_signature(status: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        status.get("active"),
+        status.get("state"),
+        status.get("message"),
+        status.get("protocol"),
+        status.get("preflight_state"),
+        status.get("low_signal_streak"),
+        status.get("low_signal_detected"),
+        status.get("percent"),
+        status.get("chunks_decoded"),
+        status.get("total_chunks"),
+        status.get("bytes_received"),
+        status.get("download_url"),
+        status.get("last_event_type"),
+    )
+
+
+def _receiver_metrics_from_status(status: dict[str, Any]) -> dict[str, str] | None:
+    if status.get("state") != "complete":
+        return None
+    download_url = status.get("download_url")
+    if not download_url:
+        return None
+
+    sha_available = bool(status.get("sha256_available"))
+    sha_ok = bool(status.get("sha256_ok"))
+    if sha_ok:
+        sha = "OK"
+    elif sha_available:
+        sha = "FAIL"
+    else:
+        sha = "UNAVAILABLE"
+
+    duration_s = float(status.get("duration_s", 0.0) or 0.0)
+    speed_mbps = float(status.get("speed_mbps", 0.0) or 0.0)
+    return {
+        "name": str(status.get("filename", "")).strip(),
+        "size": str(status.get("size", "")).strip(),
+        "sha": sha,
+        "duration": f"{duration_s:.2f} s",
+        "speed": f"{speed_mbps:.2f} Mbps",
+        "download": str(download_url).strip(),
+    }
+
+
+def _receiver_wait_failure_reason(status: dict[str, Any], *, stagnant_s: float) -> str:
+    state = str(status.get("state", "")).strip() or "unknown"
+    if state == "preflight_wait":
+        preview_age_s = status.get("preview_age_s")
+        try:
+            preview_age_s = float(preview_age_s)
+        except (TypeError, ValueError):
+            preview_age_s = None
+        if preview_age_s is not None and preview_age_s >= 3.0:
+            return "receiver remained blocked in HDMI preflight and preview stream stalled"
+        if bool(status.get("low_signal_detected")):
+            return "receiver remained blocked in HDMI preflight with black or low-signal preview"
+        return "receiver remained blocked in HDMI preflight"
+    if state == "error":
+        return f"receiver entered error state: {status.get('message', 'Error')}"
+    if state == "stopped":
+        return f"receiver stopped before completion: {status.get('message', 'Stopped')}"
+    if not bool(status.get("active", True)) and state != "complete":
+        return f"receiver became inactive without completion (state={state})"
+    if stagnant_s > 0:
+        return f"receiver stalled before completion (state={state})"
+    return f"receiver never reached completion (state={state})"
+
+
+def _resolve_sender_debug_snapshot(sender_debug: Any) -> Any:
+    if not callable(sender_debug):
+        return sender_debug
+    try:
+        return sender_debug()
+    except Exception as exc:
+        return {"sender_debug_error": str(exc)}
+
+
 def _wait_for_receiver_completion(
     driver: webdriver.Chrome,
     *,
+    base_url: str,
     timeout_s: float,
-    sender_debug: dict[str, Any],
+    sender_debug: Any,
+    stall_timeout_s: float = 15.0,
+    preflight_timeout_s: float = 8.0,
+    poll_interval_s: float = 0.25,
 ) -> dict[str, str]:
-    try:
-        WebDriverWait(driver, timeout_s).until(
-            lambda d: d.execute_script(
-                'return document.getElementById("downloadArea").classList.contains("visible");'
-            )
-        )
-    except TimeoutException as exc:
-        receiver_state = _receiver_debug_state(driver)
-        raise AssertionError(
-            "receiver UI never reached completion\n"
-            f"receiver={receiver_state}\n"
-            f"sender={sender_debug}"
-        ) from exc
+    deadline = time.time() + timeout_s
+    last_signature: tuple[Any, ...] | None = None
+    last_change_at = time.time()
+    last_status: dict[str, Any] = {"state": "unknown", "active": True}
+    last_sender_state: Any = {}
+    preflight_wait_started_at: float | None = None
 
-    return driver.execute_script(
-        """
-        return {
-          name: document.getElementById("metricName").textContent.trim(),
-          size: document.getElementById("metricSize").textContent.trim(),
-          sha: document.getElementById("metricSha").textContent.trim(),
-          duration: document.getElementById("metricDuration").textContent.trim(),
-          speed: document.getElementById("metricSpeed").textContent.trim(),
-          download: document.getElementById("downloadBtn").getAttribute("href"),
-        };
-        """
+    while time.time() < deadline:
+        try:
+            status = _receiver_status_snapshot(base_url)
+        except Exception as exc:
+            status = {
+                "state": "status_unavailable",
+                "message": str(exc),
+                "active": True,
+            }
+
+        last_status = status
+        last_sender_state = _resolve_sender_debug_snapshot(sender_debug)
+        sender_status = str(
+            last_sender_state.get("status", "")
+            if isinstance(last_sender_state, dict)
+            else "",
+        ).strip()
+        signature = _receiver_status_signature(status)
+        if signature != last_signature:
+            last_signature = signature
+            last_change_at = time.time()
+
+        metrics = _receiver_metrics_from_status(status)
+        if metrics is not None:
+            return metrics
+
+        state = str(status.get("state", "")).strip()
+        if state == "preflight_wait":
+            preview_age_s = status.get("preview_age_s")
+            try:
+                preview_age_value = float(preview_age_s)
+            except (TypeError, ValueError):
+                preview_age_value = None
+            if preview_age_value is not None and preview_age_value >= 3.0:
+                break
+            if preflight_wait_started_at is None:
+                preflight_wait_started_at = time.time()
+            sender_is_still_negotiating = sender_status in {"Starting", "Preflight"}
+            effective_preflight_timeout_s = (
+                max(preflight_timeout_s, 20.0)
+                if sender_is_still_negotiating
+                else preflight_timeout_s
+            )
+            if sender_status in {"Preflight failed", "Receiver timeout", "Stopped"}:
+                break
+            elif (
+                time.time() - preflight_wait_started_at >= effective_preflight_timeout_s
+                and (
+                    not sender_is_still_negotiating
+                    or time.time() - last_change_at >= 2.0
+                )
+            ):
+                break
+        else:
+            preflight_wait_started_at = None
+
+        if sender_status in {"Preflight failed", "Receiver timeout", "Stopped"}:
+            break
+        if state in {"error", "stopped"}:
+            break
+        if not bool(status.get("active", True)) and state != "complete":
+            break
+        if time.time() - last_change_at >= stall_timeout_s:
+            break
+        time.sleep(poll_interval_s)
+
+    receiver_state = _receiver_debug_state(driver)
+    sender_state = last_sender_state
+    reason = _receiver_wait_failure_reason(
+        last_status,
+        stagnant_s=max(0.0, time.time() - last_change_at),
+    )
+    raise AssertionError(
+        "receiver did not complete\n"
+        f"reason={reason}\n"
+        f"receiver_api={last_status}\n"
+        f"receiver_ui={receiver_state}\n"
+        f"sender={sender_state}"
     )
 
 
@@ -726,6 +879,7 @@ def test_web_ui_real_hardware_transfer(
             time.sleep(2.0)
             metrics = _wait_for_receiver_completion(
                 receiver_driver,
+                base_url=receiver_url,
                 timeout_s=90.0,
                 sender_debug={
                     "sender_log": sender_log_path.read_text(encoding="utf-8", errors="replace")

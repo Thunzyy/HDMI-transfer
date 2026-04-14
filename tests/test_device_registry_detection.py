@@ -200,16 +200,17 @@ def test_detect_devices_keeps_msmf_when_matched_dshow_capture_card_is_dead(monke
 
     devices = detect_devices(max_index=2)
 
-    assert devices == [{
+    assert devices[0] == {
         "index": 0,
         "name": "Elgato 4K X",
         "width": 1920,
         "height": 1080,
         "fps": 60.0,
         "backend": int(cv2.CAP_MSMF),
-        "dshow_index": 0,
-        "prefer_dshow": False,
-    }]
+        "dshow_index": None,
+        "prefer_dshow": True,
+        "ffmpeg_dshow_name": "Elgato 4K X",
+    }
 
 
 def test_detect_devices_matches_msmf_and_dshow_by_visual_similarity(monkeypatch):
@@ -304,3 +305,162 @@ def test_detect_devices_matches_msmf_and_dshow_by_visual_similarity(monkeypatch)
     assert devices[1]["dshow_index"] is None
     assert devices[2]["name"] == "Iriun Webcam"
     assert devices[2]["dshow_index"] is None
+
+
+def test_detect_devices_recovers_capture_card_dshow_index_by_exact_name(monkeypatch):
+    from hdmi_exfil.adapters.capture.device_registry import detect_devices
+    import hdmi_exfil.receiver.capture.source as source
+
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    ffmpeg_listing = '[dshow] "Elgato 4K X" (video)'
+
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=args[0],
+            returncode=1,
+            stdout="",
+            stderr=ffmpeg_listing,
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    msmf_frame = np.zeros((32, 32, 3), dtype=np.uint8)
+    msmf_frame[:, :16] = (255, 32, 32)
+    msmf_frame[:, 16:] = (32, 32, 255)
+
+    dshow_frame = np.zeros((32, 32, 3), dtype=np.uint8)
+    dshow_frame[::2, ::2] = (255, 255, 255)
+    dshow_frame[1::2, 1::2] = (16, 16, 16)
+
+    def fake_open_capture(index, backend, width, height, fps):
+        if backend != cv2.CAP_MSMF:
+            raise AssertionError("expected MSMF probe")
+        if index != 0:
+            return None
+        return _FakeCap(
+            width=width,
+            height=height,
+            fps=fps,
+            frames=[msmf_frame.copy() for _ in range(10)],
+        )
+
+    class FakeVideoCapture:
+        def __init__(self, index, backend):
+            if backend != cv2.CAP_DSHOW:
+                raise AssertionError("expected DSHOW probe")
+            self._cap = (
+                _FakeCap(frames=[dshow_frame.copy() for _ in range(10)])
+                if index == 0
+                else _FakeCap(opened=False, frames=[])
+            )
+
+        def isOpened(self):
+            return self._cap.isOpened()
+
+        def set(self, prop, value):
+            self._cap.set(prop, value)
+
+        def get(self, prop):
+            return self._cap.get(prop)
+
+        def read(self):
+            return self._cap.read()
+
+        def release(self):
+            self._cap.release()
+
+    monkeypatch.setattr(source, "open_capture", fake_open_capture)
+    monkeypatch.setattr(cv2, "VideoCapture", FakeVideoCapture)
+
+    devices = detect_devices(max_index=2)
+
+    assert devices[0]["name"] == "Elgato 4K X"
+    assert devices[0]["dshow_index"] == 0
+    assert devices[0]["prefer_dshow"] is True
+
+
+def test_detect_devices_does_not_assign_capture_card_to_unmatched_zero_dshow_source(monkeypatch):
+    from hdmi_exfil.adapters.capture.device_registry import detect_devices
+    import hdmi_exfil.receiver.capture.source as source
+
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    ffmpeg_listing = "\n".join([
+        '[dshow] "Camera (NVIDIA Broadcast)" (video)',
+        '[dshow] "Elgato 4K X" (video)',
+    ])
+
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=args[0],
+            returncode=1,
+            stdout="",
+            stderr=ffmpeg_listing,
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    msmf_dark = np.zeros((32, 32, 3), dtype=np.uint8)
+    dshow_dark = np.zeros((32, 32, 3), dtype=np.uint8)
+
+    def fake_open_capture(index, backend, width, height, fps):
+        if backend != cv2.CAP_MSMF:
+            raise AssertionError("expected MSMF probe")
+        if index == 0:
+            return _FakeCap(
+                width=width,
+                height=height,
+                fps=fps,
+                frames=[msmf_dark.copy() for _ in range(10)],
+            )
+        return None
+
+    class FakeVideoCapture:
+        def __init__(self, index, backend):
+            if backend != cv2.CAP_DSHOW:
+                raise AssertionError("expected DSHOW probe")
+            frames = {
+                0: dshow_dark,
+            }.get(index)
+            self._cap = (
+                _FakeCap(frames=[frames.copy() for _ in range(10)])
+                if frames is not None
+                else _FakeCap(opened=False, frames=[])
+            )
+
+        def isOpened(self):
+            return self._cap.isOpened()
+
+        def set(self, prop, value):
+            self._cap.set(prop, value)
+
+        def get(self, prop):
+            return self._cap.get(prop)
+
+        def read(self):
+            return self._cap.read()
+
+        def release(self):
+            self._cap.release()
+
+    monkeypatch.setattr(source, "open_capture", fake_open_capture)
+    monkeypatch.setattr(cv2, "VideoCapture", FakeVideoCapture)
+
+    devices = detect_devices(max_index=3)
+
+    assert devices[0] == {
+        "index": 0,
+        "name": "Elgato 4K X",
+        "width": 1920,
+        "height": 1080,
+        "fps": 60.0,
+        "backend": int(cv2.CAP_MSMF),
+        "dshow_index": None,
+        "prefer_dshow": True,
+        "ffmpeg_dshow_name": "Elgato 4K X",
+    }
+    assert not any(
+        device["name"] == "Elgato 4K X" and device.get("dshow_index") == 0
+        for device in devices
+    )

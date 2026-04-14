@@ -32,6 +32,33 @@ def test_resolve_capture_target_maps_logical_capture_card_to_dshow_index():
     assert "Elgato 4K X" in resolved.describe()
 
 
+def test_resolve_capture_target_prefers_raw_dshow_index_over_named_ffmpeg_source():
+    from hdmi_exfil.adapters.capture.resolver import resolve_capture_target
+
+    devices = [
+        {
+            "index": 0,
+            "name": "Elgato 4K X",
+            "width": 1920,
+            "height": 1080,
+            "fps": 60.0,
+            "backend": int(cv2.CAP_MSMF),
+            "dshow_index": 3,
+            "prefer_dshow": True,
+            "ffmpeg_dshow_name": "Elgato 4K X",
+        },
+    ]
+
+    resolved = resolve_capture_target(0, detector=lambda: devices)
+
+    assert resolved.open_source == 3
+    assert resolved.backend == int(cv2.CAP_DSHOW)
+    assert resolved.fallback_targets == (
+        ("ffmpeg-dshow:Elgato 4K X", int(cv2.CAP_DSHOW)),
+        (0, int(cv2.CAP_MSMF)),
+    )
+
+
 def test_resolve_saved_capture_target_auto_heals_changed_logical_index():
     from hdmi_exfil.adapters.capture.resolver import resolve_saved_capture_target
 

@@ -47,6 +47,10 @@ def _find_sender_html() -> Path:
     return candidate
 
 
+def _should_prime_persistent_capture(open_device: int | str, backend: int | None) -> bool:
+    return not isinstance(open_device, str)
+
+
 def _register_page_routes(app: Flask, static_dir: Path) -> None:
     @app.route("/")
     def index():
@@ -124,11 +128,12 @@ def create_app(
         if cached_devices:
             device = cached_devices[0]
             open_device, backend = resolve_device_open_target(device)
-            app._capture_manager.prime_async(
-                device=device["index"],
-                open_device=open_device,
-                backend=int(backend or cv2.CAP_MSMF),
-            )
+            if _should_prime_persistent_capture(open_device, backend):
+                app._capture_manager.prime_async(
+                    device=device["index"],
+                    open_device=open_device,
+                    backend=int(backend or cv2.CAP_MSMF),
+                )
     else:
         app._device_registry = None
         app._capture_manager = None

@@ -4,10 +4,14 @@ from dataclasses import replace
 
 import cv2
 import numpy as np
+import pytest
 
 from hdmi_exfil.core.config import FRAME_TYPE_DATA, FRAME_TYPE_START, PROFILES
 from hdmi_exfil.core.protocols.base import FrameResult
-from hdmi_exfil.web.receiver_worker import ReceiverWorker
+from hdmi_exfil.web.receiver_worker import (
+    ReceiverWorker,
+    _CaptureFallbackRequested,
+)
 
 
 class _FakeCap:
@@ -220,7 +224,271 @@ def test_worker_waits_for_preflight_before_receive_loop(monkeypatch) -> None:
 
     assert worker._wait_for_preflight(cap) is True
     assert worker.get_runtime_state()["preflight_state"] == "ok"
+    assert worker.get_runtime_state()["transfer_bpc"] == 1
     assert any(
         event_type == "status" and data.get("state") == "preflight_ok"
         for event_type, data in events
+    )
+
+
+def test_worker_preflight_negotiates_lower_transfer_bpc(monkeypatch) -> None:
+    from hdmi_exfil.application.preflight import build_preflight_start_payload
+
+    profile = replace(PROFILES["balanced"], bits_per_channel=3)
+    worker = ReceiverWorker(
+        device=0,
+        profile=profile,
+        mode="sequential",
+        require_preflight=True,
+    )
+    cap = _FakeCap(np.zeros((profile.height, profile.width, 3), dtype=np.uint8))
+    events: list[tuple[str, dict]] = []
+    detections = {1: 0, 2: 0}
+
+    original_publish = worker._publish
+
+    def capture_publish(event_type, data):
+        events.append((event_type, dict(data)))
+        original_publish(event_type, data)
+
+    worker._publish = capture_publish  # type: ignore[method-assign]
+
+    def fake_decode(frame, profile, decode_frame, geometry_candidates, geometry_cursor):
+        bpc = int(profile.bits_per_channel)
+        if bpc == 1 and detections[1] == 0:
+            detections[1] += 1
+            return FrameResult(
+                data=build_preflight_start_payload(),
+                frame_type=FRAME_TYPE_START,
+                frame_index=0,
+                total_frames=1,
+                is_valid=True,
+            ), geometry_cursor, worker._sampling
+        if bpc == 2 and detections[2] == 0 and detections[1] == 1:
+            detections[2] += 1
+            return FrameResult(
+                data=build_preflight_start_payload(),
+                frame_type=FRAME_TYPE_START,
+                frame_index=0,
+                total_frames=1,
+                is_valid=True,
+            ), geometry_cursor, worker._sampling
+        return None, geometry_cursor, None
+
+    worker._decode_with_sampling_fallbacks = fake_decode  # type: ignore[method-assign]
+
+    assert worker._wait_for_preflight(cap) is True
+    assert int(worker._profile.bits_per_channel) == 2
+    assert worker.get_runtime_state()["transfer_bpc"] == 2
+    assert any(
+        event_type == "status" and data.get("state") == "preflight_transfer_wait"
+        for event_type, data in events
+    )
+    assert any(
+        event_type == "status"
+        and data.get("state") == "preflight_ok"
+        and data.get("transfer_bpc") == 2
+        for event_type, data in events
+    )
+
+
+def test_worker_preflight_falls_back_to_safe_transfer_bpc_when_only_bpc1_is_visible(monkeypatch) -> None:
+    from hdmi_exfil.application.preflight import build_preflight_start_payload
+
+    profile = replace(PROFILES["balanced"], bits_per_channel=3)
+    worker = ReceiverWorker(
+        device=0,
+        profile=profile,
+        mode="sequential",
+        require_preflight=True,
+    )
+    cap = _FakeCap(np.zeros((profile.height, profile.width, 3), dtype=np.uint8))
+    events: list[tuple[str, dict]] = []
+
+    original_publish = worker._publish
+
+    def capture_publish(event_type, data):
+        events.append((event_type, dict(data)))
+        original_publish(event_type, data)
+
+    worker._publish = capture_publish  # type: ignore[method-assign]
+
+    def fake_decode(frame, profile, decode_frame, geometry_candidates, geometry_cursor):
+        if int(profile.bits_per_channel) == 1:
+            return FrameResult(
+                data=build_preflight_start_payload(),
+                frame_type=FRAME_TYPE_START,
+                frame_index=0,
+                total_frames=1,
+                is_valid=True,
+            ), geometry_cursor, worker._sampling
+        return None, geometry_cursor, None
+
+    worker._decode_with_sampling_fallbacks = fake_decode  # type: ignore[method-assign]
+
+    assert worker._wait_for_preflight(cap) is True
+    assert int(worker._profile.bits_per_channel) == 1
+    assert worker.get_runtime_state()["transfer_bpc"] == 1
+    preflight_ok = next(
+        data
+        for event_type, data in events
+        if event_type == "status" and data.get("state") == "preflight_ok"
+    )
+    assert "switching from bpc=3" in str(preflight_ok["message"])
+
+
+def test_worker_marks_preflight_low_signal_from_elapsed_time(monkeypatch) -> None:
+    profile = replace(PROFILES["balanced"], bits_per_channel=1)
+    worker = ReceiverWorker(
+        device=0,
+        profile=profile,
+        mode="sequential",
+        require_preflight=True,
+    )
+    cap = _FakeCap(np.zeros((profile.height, profile.width, 3), dtype=np.uint8))
+    events: list[tuple[str, dict]] = []
+
+    original_publish = worker._publish
+
+    def capture_publish(event_type, data):
+        events.append((event_type, dict(data)))
+        original_publish(event_type, data)
+
+    worker._publish = capture_publish  # type: ignore[method-assign]
+
+    decode_calls = {"count": 0}
+
+    def fake_decode(frame, profile, decode_frame, geometry_candidates, geometry_cursor):
+        decode_calls["count"] += 1
+        if decode_calls["count"] >= 8:
+            worker._stop_event.set()
+        return None, geometry_cursor, None
+
+    times = iter([0.0, 1.2, 2.4, 3.6, 4.8, 6.0, 7.2, 8.4, 9.6, 10.8])
+
+    monkeypatch.setattr(
+        "hdmi_exfil.web.receiver_worker.time.time",
+        lambda: next(times, 6.0),
+    )
+    worker._decode_with_sampling_fallbacks = fake_decode  # type: ignore[method-assign]
+
+    assert worker._wait_for_preflight(cap) is False
+
+    waiting_events = [
+        data
+        for event_type, data in events
+        if event_type == "status" and data.get("state") == "preflight_wait"
+    ]
+    assert waiting_events
+    assert any(float(event.get("low_signal_duration_s", 0.0)) >= 1.0 for event in waiting_events)
+    assert any(
+        event.get("low_signal_detected") is True
+        or float(event.get("low_signal_duration_s", 0.0)) >= 1.0
+        for event in waiting_events
+    )
+
+
+def test_worker_requests_runtime_fallback_after_low_signal_duration() -> None:
+    profile = replace(PROFILES["balanced"], bits_per_channel=1)
+    worker = ReceiverWorker(
+        device=1,
+        profile=profile,
+        mode="sequential",
+        backend=int(cv2.CAP_DSHOW),
+        fallback_targets=[(0, int(cv2.CAP_MSMF))],
+    )
+    worker._fallback_targets = [(0, int(cv2.CAP_MSMF))]
+
+    with pytest.raises(_CaptureFallbackRequested, match="low-signal"):
+        worker._maybe_request_runtime_fallback(
+            protocol_name="preflight",
+            frames_captured=4,
+            has_progress=False,
+            low_signal_streak=4,
+            low_signal_duration_s=3.0,
+            no_progress_duration_s=3.0,
+        )
+
+
+def test_worker_requests_runtime_fallback_after_no_progress_duration() -> None:
+    profile = replace(PROFILES["balanced"], bits_per_channel=1)
+    worker = ReceiverWorker(
+        device=1,
+        profile=profile,
+        mode="sequential",
+        backend=int(cv2.CAP_DSHOW),
+        fallback_targets=[(0, int(cv2.CAP_MSMF))],
+    )
+    worker._fallback_targets = [(0, int(cv2.CAP_MSMF))]
+
+    with pytest.raises(_CaptureFallbackRequested, match="No decodable preflight frames"):
+        worker._maybe_request_runtime_fallback(
+            protocol_name="preflight",
+            frames_captured=8,
+            has_progress=False,
+            low_signal_streak=0,
+            low_signal_duration_s=0.0,
+            no_progress_duration_s=7.0,
+        )
+
+
+def test_worker_named_dshow_source_prefers_raw_dshow_before_msmf(monkeypatch) -> None:
+    profile = replace(PROFILES["balanced"], bits_per_channel=1)
+    worker = ReceiverWorker(
+        device="ffmpeg-dshow:Elgato 4K X",
+        profile=profile,
+        mode="sequential",
+        backend=int(cv2.CAP_DSHOW),
+        fallback_targets=[
+            (0, int(cv2.CAP_MSMF)),
+            (3, int(cv2.CAP_DSHOW)),
+        ],
+    )
+
+    open_attempts: list[tuple[int | str, int | None]] = []
+    attempts = {"count": 0}
+
+    class FakeCaptureSource(_IdleCaptureSource):
+        def __init__(self, source, width, height, fps, backend=None, **kwargs) -> None:
+            open_attempts.append((source, backend))
+            super().__init__(source, width, height, fps, backend=backend, **kwargs)
+
+    def fake_run_sequential(cap) -> None:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            worker._request_capture_fallback("retry")
+            return
+        worker._publish("complete", {"filename": "ok.bin"})
+
+    monkeypatch.setattr("hdmi_exfil.web.receiver_worker.CaptureSource", FakeCaptureSource)
+    monkeypatch.setattr(worker, "_run_sequential", fake_run_sequential)
+
+    worker.run()
+
+    assert open_attempts == [
+        ("ffmpeg-dshow:Elgato 4K X", int(cv2.CAP_DSHOW)),
+        (3, int(cv2.CAP_DSHOW)),
+    ]
+
+
+def test_worker_named_dshow_source_skips_runtime_fallback_to_msmf_after_dshow_exhausted() -> None:
+    profile = replace(PROFILES["balanced"], bits_per_channel=1)
+    worker = ReceiverWorker(
+        device="ffmpeg-dshow:Elgato 4K X",
+        profile=profile,
+        mode="sequential",
+        backend=int(cv2.CAP_DSHOW),
+        fallback_targets=[(0, int(cv2.CAP_MSMF))],
+    )
+    worker._fallback_targets = [(0, int(cv2.CAP_MSMF))]
+    worker._active_device = 3
+    worker._active_backend = int(cv2.CAP_DSHOW)
+
+    worker._maybe_request_runtime_fallback(
+        protocol_name="preflight",
+        frames_captured=8,
+        has_progress=False,
+        low_signal_streak=0,
+        low_signal_duration_s=0.0,
+        no_progress_duration_s=7.0,
     )

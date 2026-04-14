@@ -388,10 +388,13 @@ const FRAME_TYPE_DATA = 0x02;
 const FRAME_TYPE_END = 0x03;
 const PREFLIGHT_FILENAME = "__hdmi_preflight__.bin";
 const PREFLIGHT_FILE_BYTES = new Uint8Array([72, 68, 77, 73, 95, 69, 88, 70, 73, 76, 95, 80, 82, 69, 70, 76, 73, 71, 72, 84, 95, 86, 49]);
+const PREFLIGHT_FILLER_BYTES = new Uint8Array([19, 65, 159, 185, 67, 17, 103, 217, 179, 161, 207, 9, 35, 177, 135, 233, 115, 1, 63, 89, 131, 113, 39, 57, 83, 225, 143, 201, 35, 17, 199, 105, 147, 193, 31, 249, 67, 145, 167, 89, 243, 97, 207, 137, 99, 241, 7, 41, 179, 129, 255, 89, 3, 49, 103, 249, 83, 33, 15, 73, 227, 145, 199, 41, 19, 193, 159, 185, 195, 17, 231, 89, 179, 161, 79, 9, 35, 177, 135, 105, 243, 1, 63, 217, 131, 241, 39, 57, 211, 97, 143, 73, 35, 17, 71, 233, 147, 65, 31, 121, 195, 145, 167, 217, 115, 225, 79, 137, 227, 113, 7, 41, 179, 129, 127, 217, 3, 49, 231, 121, 211, 33, 15, 201, 99, 145, 71, 41, 19, 65, 159, 185, 67, 17, 103, 217, 179, 161, 207, 9, 35, 177, 135, 233, 115, 1, 63, 89, 131, 113, 39, 57, 83, 225, 143, 201, 35, 17, 199, 105, 147, 193, 31, 249, 67, 145, 167, 89, 243, 97, 207, 137, 99, 241, 7, 41, 179, 129, 255, 89, 3, 49, 103, 249, 83, 33, 15, 73, 227, 145, 199, 41, 19, 193, 159, 185, 195, 17, 231, 89, 179, 161, 79, 9, 35, 177, 135, 105, 243, 1, 63, 217, 131, 241, 39, 57, 211, 97, 143, 73, 35, 17, 71, 233, 147, 65, 31, 121, 195, 145, 167, 217, 115, 225, 79, 137, 227, 113, 7, 41, 179, 129, 127, 217, 3, 49, 231, 121, 211, 33, 15, 201, 99, 145, 71, 41]);
 const PREFLIGHT_TOTAL_FRAMES = 1;
+const PREFLIGHT_BITS_PER_CHANNEL = 1;
 const PREFLIGHT_TIMEOUT_MS = 15000;
 const PREFLIGHT_POLL_INTERVAL_MS = 300;
 const PREFLIGHT_SETTLE_MS = 200;
+const PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS = 4000;
 
 const PROFILES = {
   speed: { name: "speed", width: 1920, height: 1080, blockSize: 8, targetFps: 240 },
@@ -415,6 +418,7 @@ const BPC_LEVELS = {
     cols: 0, rows: 0, bitsPerFrame: 0, bytesPerFrame: 0, payloadSize: 0,
   };
   const runtimeOptions = {
+    apiBaseUrl: "",
     debugTitle: false,
   };
 
@@ -436,6 +440,10 @@ const BPC_LEVELS = {
       fps = p ? p.targetFps : 60;
     } else fps = maxHz;
     return Math.min(fps, maxHz);
+  }
+
+  function bytesPerFrameForBpc(bpc) {
+    return (config.rows * config.cols * 3 * bpc) / 8;
   }
 
   // ── Refresh rate detection ─────────────
@@ -529,6 +537,8 @@ const BPC_LEVELS = {
   const textEncoder = new TextEncoder();
   const preflightNameBytes = textEncoder.encode(PREFLIGHT_FILENAME);
   let preflightPayloadPromise = null;
+  const FOUNTAIN_RECEIVER_WAIT_POLL_MS = 300;
+  const FOUNTAIN_RECEIVER_WAIT_MIN_MS = 30000;
 
   // ── State ──────────────────────────────
   const state = {
@@ -547,6 +557,11 @@ const BPC_LEVELS = {
     phase: "idle",
     preflightFrames: 0,
     preflightPayload: null,
+    preflightPhase: "path",
+    preflightRenderBpc: PREFLIGHT_BITS_PER_CHANNEL,
+    preflightRequestedBpc: PREFLIGHT_BITS_PER_CHANNEL,
+    preflightNegotiatedBpc: PREFLIGHT_BITS_PER_CHANNEL,
+    receiverDrivenFountainStop: false,
   };
 
   // ── Config ─────────────────────────────
@@ -672,6 +687,8 @@ const BPC_LEVELS = {
     if (fountainAutoStop !== null) {
       config.fountainAutoStop = fountainAutoStop;
     }
+    const apiBaseUrl = params.get("apiBaseUrl");
+    runtimeOptions.apiBaseUrl = apiBaseUrl ? apiBaseUrl.trim() : "";
     runtimeOptions.debugTitle = parseBoolParam(params.get("debugTitle")) === true;
 
     return {
@@ -681,9 +698,18 @@ const BPC_LEVELS = {
     };
   }
 
+  function resolveReceiverApiUrl(path) {
+    return new URL(path, runtimeOptions.apiBaseUrl || window.location.origin).toString();
+  }
+
   function updateDebugTitle() {
     if (!runtimeOptions.debugTitle) return;
-    const status = !state.running ? "IDLE" : (state.phase === "preflight" ? "PREFLIGHT" : "TX");
+    let status = "IDLE";
+    if (state.running) {
+      if (state.phase === "preflight") status = "PREFLIGHT";
+      else if (state.phase === "wait_complete") status = "WAIT_RX";
+      else status = "TX";
+    }
     document.title =
       `HDMI Exfil — Sender [${status}] ` +
       `f=${state.frame} k=${state.K} ` +
@@ -798,8 +824,18 @@ const BPC_LEVELS = {
     return new Uint8Array(await preflightPayloadPromise);
   }
 
+  function applyPreflightVisualFiller(frameBytes, usedPrefixLen) {
+    const start = Math.max(0, usedPrefixLen | 0);
+    if (start >= frameBytes.length) return;
+    const pattern = PREFLIGHT_FILLER_BYTES;
+    for (let offset = start; offset < frameBytes.length; offset += pattern.length) {
+      const length = Math.min(pattern.length, frameBytes.length - offset);
+      frameBytes.set(pattern.subarray(0, length), offset);
+    }
+  }
+
   async function getReceiverStatus() {
-    const response = await fetch("/api/receive/status", { cache: "no-store" });
+    const response = await fetch(resolveReceiverApiUrl("/api/receive/status"), { cache: "no-store" });
     if (!response.ok) throw new Error(`Receiver status unavailable (${response.status})`);
     return response.json();
   }
@@ -815,18 +851,139 @@ const BPC_LEVELS = {
 
   async function waitForReceiverPreflight() {
     const deadline = performance.now() + PREFLIGHT_TIMEOUT_MS;
+    let transferCandidateDeadline = 0;
+    let transferCandidateBpc = Math.max(PREFLIGHT_BITS_PER_CHANNEL, config.bpc | 0);
     while (state.running && state.phase === "preflight") {
       try {
         const status = await getReceiverStatus();
-        if (status.preflight_state === "ok") return true;
-        if (status.active === false) return false;
+        if (status.preflight_state === "ok") {
+          const negotiated = Number(status.transfer_bpc || transferCandidateBpc || config.bpc);
+          return {
+            ok: true,
+            transferBpc: [1, 2, 3].includes(negotiated) ? negotiated : config.bpc,
+          };
+        }
+        if (status.active === false) return { ok: false, reason: "receiver_inactive" };
+
+        const stage = String(status.preflight_stage || "path");
+        if (stage === "transfer") {
+          const requestedBpc = Number(status.requested_transfer_bpc || config.bpc);
+          if (state.preflightPhase !== "transfer") {
+            state.preflightPhase = "transfer";
+            state.preflightRequestedBpc = [1, 2, 3].includes(requestedBpc)
+              ? requestedBpc
+              : Math.max(PREFLIGHT_BITS_PER_CHANNEL, config.bpc | 0);
+            transferCandidateBpc = state.preflightRequestedBpc;
+            state.preflightRenderBpc = transferCandidateBpc;
+            transferCandidateDeadline =
+              performance.now() + PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS;
+            configWarningEl.className = "side-note";
+            configWarningEl.style.display = "";
+            configWarningEl.textContent =
+              `HDMI path validated. Probing transfer bpc=${transferCandidateBpc}...`;
+          } else if (
+            performance.now() >= transferCandidateDeadline
+            && transferCandidateBpc > PREFLIGHT_BITS_PER_CHANNEL
+          ) {
+            const failedBpc = transferCandidateBpc;
+            transferCandidateBpc -= 1;
+            state.preflightRenderBpc = transferCandidateBpc;
+            transferCandidateDeadline =
+              performance.now() + PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS;
+            configWarningEl.className = "side-note warn";
+            configWarningEl.style.display = "";
+            configWarningEl.textContent =
+              `Receiver did not confirm transfer bpc=${failedBpc}. Retrying bpc=${transferCandidateBpc}...`;
+          }
+        } else {
+          state.preflightPhase = "path";
+          state.preflightRenderBpc = PREFLIGHT_BITS_PER_CHANNEL;
+          transferCandidateDeadline = 0;
+        }
       } catch {
         // Keep rendering the preflight frame while the receiver catches up.
       }
-      if (performance.now() >= deadline) return false;
+      if (state.preflightPhase === "transfer" && transferCandidateDeadline > 0) {
+        const transferTimedOut =
+          transferCandidateBpc <= PREFLIGHT_BITS_PER_CHANNEL
+          && performance.now() >= transferCandidateDeadline;
+        if (transferTimedOut) {
+          return { ok: false, reason: "transfer_bpc_timeout" };
+        }
+      } else if (performance.now() >= deadline) {
+        return { ok: false, reason: "path_timeout" };
+      }
       await sleep(PREFLIGHT_POLL_INTERVAL_MS);
     }
+    return { ok: false, reason: "stopped" };
+  }
+
+  function applyNegotiatedTransferBpc(transferBpc) {
+    if (![1, 2, 3].includes(transferBpc) || transferBpc === config.bpc) {
+      return;
+    }
+    config.bpc = transferBpc;
+    bpcSelect.value = String(transferBpc);
+    recalcDerived();
+    rechunk();
+    saveSettings();
+  }
+
+  function getFountainReceiverWaitMaxMs() {
+    const fps = Math.max(1, getEffectiveFps());
+    const baseMs = state.fountainTargetFrames > 0
+      ? Math.ceil((state.fountainTargetFrames / fps) * 1000)
+      : 5000;
+    return Math.max(FOUNTAIN_RECEIVER_WAIT_MIN_MS, baseMs * 20);
+  }
+
+  async function waitForReceiverCompletion() {
+    const deadline = performance.now() + getFountainReceiverWaitMaxMs();
+    while (state.running && state.phase === "wait_complete") {
+      try {
+        const status = await getReceiverStatus();
+        if (status.active === false) return true;
+      } catch {
+        // Keep transmitting while the receiver finishes or reconnects.
+      }
+      if (performance.now() >= deadline) return false;
+      await sleep(FOUNTAIN_RECEIVER_WAIT_POLL_MS);
+    }
     return false;
+  }
+
+  async function maybeSwitchFountainToReceiverWait() {
+    if (!state.running || !state.receiverDrivenFountainStop || state.phase === "wait_complete") {
+      return;
+    }
+    state.phase = "wait_complete";
+    statusLabel.textContent = "Awaiting receiver";
+    statusLabel.style.color = "var(--yellow)";
+    configWarningEl.className = "side-note";
+    configWarningEl.style.display = "";
+    configWarningEl.textContent =
+      "Receiver still active after local fountain target. Continuing droplets...";
+    updateDebugTitle();
+
+    const completed = await waitForReceiverCompletion();
+    if (!state.running || state.phase !== "wait_complete") return;
+
+    if (completed) {
+      stopSending({
+        statusText: "Completed",
+        saveHistory: true,
+      });
+      return;
+    }
+
+    stopSending({
+      saveHistory: false,
+      statusText: "Receiver timeout",
+      warningText: (
+        "Receiver still active after local fountain target. "
+        + "Transmission stopped after timeout."
+      ),
+    });
   }
 
   function sliceIntoChunks(bytes) {
@@ -899,8 +1056,8 @@ const BPC_LEVELS = {
   }
 
   // ── Sequential frame builders ──────────
-  function buildSeqFrame(frameType, frameIndex, totalFrames, payload) {
-    const frameBytes = new Uint8Array(config.bytesPerFrame);
+  function buildSeqFrame(frameType, frameIndex, totalFrames, payload, bytesPerFrame = config.bytesPerFrame) {
+    const frameBytes = new Uint8Array(bytesPerFrame);
     const view = new DataView(frameBytes.buffer);
     // Pre-CRC header (13 bytes)
     view.setUint16(0, SEQ_MAGIC, false);
@@ -940,8 +1097,7 @@ const BPC_LEVELS = {
   }
 
   // ── Encoding ───────────────────────────
-  function bytesToValues(bytes) {
-    const bpc = config.bpc;
+  function bytesToValues(bytes, bpc = config.bpc) {
     let p = 0;
     if (bpc === 1) {
       for (let i = 0; i < bytes.length; i++) {
@@ -971,9 +1127,9 @@ const BPC_LEVELS = {
       }
     }
   }
-  function drawValues(vals) {
+  function drawValues(vals, bpc = config.bpc) {
     const W = config.width, BS = config.blockSize, R = config.rows, C = config.cols;
-    const levels = BPC_LEVELS[config.bpc];
+    const levels = BPC_LEVELS[bpc];
     let vi = 0;
     for (let r = 0; r < R; r++) { const sy = r*BS;
       for (let c = 0; c < C; c++) {
@@ -1006,7 +1162,7 @@ const BPC_LEVELS = {
     crcData.set(frameBytes.subarray(0, FOUNTAIN_HEADER_PRE_CRC));
     crcData.set(payload, FOUNTAIN_HEADER_PRE_CRC);
     view.setUint32(FOUNTAIN_HEADER_PRE_CRC, crc32(crcData), false);
-    bytesToValues(frameBytes); drawValues(state.vals);
+    bytesToValues(frameBytes, config.bpc); drawValues(state.vals, config.bpc);
     state.seed = (state.seed + 1) >>> 0; if (state.seed === 0) state.seed = 1;
   }
 
@@ -1036,19 +1192,29 @@ const BPC_LEVELS = {
         state.seqPhase = "start"; state.seqRepeat = 0;
       }
     }
-    bytesToValues(frameBytes); drawValues(state.vals);
+    bytesToValues(frameBytes, config.bpc); drawValues(state.vals, config.bpc);
   }
 
   function renderPreflightFrame() {
     if (!state.preflightPayload) return;
+    const preflightBpc = Math.max(
+      PREFLIGHT_BITS_PER_CHANNEL,
+      Math.min(3, state.preflightRenderBpc | 0),
+    );
+    const preflightBytesPerFrame = bytesPerFrameForBpc(preflightBpc);
     const frameBytes = buildSeqFrame(
       FRAME_TYPE_START,
       0,
       PREFLIGHT_TOTAL_FRAMES,
       state.preflightPayload,
+      preflightBytesPerFrame,
     );
-    bytesToValues(frameBytes);
-    drawValues(state.vals);
+    applyPreflightVisualFiller(
+      frameBytes,
+      SEQ_HEADER_LEN + state.preflightPayload.length,
+    );
+    bytesToValues(frameBytes, preflightBpc);
+    drawValues(state.vals, preflightBpc);
   }
 
   function renderFrame() {
@@ -1078,6 +1244,10 @@ const BPC_LEVELS = {
       && state.fountainTargetFrames > 0
       && state.frame >= state.fountainTargetFrames
     ) {
+      if (state.receiverDrivenFountainStop) {
+        void maybeSwitchFountainToReceiverWait();
+        return;
+      }
       stopSending();
       return;
     }
@@ -1135,9 +1305,14 @@ const BPC_LEVELS = {
     if (!state.chunks.length || !validateConfig() || state.running) return;
     state.running = true; state.seed = 1; state.frame = 0;
     state.seqPhase = "start"; state.seqDataIdx = 0; state.seqRepeat = 0;
-    state.phase = "idle";
-    state.preflightFrames = 0;
-    state.preflightPayload = null;
+      state.phase = "idle";
+      state.preflightFrames = 0;
+      state.preflightPayload = null;
+      state.preflightPhase = "path";
+      state.preflightRenderBpc = PREFLIGHT_BITS_PER_CHANNEL;
+      state.preflightRequestedBpc = config.bpc;
+      state.preflightNegotiatedBpc = config.bpc;
+      state.receiverDrivenFountainStop = false;
     startBtn.disabled = true; stopBtn.disabled = false;
     setSettingsEnabled(false);
     statusLabel.textContent = "Starting";
@@ -1157,29 +1332,52 @@ const BPC_LEVELS = {
         state.preflightPayload = await getPreflightPayload();
         state.phase = "preflight";
         state.preflightFrames = 0;
+        state.preflightPhase = "path";
+        state.preflightRenderBpc = PREFLIGHT_BITS_PER_CHANNEL;
+        state.preflightRequestedBpc = Math.max(PREFLIGHT_BITS_PER_CHANNEL, config.bpc | 0);
+        state.preflightNegotiatedBpc = state.preflightRequestedBpc;
         statusLabel.textContent = "Preflight";
         statusLabel.style.color = "var(--yellow)";
         configWarningEl.className = "side-note";
         configWarningEl.style.display = "";
         configWarningEl.textContent = "Validating HDMI path on receiver...";
         renderLoop(0);
-        const ok = await waitForReceiverPreflight();
-        if (!ok) {
+        const preflight = await waitForReceiverPreflight();
+        if (!preflight.ok) {
           if (state.running) {
+            const warningText = preflight.reason === "transfer_bpc_timeout"
+              ? (
+                "Receiver did not confirm any supported transfer bpc. "
+                + "Check the HDMI duplication path or lower the target profile."
+              )
+              : (
+                "Receiver did not confirm the HDMI preflight frame. "
+                + "Check the HDMI duplication path."
+              );
             stopSending({
               saveHistory: false,
               statusText: "Preflight failed",
-              warningText: (
-                "Receiver did not confirm the HDMI preflight frame. "
-                + "Check the HDMI duplication path."
-              ),
+              warningText,
             });
           }
           return;
         }
+        state.preflightNegotiatedBpc = preflight.transferBpc;
+        if (preflight.transferBpc !== config.bpc) {
+          applyNegotiatedTransferBpc(preflight.transferBpc);
+          configWarningEl.className = "side-note warn";
+          configWarningEl.style.display = "";
+          configWarningEl.textContent =
+            `Transfer bpc downgraded automatically to ${preflight.transferBpc}.`;
+        }
         await sleep(PREFLIGHT_SETTLE_MS);
       }
       if (!state.running) return;
+      state.receiverDrivenFountainStop = (
+        shouldPreflight
+        && config.protocol === "fountain"
+        && config.fountainAutoStop
+      );
       state.phase = "transmitting";
       state.frame = 0;
       state.startTime = performance.now();
@@ -1190,6 +1388,7 @@ const BPC_LEVELS = {
       statusLabel.style.color = "var(--green)";
       if (configWarningEl.textContent === "Validating HDMI path on receiver...") {
         configWarningEl.style.display = "none";
+        configWarningEl.textContent = "";
       }
       if (!state.raf) renderLoop(0);
     };
@@ -1201,11 +1400,11 @@ const BPC_LEVELS = {
 
   function stopSending(options = {}) {
     const {
-      saveHistory = state.phase === "transmitting" && state.frame > 0 && !!state.fileName,
+      saveHistory = state.phase !== "preflight" && state.frame > 0 && !!state.fileName,
       statusText = "Stopped",
       warningText = "",
     } = options;
-    const finalFrames = state.phase === "transmitting" ? state.frame : state.preflightFrames;
+    const finalFrames = state.phase === "preflight" ? state.preflightFrames : state.frame;
     state.running = false;
     if (state.raf) cancelAnimationFrame(state.raf);
     state.raf = null;
@@ -1218,6 +1417,11 @@ const BPC_LEVELS = {
     state.phase = "idle";
     state.preflightFrames = 0;
     state.preflightPayload = null;
+    state.preflightPhase = "path";
+    state.preflightRenderBpc = PREFLIGHT_BITS_PER_CHANNEL;
+    state.preflightRequestedBpc = config.bpc;
+    state.preflightNegotiatedBpc = config.bpc;
+    state.receiverDrivenFountainStop = false;
     statusLabel.textContent = statusText;
     statusLabel.classList.add("dim");
     statusLabel.style.color = "";
@@ -1227,6 +1431,12 @@ const BPC_LEVELS = {
       configWarningEl.className = "side-note warn";
       configWarningEl.style.display = "";
       configWarningEl.textContent = warningText;
+    } else if (
+      configWarningEl.textContent === "Validating HDMI path on receiver..."
+      || configWarningEl.textContent === "Receiver still active after local fountain target. Continuing droplets..."
+    ) {
+      configWarningEl.style.display = "none";
+      configWarningEl.textContent = "";
     }
     updateDebugTitle();
     if (saveHistory) {

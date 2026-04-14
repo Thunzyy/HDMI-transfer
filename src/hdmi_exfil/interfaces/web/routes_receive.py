@@ -21,12 +21,22 @@ from .preview_stream import create_preview_response
 log = logging.getLogger(__name__)
 
 
+def _should_prime_persistent_capture(open_device: int | str, backend: int | None) -> bool:
+    return not isinstance(open_device, str)
+
+
 def register_receive_routes(app: Flask) -> None:
+    def _json_with_sender_cors(payload: dict, status_code: int = 200):
+        response = jsonify(payload)
+        response.status_code = status_code
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        return response
+
     @app.route("/api/receive/status")
     def api_receive_status():
         worker = app._receiver_worker
-        if worker is not None and worker.is_alive():
-            payload = {"active": True}
+        if worker is not None:
+            payload = {"active": bool(worker.is_alive())}
             try:
                 payload.update(worker.get_preview_health())
             except Exception:
@@ -35,8 +45,8 @@ def register_receive_routes(app: Flask) -> None:
                 payload.update(worker.get_runtime_state())
             except Exception:
                 pass
-            return jsonify(payload)
-        return jsonify({
+            return _json_with_sender_cors(payload)
+        return _json_with_sender_cors({
             "active": False,
             "preflight_required": False,
             "preflight_state": "inactive",
@@ -183,24 +193,26 @@ def register_receive_routes(app: Flask) -> None:
                             open_device, backend = resolve_device_open_target(detected)
                             break
                 if backend is not None:
-                    app._capture_manager.prime_async(
-                        device=target_device,
-                        open_device=open_device,
-                        backend=backend,
-                    )
-                    opened = True
+                    if _should_prime_persistent_capture(open_device, backend):
+                        app._capture_manager.prime_async(
+                            device=target_device,
+                            open_device=open_device,
+                            backend=backend,
+                        )
+                        opened = True
 
             if not opened:
                 devices = app._device_registry.list_devices()
                 fallback = devices[0] if devices else None
                 if fallback is not None:
                     open_device, backend = resolve_device_open_target(fallback)
-                    app._capture_manager.prime_async(
-                        device=fallback["index"],
-                        open_device=open_device,
-                        backend=int(backend or cv2.CAP_MSMF),
-                    )
-                    opened = True
+                    if _should_prime_persistent_capture(open_device, backend):
+                        app._capture_manager.prime_async(
+                            device=fallback["index"],
+                            open_device=open_device,
+                            backend=int(backend or cv2.CAP_MSMF),
+                        )
+                        opened = True
 
             return jsonify({"status": "reset", "persistent_opening": opened})
 

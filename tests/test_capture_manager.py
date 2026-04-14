@@ -62,3 +62,27 @@ def test_capture_manager_opens_distinct_open_source_for_logical_device() -> None
     assert calls == [(1, 42, 1920, 1080, 60)]
     assert taken_capture is capture
     assert backend == 42
+
+
+def test_capture_manager_accepts_named_open_source() -> None:
+    from hdmi_exfil.adapters.capture.capture_manager import CaptureManager
+
+    calls = []
+    capture = _FakeCapture()
+
+    def opener(device, backend, width, height, fps):
+        calls.append((device, backend, width, height, fps))
+        return capture
+
+    manager = CaptureManager(opener=opener)
+
+    manager.prime(
+        device=7,
+        open_device="ffmpeg-dshow:Elgato 4K X",
+        backend=42,
+    )
+    taken_capture, backend = manager.take(device=7)
+
+    assert calls == [("ffmpeg-dshow:Elgato 4K X", 42, 1920, 1080, 60)]
+    assert taken_capture is capture
+    assert backend == 42

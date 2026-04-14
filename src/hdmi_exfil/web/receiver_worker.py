@@ -24,7 +24,10 @@ import time
 import cv2
 import numpy as np
 
-from hdmi_exfil.application.preflight import is_preflight_start_result
+from hdmi_exfil.application.preflight import (
+    PREFLIGHT_BITS_PER_CHANNEL,
+    is_preflight_start_result,
+)
 from hdmi_exfil.application.receive_geometry import (
     build_geometry_candidates,
     decode_with_sampling_fallbacks,
@@ -49,6 +52,11 @@ from hdmi_exfil.core.protocols.fountain import FountainDecoder
 from hdmi_exfil.receiver.capture.source import CaptureSource
 
 
+_LOW_SIGNAL_DETECTED_AFTER_S = 1.0
+_RUNTIME_FALLBACK_LOW_SIGNAL_AFTER_S = 2.5
+_RUNTIME_FALLBACK_NO_PROGRESS_AFTER_S = 6.0
+
+
 class _CaptureFallbackRequested(RuntimeError):
     """Internal control-flow exception used to retry another capture target."""
 
@@ -70,14 +78,14 @@ class ReceiverWorker(threading.Thread):
 
     def __init__(
         self,
-        device: int,
+        device: int | str,
         profile: ResolutionProfile,
         mode: str = "auto",
         output_dir: str = "received_files",
         backend: int | None = None,
         precap: "cv2.VideoCapture | None" = None,
         on_cap_return: "callable | None" = None,
-        fallback_targets: list[tuple[int, int | None]] | None = None,
+        fallback_targets: list[tuple[int | str, int | None]] | None = None,
         require_preflight: bool = False,
     ) -> None:
         super().__init__(daemon=True)
@@ -88,14 +96,22 @@ class ReceiverWorker(threading.Thread):
         self._backend = backend
         self._precap = precap
         self._on_cap_return = on_cap_return
-        self._capture_targets = [(int(device), backend)]
-        for source, alt_backend in fallback_targets or []:
-            candidate = (int(source), alt_backend)
+        self._restrict_runtime_fallback_to_dshow = (
+            isinstance(device, str) and device.startswith("ffmpeg-dshow:")
+        )
+        self._capture_targets = [(device, backend)]
+        ordered_fallbacks = list(fallback_targets or [])
+        if self._restrict_runtime_fallback_to_dshow:
+            ordered_fallbacks.sort(
+                key=lambda candidate: 0 if candidate[1] == cv2.CAP_DSHOW else 1,
+            )
+        for source, alt_backend in ordered_fallbacks:
+            candidate = (source, alt_backend)
             if candidate not in self._capture_targets:
                 self._capture_targets.append(candidate)
-        self._active_device = int(device)
+        self._active_device = device
         self._active_backend = backend
-        self._fallback_targets: list[tuple[int, int | None]] = []
+        self._fallback_targets: list[tuple[int | str, int | None]] = []
         self._require_preflight = bool(require_preflight)
         self._stop_event = threading.Event()
         self._subscribers: list[queue.Queue] = []
@@ -106,6 +122,9 @@ class ReceiverWorker(threading.Thread):
             "protocol": None,
             "preflight_required": self._require_preflight,
             "preflight_state": "waiting" if self._require_preflight else "disabled",
+            "preflight_stage": "path" if self._require_preflight else "disabled",
+            "requested_transfer_bpc": int(self._profile.bits_per_channel),
+            "transfer_bpc": None,
             "active_device": self._active_device,
             "active_backend": self._active_backend,
         }
@@ -294,7 +313,11 @@ class ReceiverWorker(threading.Thread):
 
     def _wait_for_preflight(self, cap: CaptureSource) -> bool:
         selected_bpc = int(self._profile.bits_per_channel)
-        candidate_bpcs = [selected_bpc] + [b for b in (1, 2, 3) if b != selected_bpc]
+        candidate_bpcs = [PREFLIGHT_BITS_PER_CHANNEL, selected_bpc]
+        candidate_bpcs.extend(
+            b for b in (1, 2, 3)
+            if b not in candidate_bpcs
+        )
         probe_candidates: list[tuple[int, ResolutionProfile, object]] = []
         for bpc in candidate_bpcs:
             profile = (
@@ -310,15 +333,24 @@ class ReceiverWorker(threading.Thread):
 
         frames_captured = 0
         low_signal_streak = 0
+        low_signal_since: float | None = None
         last_waiting_emit = 0.0
+        wait_started_at = time.time()
         geometry_candidates = self._build_geometry_candidates(self._profile)
         geometry_cursor = 0
+        path_confirmed = False
 
         self._publish("status", {
             "state": "preflight_wait",
             "message": "Waiting for HDMI preflight frame...",
             "preflight_required": True,
             "preflight_state": "waiting",
+            "preflight_stage": "path",
+            "requested_transfer_bpc": selected_bpc,
+            "transfer_bpc": None,
+            "low_signal_streak": 0,
+            "low_signal_duration_s": 0.0,
+            "low_signal_detected": False,
         })
 
         while not self._stop_event.is_set():
@@ -329,20 +361,42 @@ class ReceiverWorker(threading.Thread):
 
             frames_captured += 1
             self._maybe_publish_preview(frame)
-            low_signal_streak = self._update_low_signal_streak(frame, low_signal_streak)
-
             now = time.time()
+            low_signal_streak, low_signal_since, low_signal_duration_s = (
+                self._update_low_signal_state(
+                    frame,
+                    low_signal_streak,
+                    low_signal_since,
+                    now,
+                )
+            )
             if (now - last_waiting_emit) >= 1.0:
                 last_waiting_emit = now
+                waiting_stage = (
+                    "transfer"
+                    if path_confirmed and selected_bpc != PREFLIGHT_BITS_PER_CHANNEL
+                    else "path"
+                )
+                waiting_message = (
+                    f"Waiting for transfer bpc calibration... ({frames_captured:,} frames scanned)"
+                    if waiting_stage == "transfer"
+                    else f"Waiting for HDMI preflight frame... ({frames_captured:,} frames scanned)"
+                )
                 self._publish("status", {
                     "state": "preflight_wait",
-                    "message": (
-                        "Waiting for HDMI preflight frame... "
-                        f"({frames_captured:,} frames scanned)"
-                    ),
+                    "message": waiting_message,
                     "frames_captured": frames_captured,
                     "preflight_required": True,
                     "preflight_state": "waiting",
+                    "preflight_stage": waiting_stage,
+                    "requested_transfer_bpc": selected_bpc,
+                    "transfer_bpc": None,
+                    "low_signal_streak": low_signal_streak,
+                    "low_signal_duration_s": round(low_signal_duration_s, 2),
+                    "low_signal_detected": self._is_low_signal_detected(
+                        low_signal_duration_s,
+                        low_signal_streak,
+                    ),
                 })
 
             frame = self._ensure_size(frame)
@@ -359,6 +413,32 @@ class ReceiverWorker(threading.Thread):
                 if not is_preflight_start_result(result):
                     continue
                 low_signal_streak = 0
+                low_signal_since = None
+                if (
+                    not path_confirmed
+                    and selected_bpc != PREFLIGHT_BITS_PER_CHANNEL
+                    and bpc == PREFLIGHT_BITS_PER_CHANNEL
+                ):
+                    path_confirmed = True
+                    self._publish("status", {
+                        "state": "preflight_transfer_wait",
+                        "message": (
+                            "HDMI path validated. "
+                            f"Waiting for transfer bpc={selected_bpc} calibration..."
+                        ),
+                        "frames_captured": frames_captured,
+                        "preflight_required": True,
+                        "preflight_state": "waiting",
+                        "preflight_stage": "transfer",
+                        "requested_transfer_bpc": selected_bpc,
+                        "transfer_bpc": None,
+                        "low_signal_streak": 0,
+                        "low_signal_duration_s": 0.0,
+                        "low_signal_detected": False,
+                    })
+                    continue
+
+                path_confirmed = True
                 self._profile = profile
                 self._publish("status", {
                     "state": "preflight_ok",
@@ -366,10 +446,17 @@ class ReceiverWorker(threading.Thread):
                         selected_bpc=selected_bpc,
                         detected_bpc=bpc,
                         sampling=self._sampling,
+                        keep_transfer_profile=False,
                     ),
                     "frames_captured": frames_captured,
                     "preflight_required": True,
                     "preflight_state": "ok",
+                    "preflight_stage": "done",
+                    "requested_transfer_bpc": selected_bpc,
+                    "transfer_bpc": bpc,
+                    "low_signal_streak": 0,
+                    "low_signal_duration_s": 0.0,
+                    "low_signal_detected": False,
                 })
                 return True
 
@@ -378,6 +465,8 @@ class ReceiverWorker(threading.Thread):
                 frames_captured=frames_captured,
                 has_progress=False,
                 low_signal_streak=low_signal_streak,
+                low_signal_duration_s=low_signal_duration_s,
+                no_progress_duration_s=max(0.0, now - wait_started_at),
             )
 
         self._publish("stopped", {
@@ -391,8 +480,10 @@ class ReceiverWorker(threading.Thread):
         session = ReceiveSession(mode="fountain", profile=self._profile)
         frames_captured = 0
         low_signal_streak = 0
+        low_signal_since: float | None = None
         last_progress = 0.0
         last_waiting_emit = 0.0
+        started_at = time.time()
         geometry_candidates = self._build_geometry_candidates(self._profile)
         geometry_cursor = 0
 
@@ -411,9 +502,15 @@ class ReceiverWorker(threading.Thread):
             frames_captured += 1
 
             self._maybe_publish_preview(frame)
-            low_signal_streak = self._update_low_signal_streak(frame, low_signal_streak)
-
             now = time.time()
+            low_signal_streak, low_signal_since, low_signal_duration_s = (
+                self._update_low_signal_state(
+                    frame,
+                    low_signal_streak,
+                    low_signal_since,
+                    now,
+                )
+            )
             if session.detected_protocol is None and (now - last_waiting_emit) >= 1.0:
                 last_waiting_emit = now
                 self._publish("status", {
@@ -441,10 +538,13 @@ class ReceiverWorker(threading.Thread):
                     frames_captured=frames_captured,
                     has_progress=session._fountain_decoder is not None,
                     low_signal_streak=low_signal_streak,
+                    low_signal_duration_s=low_signal_duration_s,
+                    no_progress_duration_s=max(0.0, now - started_at),
                 )
                 continue
 
             low_signal_streak = 0
+            low_signal_since = None
             events = session.feed_frame_result("fountain", result)
             for event in events:
                 data = dict(event.data)
@@ -570,6 +670,8 @@ class ReceiverWorker(threading.Thread):
         session = ReceiveSession(mode="sequential", profile=self._profile)
         frames_captured = 0
         low_signal_streak = 0
+        low_signal_since: float | None = None
+        started_at = time.time()
         geometry_candidates = self._build_geometry_candidates(self._profile)
         geometry_cursor = 0
 
@@ -588,8 +690,15 @@ class ReceiverWorker(threading.Thread):
             frames_captured += 1
 
             self._maybe_publish_preview(frame)
-            low_signal_streak = self._update_low_signal_streak(frame, low_signal_streak)
-
+            now = time.time()
+            low_signal_streak, low_signal_since, low_signal_duration_s = (
+                self._update_low_signal_state(
+                    frame,
+                    low_signal_streak,
+                    low_signal_since,
+                    now,
+                )
+            )
             frame = self._ensure_size(frame)
             result, geometry_cursor, _ = self._decode_with_sampling_fallbacks(
                 frame,
@@ -610,12 +719,15 @@ class ReceiverWorker(threading.Thread):
                         or bool(session._seq_received)
                     ),
                     low_signal_streak=low_signal_streak,
+                    low_signal_duration_s=low_signal_duration_s,
+                    no_progress_duration_s=max(0.0, now - started_at),
                 )
                 continue
             if is_preflight_start_result(result):
                 continue
 
             low_signal_streak = 0
+            low_signal_since = None
             events = session.feed_frame_result("sequential", result)
             for event in events:
                 data = dict(event.data)
@@ -899,12 +1011,19 @@ class ReceiverWorker(threading.Thread):
         selected_bpc: int,
         detected_bpc: int,
         sampling: tuple[int, int, float, float],
+        keep_transfer_profile: bool = False,
     ) -> str:
         ox, oy, sx, sy = sampling
         geom_suffix = ""
         if sampling != (0, 0, 1.0, 1.0):
             geom_suffix = (
                 f" | geometry offset=({ox},{oy}) scale=({sx:.4f},{sy:.4f})"
+            )
+        if keep_transfer_profile:
+            return (
+                "HDMI preflight detected on capture path "
+                f"(safe bpc={detected_bpc}) — keeping transfer bpc={selected_bpc}"
+                f"{geom_suffix}"
             )
         if detected_bpc != selected_bpc:
             return (
@@ -920,6 +1039,23 @@ class ReceiverWorker(threading.Thread):
             return streak + 1
         return 0
 
+    def _update_low_signal_state(
+        self,
+        frame,
+        streak: int,
+        started_at: float | None,
+        now: float,
+    ) -> tuple[int, float | None, float]:
+        streak = self._update_low_signal_streak(frame, streak)
+        if streak <= 0:
+            return 0, None, 0.0
+        if started_at is None:
+            started_at = now
+        return streak, started_at, max(0.0, now - started_at)
+
+    def _is_low_signal_detected(self, duration_s: float, streak: int) -> bool:
+        return streak > 0 and duration_s >= _LOW_SIGNAL_DETECTED_AFTER_S
+
     def _maybe_request_runtime_fallback(
         self,
         *,
@@ -927,19 +1063,30 @@ class ReceiverWorker(threading.Thread):
         frames_captured: int,
         has_progress: bool,
         low_signal_streak: int,
+        low_signal_duration_s: float = 0.0,
+        no_progress_duration_s: float = 0.0,
     ) -> None:
-        if self._active_backend != cv2.CAP_DSHOW or not self._fallback_targets:
+        if self._active_backend != cv2.CAP_DSHOW:
+            return
+        if not self._has_runtime_fallback_target():
             return
         if has_progress:
             return
-        if low_signal_streak >= 120:
+        if low_signal_streak > 0 and low_signal_duration_s >= _RUNTIME_FALLBACK_LOW_SIGNAL_AFTER_S:
             self._request_capture_fallback(
                 "Current DSHOW source is black or low-signal.",
             )
-        if frames_captured >= 360:
+        if no_progress_duration_s >= _RUNTIME_FALLBACK_NO_PROGRESS_AFTER_S or frames_captured >= 360:
             self._request_capture_fallback(
                 f"No decodable {protocol_name} frames found on current DSHOW source.",
             )
+
+    def _has_runtime_fallback_target(self) -> bool:
+        if not self._fallback_targets:
+            return False
+        if not self._restrict_runtime_fallback_to_dshow:
+            return True
+        return any(backend == cv2.CAP_DSHOW for _, backend in self._fallback_targets)
 
     def _request_capture_fallback(self, reason: str) -> None:
         if not self._fallback_targets:
@@ -954,7 +1101,9 @@ class ReceiverWorker(threading.Thread):
         })
         raise _CaptureFallbackRequested(reason)
 
-    def _describe_capture_target(self, device: int, backend: int | None) -> str:
+    def _describe_capture_target(self, device: int | str, backend: int | None) -> str:
+        if isinstance(device, str) and device.startswith("ffmpeg-dshow:"):
+            return f"{device.split(':', 1)[1]} via ffmpeg+dshow"
         if backend == cv2.CAP_DSHOW:
             return f"source {device} via DSHOW"
         if backend == cv2.CAP_MSMF:
@@ -972,6 +1121,7 @@ class ReceiverWorker(threading.Thread):
             "preflight_required": self._require_preflight,
             "active_device": self._active_device,
             "active_backend": self._active_backend,
+            "last_event_type": event_type,
         }
         if event_type == "status":
             updates.update(data)
@@ -979,18 +1129,31 @@ class ReceiverWorker(threading.Thread):
                 "preflight_state",
                 self._runtime_state.get("preflight_state", "disabled"),
             )
+        elif event_type == "progress":
+            updates.update(data)
+            updates.setdefault(
+                "state",
+                self._runtime_state.get("state", "receiving"),
+            )
+            updates.setdefault(
+                "message",
+                self._runtime_state.get("message", ""),
+            )
         elif event_type == "complete":
+            updates.update(data)
             updates.update({
                 "state": "complete",
                 "message": f"Complete: {data.get('filename', 'output')}",
                 "protocol": data.get("protocol"),
             })
         elif event_type == "error":
+            updates.update(data)
             updates.update({
                 "state": "error",
                 "message": data.get("message", "Error"),
             })
         elif event_type == "stopped":
+            updates.update(data)
             updates.update({
                 "state": "stopped",
                 "message": data.get("message", "Stopped"),

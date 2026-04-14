@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import contextlib
 import json
 import shutil
 import socket
@@ -30,12 +31,14 @@ from tests.test_web_e2e_hardware import (  # noqa: E402
     _create_payload,
     _download_received_bytes,
     _find_chrome_binary,
+    _fullscreen_window,
     _position_window,
     _receiver_debug_state,
     _reset_receiver,
     _select_capture_device,
     _select_receiver_monitor,
     _select_sender_monitor,
+    _sender_debug_state,
     _set_select_value,
     _wait_for_ready_state,
     _wait_for_receiver_completion,
@@ -187,7 +190,9 @@ def _promote_window(process_id: int, sender_monitor) -> None:
     EnumWindows = user32.EnumWindows
     EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
     IsWindowVisible = user32.IsWindowVisible
+    AdjustWindowRectEx = user32.AdjustWindowRectEx
     GetWindowThreadProcessId = user32.GetWindowThreadProcessId
+    GetWindowLongPtr = user32.GetWindowLongPtrW
     ShowWindow = user32.ShowWindow
     SetForegroundWindow = user32.SetForegroundWindow
     MoveWindow = user32.MoveWindow
@@ -196,9 +201,21 @@ def _promote_window(process_id: int, sender_monitor) -> None:
     SW_RESTORE = 9
     HWND_TOPMOST = -1
     HWND_NOTOPMOST = -2
+    GWL_STYLE = -16
+    GWL_EXSTYLE = -20
     SWP_NOSIZE = 0x0001
     SWP_NOMOVE = 0x0002
     SWP_SHOWWINDOW = 0x0040
+
+    GetWindowLongPtr.argtypes = [wintypes.HWND, ctypes.c_int]
+    GetWindowLongPtr.restype = ctypes.c_ssize_t
+    AdjustWindowRectEx.argtypes = [
+        ctypes.POINTER(wintypes.RECT),
+        wintypes.DWORD,
+        wintypes.BOOL,
+        wintypes.DWORD,
+    ]
+    AdjustWindowRectEx.restype = wintypes.BOOL
 
     def callback(hwnd, _lparam):
         nonlocal hwnd_found
@@ -220,21 +237,34 @@ def _promote_window(process_id: int, sender_monitor) -> None:
         return
 
     ShowWindow(hwnd_found, SW_RESTORE)
+    style = GetWindowLongPtr(hwnd_found, GWL_STYLE)
+    ex_style = GetWindowLongPtr(hwnd_found, GWL_EXSTYLE)
+    rect = wintypes.RECT(0, 0, int(sender_monitor.width), int(sender_monitor.height))
+    if AdjustWindowRectEx(ctypes.byref(rect), style, False, ex_style):
+        left = int(sender_monitor.x) + int(rect.left)
+        top = int(sender_monitor.y) + int(rect.top)
+        width = int(rect.right - rect.left)
+        height = int(rect.bottom - rect.top)
+    else:
+        left = int(sender_monitor.x)
+        top = int(sender_monitor.y)
+        width = int(sender_monitor.width)
+        height = int(sender_monitor.height)
     MoveWindow(
         hwnd_found,
-        int(sender_monitor.x),
-        int(sender_monitor.y),
-        int(sender_monitor.width),
-        int(sender_monitor.height),
+        left,
+        top,
+        width,
+        height,
         True,
     )
     SetWindowPos(
         hwnd_found,
         HWND_TOPMOST,
-        int(sender_monitor.x),
-        int(sender_monitor.y),
-        int(sender_monitor.width),
-        int(sender_monitor.height),
+        left,
+        top,
+        width,
+        height,
         SWP_SHOWWINDOW,
     )
     SetForegroundWindow(hwnd_found)
@@ -242,7 +272,13 @@ def _promote_window(process_id: int, sender_monitor) -> None:
     SetWindowPos(hwnd_found, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
 
 
-def _build_sender_url(sender_base_url: str, payload_name: str, case: BenchmarkCase) -> str:
+def _build_sender_url(
+    sender_base_url: str,
+    payload_name: str,
+    case: BenchmarkCase,
+    *,
+    api_base_url: str = "",
+) -> str:
     params: dict[str, str] = {
         "protocol": case.mode,
         "bpc": str(case.bits_per_channel),
@@ -252,6 +288,8 @@ def _build_sender_url(sender_base_url: str, payload_name: str, case: BenchmarkCa
         "name": payload_name,
         "autostart": "1",
     }
+    if api_base_url:
+        params["apiBaseUrl"] = api_base_url
     if case.mode == "fountain":
         params["fountainAutoStop"] = "1"
         params["fountainRedundancy"] = f"{case.fountain_redundancy:.2f}"
@@ -338,6 +376,38 @@ def _wait_for_output_file(
     )
 
 
+def _wait_for_case_result(
+    *,
+    receiver_driver,
+    base_url: str,
+    output_dir: Path,
+    known_files: set[str],
+    sender_url: str,
+    sender_debug: dict[str, object],
+    completion_timeout_s: float,
+    output_timeout_s: float,
+) -> tuple[dict[str, str], Path | None, float]:
+    started = time.perf_counter()
+    metrics = _wait_for_receiver_completion(
+        receiver_driver,
+        base_url=base_url,
+        timeout_s=completion_timeout_s,
+        sender_debug=sender_debug,
+    )
+    duration_s = time.perf_counter() - started
+    _bring_to_front(receiver_driver)
+    output_file: Path | None = None
+    try:
+        output_file = _wait_for_output_file(
+            output_dir,
+            known_files=known_files,
+            timeout_s=output_timeout_s,
+        )
+    except Exception:
+        output_file = None
+    return metrics, output_file, duration_s
+
+
 def _run_case(
     *,
     base_url: str,
@@ -350,9 +420,12 @@ def _run_case(
     payload: bytes,
 ) -> BenchmarkResult:
     receiver_monitor = _select_receiver_monitor()
-    sender_url = _build_sender_url(sender_base_url, payload_path.name, case)
-    sender_process: subprocess.Popen[str] | None = None
-    sender_profile_dir: Path | None = None
+    sender_url = _build_sender_url(
+        sender_base_url,
+        payload_path.name,
+        case,
+        api_base_url=base_url,
+    )
 
     try:
         with _chrome_session(
@@ -378,34 +451,41 @@ def _run_case(
             _wait_for_receiver_stream_ready(receiver_driver)
 
             known_files = {path.name for path in output_dir.iterdir() if path.is_file()}
-            sender_process, sender_profile_dir = _launch_sender_app(sender_url, sender_monitor)
-            started = time.perf_counter()
             try:
-                output_file = _wait_for_output_file(
-                    output_dir,
-                    known_files=known_files,
-                    timeout_s=300.0,
-                )
+                with _chrome_session(
+                    app_url=sender_url,
+                    monitor=sender_monitor,
+                    width=sender_monitor.width,
+                    height=sender_monitor.height,
+                ) as sender_driver:
+                    _wait_for_ready_state(sender_driver)
+                    _position_window(
+                        sender_driver,
+                        sender_monitor,
+                        width=sender_monitor.width,
+                        height=sender_monitor.height,
+                    )
+                    _bring_to_front(sender_driver)
+                    _fullscreen_window(sender_driver, sender_monitor)
+                    metrics, output_file, duration_s = _wait_for_case_result(
+                        receiver_driver=receiver_driver,
+                        base_url=base_url,
+                        output_dir=output_dir,
+                        known_files=known_files,
+                        sender_url=sender_url,
+                        sender_debug=lambda: _sender_debug_state(sender_driver),
+                        completion_timeout_s=300.0,
+                        output_timeout_s=30.0,
+                    )
             except Exception as exc:
                 receiver_state = _receiver_debug_state(receiver_driver)
-                sender_exit = sender_process.poll()
                 raise AssertionError(
-                    f"{exc}\nreceiver={receiver_state}\nsender_url={sender_url}\nsender_exit={sender_exit}"
+                    f"{exc}\nreceiver={receiver_state}\nsender_url={sender_url}"
                 ) from exc
-
-            duration_s = time.perf_counter() - started
-            _terminate_process(sender_process, timeout_s=5.0)
-            sender_process = None
-            _bring_to_front(receiver_driver)
-            metrics = _wait_for_receiver_completion(
-                receiver_driver,
-                timeout_s=30.0,
-                sender_debug={"sender_url": sender_url},
-            )
             received = _download_received_bytes(base_url, metrics["download"])
             if received != payload:
                 raise AssertionError(f"{case.label}: downloaded payload mismatch")
-            if output_file.name != metrics["name"]:
+            if output_file is not None and output_file.name != metrics["name"]:
                 raise AssertionError(
                     f"{case.label}: receiver UI name mismatch "
                     f"(ui={metrics['name']} output={output_file.name})"
@@ -430,11 +510,8 @@ def _run_case(
                 error="",
             )
     finally:
-        if sender_process is not None:
-            _terminate_process(sender_process, timeout_s=5.0)
-        if sender_profile_dir is not None:
-            shutil.rmtree(sender_profile_dir, ignore_errors=True)
-        _reset_receiver(base_url, device_index)
+        with contextlib.suppress(Exception):
+            _reset_receiver(base_url, device_index)
 
 
 def main() -> None:
@@ -475,24 +552,24 @@ def main() -> None:
             f"benchmark_{args.size_mib}mb",
             size_bytes=args.size_mib * 1024 * 1024,
         )
-        process, base_url = _launch_server(server_output, server_log)
         sender_process, sender_base_url = _launch_static_server(sender_bundle, sender_static_log)
         try:
-            _wait_for_server_ready(base_url, server_log)
-            response = requests.get(f"{base_url}/api/devices?force=1", timeout=60.0)
-            response.raise_for_status()
-            device = _select_capture_device(response.json())
-            requests.post(
-                f"{base_url}/api/devices/warm",
-                json={"device": int(device["index"])},
-                timeout=10.0,
-            )
-
             results: list[BenchmarkResult] = []
+            device: dict[str, object] = {}
             for case in cases:
                 print(f"[bench] {case.label}", flush=True)
                 started = time.perf_counter()
+                process, base_url = _launch_server(server_output, server_log)
                 try:
+                    _wait_for_server_ready(base_url, server_log)
+                    response = requests.get(f"{base_url}/api/devices?force=1", timeout=60.0)
+                    response.raise_for_status()
+                    device = _select_capture_device(response.json())
+                    requests.post(
+                        f"{base_url}/api/devices/warm",
+                        json={"device": int(device["index"])},
+                        timeout=10.0,
+                    )
                     result = _run_case(
                         base_url=base_url,
                         output_dir=server_output,
@@ -519,6 +596,8 @@ def main() -> None:
                         ok=False,
                         error=str(exc),
                     )
+                finally:
+                    _terminate_process(process, timeout_s=10.0)
                 results.append(result)
                 _write_results(
                     args.output,
@@ -544,7 +623,6 @@ def main() -> None:
             print(json.dumps(payload_json, indent=2))
         finally:
             _terminate_process(sender_process, timeout_s=5.0)
-            _terminate_process(process, timeout_s=10.0)
 
 
 if __name__ == "__main__":

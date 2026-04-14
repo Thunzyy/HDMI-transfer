@@ -34,3 +34,22 @@ def test_preflight_rejects_regular_start_frame() -> None:
     )
 
     assert is_preflight_start_result(result) is False
+
+
+def test_preflight_filler_preserves_prefix_and_densifies_tail() -> None:
+    from hdmi_exfil.application.preflight import (
+        PREFLIGHT_BITS_PER_CHANNEL,
+        apply_preflight_visual_filler,
+    )
+
+    assert PREFLIGHT_BITS_PER_CHANNEL == 1
+
+    frame = bytearray(256)
+    prefix = bytes(range(32))
+    frame[: len(prefix)] = prefix
+
+    apply_preflight_visual_filler(frame, used_prefix_len=len(prefix))
+
+    assert bytes(frame[: len(prefix)]) == prefix
+    assert any(byte != 0 for byte in frame[len(prefix):])
+    assert sum(1 for byte in frame[len(prefix):] if byte != 0) > 128
