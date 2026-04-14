@@ -80,10 +80,10 @@ Interpretation du SNR :
 ## Validation manuelle minimale
 
 1. `hdmi-calibrate --profile balanced loopback <capture-index>`
-2. `hdmi-recv <capture-index> --profile balanced`
-3. `hdmi-send test.bin --mode sequential --profile balanced --screen <screen-index>`
-4. `hdmi-send test.bin --mode fountain --profile balanced --screen <screen-index>`
-5. `hdmi-web` puis verification de l'UI receiver et de `/sender/app`
+2. `uv run hdmi-recv <capture-index> --profile balanced`
+3. `uv run hdmi-send test.bin --mode sequential --profile balanced --screen <screen-index>`
+4. `uv run hdmi-send test.bin --mode fountain --profile balanced --screen <screen-index>`
+5. `uv run hdmi-web` puis verification de l'UI receiver et de `/sender`
 
 ## Symptomes frequents
 

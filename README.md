@@ -1,165 +1,182 @@
 # HDMI Exfil
 
-Transfert de fichiers par signal video HDMI. Le sender encode un payload dans des frames affichees sur un ecran, le receiver lit ce signal via une carte de capture et reconstruit le fichier sans canal reseau.
+Transfert de fichiers par signal video HDMI. Le sender affiche des frames encodees sur une sortie ecran, le receiver lit ce signal via une carte de capture et reconstruit le fichier sans utiliser le reseau pour les donnees.
 
-Deux chemins d'envoi restent supportes :
-- `hdmi-send` pour le sender Python
-- `sender.html` pour le sender navigateur genere depuis la meme source protocolaire
-
-## Architecture
-
-Le projet est maintenant organise autour d'une architecture cible explicite :
+Le projet est maintenant organise directement sous `src/`:
 
 ```text
-src/hdmi_exfil/
-  domain/          Manifest protocolaire canonique
-  application/     Sessions shared send/receive
-  adapters/        Capture manager, registry devices, bridges techniques
-  interfaces/      CLI, web Flask et sender navigateur
-  compat/          Shims legacy testes et uniformes
+src/
+  adapters/
+  application/
+  core/
+  domain/
+  interfaces/
+  receiver/
+  sender/
+  web/
 ```
 
-Points importants :
-- `hdmi_exfil.domain.protocol_manifest` est la source de verite des profils, headers et constantes partagees.
-- `SendSession` et `ReceiveSession` portent les machines d'etat communes.
-- `sender.html` est un artefact genere par `python tools/build_sender_html.py`, pas une implementation maintenue a la main.
-- Les anciens imports restent disponibles, mais tout nouveau code doit viser les modules canoniques.
+Le nom logique du package reste `hdmi_exfil`, mais les sources ne vivent plus dans un sous-dossier `src/hdmi_exfil/`.
 
-Documentation associee :
-- [Architecture](docs/architecture.md)
-- [Migration](docs/migration.md)
-- [Testing](docs/testing.md)
-- [Setup materiel](docs/hardware-setup.md)
+## Quick Start
 
-## Installation
+Setup recommande: `2 PC`.
 
-Python 3.11+ requis.
+- `PC sender`: machine qui affiche les frames HDMI
+- `PC receiver`: machine avec la carte de capture
+
+### 1. Installer
+
+Sur le receiver:
 
 ```bash
 git clone git@github.com:Thunzyy/HDMI_exfil.git
 cd HDMI_exfil
+uv sync --extra web
 ```
 
-Extras disponibles :
-
-| Commande | Usage |
-|----------|-------|
-| `pip install -e ".[sender]"` | sender Python uniquement |
-| `pip install -e ".[receiver]"` | receiver CLI uniquement |
-| `pip install -e ".[web]"` | web app + capture |
-| `pip install -e ".[all]"` | sender + receiver + web |
-| `pip install -e ".[dev]"` | stack complete + tests |
-
-Pour un setup loopback sur un seul PC :
+Si tu veux aussi les outils CLI sender/receiver sur la meme machine:
 
 ```bash
-pip install -e ".[all]"
+uv sync --extra all
 ```
 
-Si `cv2.imshow` ou les fenetres OpenCV echouent, installer la build non-headless :
+Pour un environnement de dev complet:
 
 ```bash
-pip install opencv-python --force-reinstall
+uv sync --extra dev
 ```
 
-## Demarrage rapide
+`uv` cree automatiquement un environnement local dans `.venv/`.
 
-1. Identifier l'index de la carte de capture.
-2. Identifier l'ecran duplique vers cette capture.
-3. Lancer la calibration.
-4. Lancer le receiver puis le sender.
+### 2. Lancer l'interface web
 
-Commandes minimales :
+Sur le receiver:
 
 ```bash
-hdmi-calibrate --profile balanced loopback 1
-hdmi-recv 1 --profile balanced
-hdmi-send monfichier.zip --mode fountain --profile balanced --screen 0
+uv run hdmi-web --host 0.0.0.0 --port 5000
 ```
 
-Pour le detail materiel complet, voir [docs/hardware-setup.md](docs/hardware-setup.md).
+Ouvre ensuite:
+
+- receiver UI: `http://localhost:5000/`
+- sender UI depuis le PC sender: `http://<IP_DU_RECEIVER>:5000/sender`
+
+### 3. Regler les bons defaults
+
+Pour la plupart des setups `2 PC`, laisse ces valeurs:
+
+- `Protocol`: `Fountain`
+- `Profile`: `Balanced`
+- `Encoding`: `2 bpc`
+- `Preview quality`: `Low`
+
+Ces choix sont les plus robustes sur du materiel varie. Passe en `Speed` uniquement si la sortie HDMI du sender est sur un chemin dedie `120/144/240 Hz`.
+
+### 4. Recevoir un fichier
+
+Sur le receiver:
+
+1. Ouvre `Receive`
+2. Selectionne la carte de capture HDMI
+3. Verifie que la preview montre bien le signal attendu
+4. Clique `Start`
+
+Sur le sender:
+
+1. Ouvre `Send`
+2. Charge un fichier
+3. Mets la fenetre sender en plein ecran sur la sortie HDMI envoyee a la carte de capture
+4. Clique `Start transmission`
+
+Quand le transfer est termine, le bouton `Download` apparait cote receiver.
+
+## Variante CLI
+
+### Receiver
+
+```bash
+uv run hdmi-recv 0 --mode fountain --profile balanced --output received_files
+```
+
+`0` peut aussi etre remplace par:
+
+- `name:Elgato`
+- `raw:1`
+- un chemin video local
+
+### Sender
+
+```bash
+uv run hdmi-send monfichier.zip --mode fountain --profile balanced --screen 1
+```
+
+Commence en `balanced`. Monte en `speed` seulement si le chemin HDMI reel tient plus de `60 Hz`.
+
+## Sender navigateur genere
+
+`sender.html` est un artefact genere, pas un fichier a maintenir a la main.
+
+```bash
+uv run python tools/build_sender_html.py
+uv run python tools/build_sender_html.py --check
+```
+
+Le sender standalone est aussi servi par le web sur `/sender/app`.
 
 ## Profils
 
-| Profil | Resolution | FPS | Usage |
-|--------|------------|-----|-------|
-| `speed` | 1920x1080 | 240 | debit max, machine dediee |
-| `balanced` | 1920x1080 | 60 | choix recommande pour loopback |
-| `quality` | 3840x2160 | 30 | marge de signal plus large |
+| Profil | Resolution | FPS cible | Usage |
+|--------|------------|-----------|-------|
+| `speed` | 1920x1080 | 240 | chemin HDMI dedie haut refresh |
+| `balanced` | 1920x1080 | 60 | meilleur choix par defaut |
+| `quality` | 3840x2160 | 30 | priorite a la marge de signal |
 
-Sur un seul PC, commencer avec `balanced`.
+## Interfaces disponibles
 
-## Protocoles
-
-### Sequential
-
-Frames ordonnees avec cycle START/DATA/END.
-
-```bash
-hdmi-send file.zip --mode sequential --profile balanced --redundancy 3 --screen 0
-hdmi-recv 1 --mode sequential --profile balanced
-```
-
-### Fountain
-
-Codage a effacement sans canal retour, robuste aux pertes de frames.
-
-```bash
-hdmi-send file.zip --mode fountain --profile balanced --screen 0
-hdmi-recv 1 --mode fountain --profile balanced
-```
-
-Les budgets de performance du mode fountain sont maintenant verrouilles par tests.
-
-## Interfaces
-
-CLI publiques :
 - `hdmi-send`
 - `hdmi-recv`
 - `hdmi-calibrate`
 - `hdmi-bench`
 - `hdmi-web`
 
-Sender navigateur :
+## Testing
 
-```bash
-python tools/build_sender_html.py
-python tools/build_sender_html.py --check
-```
-
-Le fichier genere est servi par l'interface web sur `/sender/app` et peut aussi etre utilise en standalone.
-
-## Testing et quality gate
-
-Commande locale canonique :
+Gate local:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/run_quality_gate.ps1
+uv run powershell -ExecutionPolicy Bypass -File tools/run_quality_gate.ps1
 ```
 
-Le gate execute :
-- la suite `pytest` hors tests `hardware`
-- les budgets fountain
-- la verification `python tools/build_sender_html.py --check`
-- un smoke benchmark `hdmi-bench --profile balanced --mode fountain --no-json`
-
-Le detail des commandes et de la validation hardware est dans [docs/testing.md](docs/testing.md).
-
-## Compatibilite
-
-Les anciens chemins d'import (`hdmi_exfil.protocols`, `hdmi_exfil.config`, `hdmi_exfil.cli.*`, etc.) continuent de fonctionner via la couche `compat`. Pour identifier les imports legacy a migrer :
+Verification des assets sender:
 
 ```bash
-set HDMI_EXFIL_WARN_LEGACY_IMPORTS=1
+uv run python tools/build_sender_html.py --check
 ```
 
-## Depannage
+## Documentation
 
-Problemes courants :
-- Receiver muet : verifier l'index de capture et refaire `hdmi-calibrate --profile balanced loopback <index>`.
-- `hdmi-calibrate` rejette `--profile` : l'option doit etre placee avant le subcommand.
-- FPS insuffisant en loopback : baisser le profil a `balanced` ou `quality`.
-- SNR faible : verifier la duplication d'ecran vers l'Elgato et le cablage.
+- [Architecture](docs/architecture.md)
+- [Migration](docs/migration.md)
+- [Testing](docs/testing.md)
+- [Setup materiel](docs/hardware-setup.md)
+
+## Depannage rapide
+
+- Ecran noir dans la preview: verifier que la bonne carte de capture est selectionnee et que la sortie HDMI du sender lui est bien envoyee.
+- `Speed` n'accelere rien: le chemin HDMI reel est probablement encore a `60 Hz`.
+- Decode instable: revenir a `Balanced + Fountain + 2 bpc`.
+- Materiel faible cote receiver: baisser la `Preview quality`.
+
+## Commandes `uv` utiles
+
+```bash
+uv sync --extra web
+uv sync --extra all
+uv sync --extra dev
+uv run hdmi-web --host 0.0.0.0 --port 5000
+uv run pytest
+```
 
 ## Licence
 

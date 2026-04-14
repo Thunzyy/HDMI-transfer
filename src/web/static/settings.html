@@ -48,11 +48,6 @@ html,body{
 }
 .nav a:hover{color:var(--text);background:rgba(255,255,255,0.04)}
 .nav a.active{color:var(--bright);background:rgba(255,255,255,0.07);font-weight:700}
-.sidebar-ver{
-  padding:12px 16px;font-size:11px;color:var(--muted);
-  letter-spacing:1px;opacity:.6;margin-top:auto;
-}
-
 #center{flex:1;display:flex;flex-direction:column;overflow-y:auto}
 
 .center-top{
@@ -80,8 +75,39 @@ html,body{
   margin-bottom:14px;
 }
 .setting-row:last-child{margin-bottom:0}
+.setting-copy{
+  max-width:280px;
+}
 .setting-label{font-size:13px;color:var(--text)}
 .setting-hint{font-size:11px;color:var(--muted);margin-top:2px}
+.setting-head{
+  display:flex;align-items:center;justify-content:flex-start;gap:6px;
+  width:fit-content;max-width:100%;
+}
+.help-tip{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;border-radius:999px;flex-shrink:0;
+  border:1px solid rgba(255,255,255,0.16);background:rgba(255,255,255,0.04);
+  color:var(--muted);font-size:11px;font-weight:700;line-height:1;cursor:help;
+}
+.help-tip:hover,.help-tip:focus-visible{
+  color:var(--bright);border-color:rgba(255,255,255,0.28);outline:none;
+}
+.help-bubble{
+  position:absolute;left:calc(100% + 8px);top:50%;transform:translateY(-50%);
+  width:240px;padding:10px 12px;border-radius:6px;z-index:30;
+  background:rgba(8,10,15,0.96);border:1px solid rgba(255,255,255,0.12);
+  color:var(--text);font-size:11px;font-weight:500;line-height:1.5;
+  box-shadow:0 14px 30px rgba(0,0,0,0.35);
+  opacity:0;pointer-events:none;transition:opacity .12s ease;
+}
+.help-tip:hover .help-bubble,
+.help-tip:focus-visible .help-bubble{opacity:1}
+.callout{
+  padding:12px 14px;border-radius:6px;
+  background:rgba(124,138,255,0.08);border:1px solid rgba(124,138,255,0.18);
+  color:var(--text);font-size:12px;line-height:1.6;
+}
 .setting-select{
   height:34px;padding:0 28px 0 12px;min-width:220px;
   background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);
@@ -134,78 +160,110 @@ html,body{
       <a href="/history">History</a>
       <a class="active" href="/settings">Settings</a>
     </nav>
-    <div class="sidebar-ver">v0.1.0</div>
   </aside>
 
   <main id="center">
     <div class="center-top">
       <div>
         <h2>Settings</h2>
-        <div class="sub">Persistent preferences</div>
+        <div class="sub">Shared defaults used by Send and Receive</div>
       </div>
     </div>
 
     <div class="settings-body">
+      <div class="callout">
+        Recommended baseline for most 2-PC setups: Fountain + Balanced + 2 bpc, with low preview quality on the receiver. Switch to Speed only on a dedicated 120/144/240Hz HDMI path.
+      </div>
       <div class="setting-group">
-        <div class="setting-group-title">Receiver</div>
+        <div class="setting-group-title">Transfer defaults</div>
         <div class="setting-row">
-          <div>
-            <div class="setting-label">Default device</div>
-            <div class="setting-hint">Auto-selected when opening Receive</div>
+          <div class="setting-copy">
+            <div class="setting-head">
+              <div class="setting-label">Default device</div>
+              <span class="help-tip" tabindex="0">?
+                <span class="help-bubble">Receiver-side capture source. In a 2-PC setup, this should be the HDMI capture card connected to the sender PC.</span>
+              </span>
+            </div>
+            <div class="setting-hint">Applied when opening Receive</div>
           </div>
           <select class="setting-select" id="defaultDevice" disabled>
             <option value="">Loading devices...</option>
           </select>
         </div>
         <div class="setting-row">
-          <div>
-            <div class="setting-label">Default profile</div>
-            <div class="setting-hint">Capture resolution & framerate</div>
+          <div class="setting-copy">
+            <div class="setting-head">
+              <div class="setting-label">Default profile</div>
+              <span class="help-tip" tabindex="0">?
+                <span class="help-bubble">Geometry and target framerate preset. Balanced is the default for broad compatibility. Speed only helps when the sender HDMI path itself is running above 60 Hz.</span>
+              </span>
+            </div>
+            <div class="setting-hint">Shared by Send and Receive</div>
           </div>
           <select class="setting-select" id="defaultProfile">
-            <option value="speed">Speed (1080p @240fps)</option>
-            <option value="balanced" selected>Balanced (1080p @60fps)</option>
-            <option value="quality">Quality (4K @30fps)</option>
+            <option value="speed">Speed - dedicated 120/144/240Hz HDMI path</option>
+            <option value="balanced" selected>Balanced - recommended for most 2-PC setups</option>
+            <option value="quality">Quality - 4K, slower but cleaner</option>
           </select>
         </div>
         <div class="setting-row">
-          <div>
-            <div class="setting-label">Default mode</div>
-            <div class="setting-hint">Protocol detection strategy</div>
+          <div class="setting-copy">
+            <div class="setting-head">
+              <div class="setting-label">Default mode</div>
+              <span class="help-tip" tabindex="0">?
+                <span class="help-bubble">Fountain is the best default for real transfers. Auto helps during bring-up on the receiver when you do not know the sender protocol yet. Sequential is mostly a debug path.</span>
+              </span>
+            </div>
+            <div class="setting-hint">Receiver uses Auto too; sender falls back to Fountain</div>
           </div>
           <select class="setting-select" id="defaultMode">
-            <option value="auto">Auto-detect</option>
-            <option value="fountain" selected>Fountain</option>
-            <option value="sequential">Sequential</option>
+            <option value="auto">Auto-detect - receiver bring-up fallback</option>
+            <option value="fountain" selected>Fountain - recommended default</option>
+            <option value="sequential">Sequential - debug / worst-case path</option>
           </select>
         </div>
         <div class="setting-row">
-          <div>
-            <div class="setting-label">Default encoding</div>
-            <div class="setting-hint">Bits per channel used by Receive</div>
+          <div class="setting-copy">
+            <div class="setting-head">
+              <div class="setting-label">Default encoding</div>
+              <span class="help-tip" tabindex="0">?
+                <span class="help-bubble">Bits per color channel used to encode payload data. 2 bpc is the best default. The sender preflight can automatically step down if the HDMI path cannot keep the signal clean.</span>
+              </span>
+            </div>
+            <div class="setting-hint">Shared by Send and Receive</div>
           </div>
           <select class="setting-select" id="defaultBpc">
-            <option value="1">1 bpc - Safe</option>
-            <option value="2" selected>2 bpc - Fast</option>
-            <option value="3">3 bpc - Max</option>
+            <option value="1">1 bpc - safest fallback</option>
+            <option value="2" selected>2 bpc - recommended default</option>
+            <option value="3">3 bpc - only if the HDMI path is very clean</option>
           </select>
         </div>
         <div class="setting-row">
-          <div>
-            <div class="setting-label">Preview quality</div>
-            <div class="setting-hint">JPEG quality for live preview stream</div>
+          <div class="setting-copy">
+            <div class="setting-head">
+              <div class="setting-label">Preview quality</div>
+              <span class="help-tip" tabindex="0">?
+                <span class="help-bubble">Receiver preview JPEG quality. This does not change the transfer itself. Lower values are better for stability on weaker receiver PCs.</span>
+              </span>
+            </div>
+            <div class="setting-hint">Receiver only</div>
           </div>
           <select class="setting-select" id="defaultPreviewQuality">
-            <option value="45">Low (Q45)</option>
-            <option value="60">Balanced (Q60)</option>
-            <option value="75">High (Q75)</option>
-            <option value="90">Max (Q90)</option>
+            <option value="45" selected>Low - recommended during transfers</option>
+            <option value="60">Balanced</option>
+            <option value="75">High</option>
+            <option value="90">Max</option>
           </select>
         </div>
         <div class="setting-row">
-          <div>
-            <div class="setting-label">Auto device scan</div>
-            <div class="setting-hint">Scan capture devices automatically on Receive</div>
+          <div class="setting-copy">
+            <div class="setting-head">
+              <div class="setting-label">Auto device scan</div>
+              <span class="help-tip" tabindex="0">?
+                <span class="help-bubble">Refreshes the capture-device list automatically when opening Receive. Keep this enabled unless your receiver PC has unstable drivers and you want to rely on cached devices only.</span>
+              </span>
+            </div>
+            <div class="setting-hint">Receiver only</div>
           </div>
           <select class="setting-select" id="autoDeviceScan">
             <option value="1">Enabled</option>
@@ -213,9 +271,14 @@ html,body{
           </select>
         </div>
         <div class="setting-row">
-          <div>
-            <div class="setting-label">Idle preview</div>
-            <div class="setting-hint">Show live device preview when not receiving</div>
+          <div class="setting-copy">
+            <div class="setting-head">
+              <div class="setting-label">Idle preview</div>
+              <span class="help-tip" tabindex="0">?
+                <span class="help-bubble">Shows the live capture view before a transfer starts. Useful during setup. Turn it off if the receiver PC is weak and you want to minimize background load.</span>
+              </span>
+            </div>
+            <div class="setting-hint">Receiver only</div>
           </div>
           <select class="setting-select" id="idlePreviewEnabled">
             <option value="1">Enabled</option>

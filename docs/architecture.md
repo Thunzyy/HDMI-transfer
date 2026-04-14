@@ -7,7 +7,7 @@ Le projet est maintenant structure autour d'un moteur de transfert unique, d'un 
 ## Couches
 
 ```text
-src/hdmi_exfil/
+src/
   domain/          Donnees canoniques du protocole
   application/     Sessions send/receive et evenements
   adapters/        Capture, stockage et integrations techniques
@@ -61,7 +61,7 @@ src/hdmi_exfil/
 ## Regles de qualite
 
 - Les performances fountain sont bloquees par `tests/test_fountain_overhead.py` et `tests/perf/test_fountain_budget.py`.
-- La generation du sender navigateur est verifiee par `python tools/build_sender_html.py --check`.
+- La generation du sender navigateur est verifiee par `uv run python tools/build_sender_html.py --check`.
 - Le gate local et CI passe par `tools/run_quality_gate.ps1`.
 
 ## Decision importante

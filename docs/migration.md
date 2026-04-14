@@ -32,12 +32,12 @@ Quand vous touchez du code, utilisez les modules canoniques. Les anciens imports
 ## Sender navigateur
 
 - Le protocole JS n'est plus edite a la main dans `sender.html`.
-- Modifier les sources dans `src/hdmi_exfil/interfaces/browser_sender/`.
+- Modifier les sources dans `src/interfaces/browser_sender/`.
 - Regenerer ensuite:
 
 ```bash
-python tools/build_sender_html.py
-python tools/build_sender_html.py --check
+uv run python tools/build_sender_html.py
+uv run python tools/build_sender_html.py --check
 ```
 
 ## Comment migrer une zone legacy

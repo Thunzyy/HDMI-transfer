@@ -9,10 +9,10 @@ from pathlib import Path
 
 from flask import Flask, send_file, send_from_directory
 
-_HDMI_EXFIL_DIR = Path(__file__).resolve().parents[2]
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-STATIC_DIR = _HDMI_EXFIL_DIR / "web" / "static"
-CACHE_FILE = _HDMI_EXFIL_DIR / "web" / ".device_cache.json"
+_SOURCE_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+STATIC_DIR = _SOURCE_ROOT / "web" / "static"
+CACHE_FILE = _SOURCE_ROOT / "web" / ".device_cache.json"
 
 
 def _load_disk_cache() -> list[dict] | None:
@@ -25,14 +25,6 @@ def _load_disk_cache() -> list[dict] | None:
     except Exception:
         pass
     return None
-
-
-def _save_disk_cache(devices: list[dict]) -> None:
-    """Compatibility helper kept for tests and legacy callers."""
-    try:
-        CACHE_FILE.write_text(json.dumps(devices))
-    except Exception:
-        pass
 
 
 def _find_sender_html() -> Path:
@@ -51,7 +43,35 @@ def _should_prime_persistent_capture(open_device: int | str, backend: int | None
     return not isinstance(open_device, str)
 
 
+def shutdown_runtime(app: Flask) -> None:
+    """Stop background worker and release persistent capture resources."""
+    lock = getattr(app, "_receiver_control_lock", None)
+    worker = getattr(app, "_receiver_worker", None)
+    capture_manager = getattr(app, "_capture_manager", None)
+
+    if lock is not None:
+        lock.acquire()
+    try:
+        if worker is not None:
+            try:
+                if worker.is_alive():
+                    worker.stop()
+            finally:
+                app._receiver_worker = None
+        if capture_manager is not None:
+            capture_manager.release()
+    finally:
+        if lock is not None:
+            lock.release()
+
+
 def _register_page_routes(app: Flask, static_dir: Path) -> None:
+    def _send_sender_html():
+        path = app.config["SENDER_HTML"]
+        if not os.path.isfile(path):
+            return "sender.html not found", 404
+        return send_file(path)
+
     @app.route("/")
     def index():
         return send_from_directory(str(static_dir), "receiver.html")
@@ -68,12 +88,13 @@ def _register_page_routes(app: Flask, static_dir: Path) -> None:
     def sender_page():
         return send_from_directory(str(static_dir), "sender-page.html")
 
+    @app.route("/sender/page")
+    def sender_page_wrapper():
+        return send_from_directory(str(static_dir), "sender-page.html")
+
     @app.route("/sender/app")
     def sender_app():
-        path = app.config["SENDER_HTML"]
-        if not os.path.isfile(path):
-            return "sender.html not found", 404
-        return send_file(path)
+        return _send_sender_html()
 
 
 def create_app(
@@ -92,6 +113,7 @@ def create_app(
     app.config["SENDER_HTML"] = str(sender_html)
     app._receiver_worker = None
     app._receiver_control_lock = threading.Lock()
+    app.shutdown_runtime = lambda: shutdown_runtime(app)
 
     if runtime:
         import cv2

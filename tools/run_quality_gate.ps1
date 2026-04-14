@@ -8,6 +8,11 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
+$DefaultVenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
+
+if ($Python -eq "python" -and (Test-Path $DefaultVenvPython)) {
+    $Python = $DefaultVenvPython
+}
 
 function Invoke-Step {
     param(

@@ -186,6 +186,7 @@
     updateDerivedStats(); updateChips(); saveSettings();
   }
 
+  const APP_SETTINGS_KEY = "hdmi_exfil_settings";
   const STORAGE_KEY = "hdmi_exfil_sender_settings";
   function saveSettings() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -198,7 +199,32 @@
       fountainAutoStop: config.fountainAutoStop,
     })); } catch(e) {}
   }
+  function applySharedAppDefaults() {
+    try {
+      const raw = localStorage.getItem(APP_SETTINGS_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.defaultMode === "fountain" || d.defaultMode === "sequential") {
+        config.protocol = d.defaultMode;
+      }
+      if (d.defaultBpc && [1, 2, 3].includes(Number(d.defaultBpc))) {
+        config.bpc = Number(d.defaultBpc);
+      }
+      if (d.defaultProfile && PROFILES[d.defaultProfile]) {
+        const p = PROFILES[d.defaultProfile];
+        Object.assign(config, {
+          profileName: d.defaultProfile,
+          width: p.width,
+          height: p.height,
+          blockSize: p.blockSize,
+          targetFps: p.targetFps,
+        });
+      }
+    } catch (e) {}
+  }
+
   function loadSettings() {
+    applySharedAppDefaults();
     try {
       const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return;
       const d = JSON.parse(raw);
@@ -319,6 +345,26 @@
     return (b / 1048576).toFixed(2) + " MB";
   }
 
+  function updateRefreshRateHint() {
+    const detected = Number(config.detectedHz || 0);
+    const target = Number(getEffectiveFps() || 0);
+    if (detected > 0) {
+      if (config.profileName === "speed" && detected < 120) {
+        detectedHzEl.textContent =
+          `Monitor: ${detected} Hz detected. Speed is capped here; use a dedicated 120Hz+ HDMI path for gains.`;
+        return;
+      }
+      if (target > detected) {
+        detectedHzEl.textContent =
+          `Monitor: ${detected} Hz detected. Effective sender FPS is capped by this path.`;
+        return;
+      }
+      detectedHzEl.textContent = `Monitor: ${detected} Hz detected`;
+      return;
+    }
+    detectedHzEl.textContent = "Detecting refresh rate...";
+  }
+
   function getDisplayedThroughputKbps() {
     const fps = getEffectiveFps();
     const repeats = config.protocol === "sequential"
@@ -346,6 +392,7 @@
       `~${kbps} KB/s throughput${extra}`;
     hudFps.textContent = fps;
     headerFps.textContent = fps;
+    updateRefreshRateHint();
   }
 
   function updateChips() {
@@ -1262,7 +1309,6 @@
 
   detectRefreshRate().then((hz) => {
     config.detectedHz = hz;
-    detectedHzEl.textContent = `Monitor: ${hz} Hz detected`;
     hudFps.textContent = getEffectiveFps();
     headerFps.textContent = getEffectiveFps();
     if (config.fpsMode === "auto") config.targetFps = hz;

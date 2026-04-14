@@ -20,10 +20,12 @@ received_files/
 
 # Test artifacts
 ui_*.json
+.tmp_*
 
 # Environment
 .env
 .env.*
+.venv/
 
 # IDE
 .vscode/

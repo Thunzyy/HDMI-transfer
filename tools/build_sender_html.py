@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 from hdmi_exfil.interfaces.browser_sender import (
     render_protocol_javascript,
     render_sender_html,
 )
-
-_REPO_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_PROTOCOL_OUTPUT = (
     _REPO_ROOT
     / "src"
-    / "hdmi_exfil"
     / "interfaces"
     / "browser_sender"
     / "protocol.generated.js"

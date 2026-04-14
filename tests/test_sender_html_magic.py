@@ -28,6 +28,10 @@ def test_sender_html_defaults_match_python_sender_behavior() -> None:
     assert "fountainAutoStop: true," in text
     assert 'sequentialRedundancy: 1,' in text
     assert 'fpsMode: "profile"' in text
+    assert 'const APP_SETTINGS_KEY = "hdmi_exfil_settings";' in text
+    assert "applySharedAppDefaults()" in text
+    assert "Recommended for most 2-PC setups: Fountain + Balanced + 2 bpc." in text
+    assert "Speed is capped here; use a dedicated 120Hz+ HDMI path for gains." in text
 
 
 def test_sender_html_contains_preflight_handshake_logic() -> None:

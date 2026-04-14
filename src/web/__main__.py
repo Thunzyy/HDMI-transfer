@@ -10,6 +10,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import contextlib
 
 from hdmi_exfil.interfaces.web import create_app
 
@@ -26,7 +27,13 @@ def main() -> None:
 
     app = create_app()
     print(f"HDMI Exfil Web: http://{args.host}:{args.port}")
-    app.run(host=args.host, port=args.port, debug=args.debug, threaded=True)
+    try:
+        app.run(host=args.host, port=args.port, debug=args.debug, threaded=True)
+    except KeyboardInterrupt:
+        print("\nStopping HDMI Exfil web server...")
+    finally:
+        with contextlib.suppress(Exception):
+            app.shutdown_runtime()
 
 
 if __name__ == "__main__":
