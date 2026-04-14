@@ -24,6 +24,8 @@ def test_sender_html_matches_generated_output() -> None:
 def test_sender_html_defaults_match_python_sender_behavior() -> None:
     sender_html = Path(__file__).resolve().parents[1] / "sender.html"
     text = sender_html.read_text(encoding="utf-8")
+    assert 'protocol: "fountain", bpc: 2,' in text
+    assert "fountainAutoStop: true," in text
     assert 'sequentialRedundancy: 1,' in text
     assert 'fpsMode: "profile"' in text
 

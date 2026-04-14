@@ -164,7 +164,7 @@ html,body{
           </div>
           <select class="setting-select" id="defaultProfile">
             <option value="speed">Speed (1080p @240fps)</option>
-            <option value="balanced">Balanced (1080p @60fps)</option>
+            <option value="balanced" selected>Balanced (1080p @60fps)</option>
             <option value="quality">Quality (4K @30fps)</option>
           </select>
         </div>
@@ -175,8 +175,19 @@ html,body{
           </div>
           <select class="setting-select" id="defaultMode">
             <option value="auto">Auto-detect</option>
-            <option value="fountain">Fountain</option>
+            <option value="fountain" selected>Fountain</option>
             <option value="sequential">Sequential</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Default encoding</div>
+            <div class="setting-hint">Bits per channel used by Receive</div>
+          </div>
+          <select class="setting-select" id="defaultBpc">
+            <option value="1">1 bpc - Safe</option>
+            <option value="2" selected>2 bpc - Fast</option>
+            <option value="3">3 bpc - Max</option>
           </select>
         </div>
         <div class="setting-row">
@@ -228,6 +239,7 @@ html,body{
   const defaultDevice = document.getElementById("defaultDevice");
   const defaultProfile = document.getElementById("defaultProfile");
   const defaultMode = document.getElementById("defaultMode");
+  const defaultBpc = document.getElementById("defaultBpc");
   const defaultPreviewQuality = document.getElementById("defaultPreviewQuality");
   const autoDeviceScan = document.getElementById("autoDeviceScan");
   const idlePreviewEnabled = document.getElementById("idlePreviewEnabled");
@@ -272,6 +284,7 @@ html,body{
       if (s.defaultDevice !== undefined) defaultDevice.value = String(s.defaultDevice);
       if (s.defaultProfile) defaultProfile.value = s.defaultProfile;
       if (s.defaultMode) defaultMode.value = s.defaultMode;
+      if (s.defaultBpc !== undefined) defaultBpc.value = String(Number(s.defaultBpc));
       if (s.defaultPreviewQuality !== undefined) {
         defaultPreviewQuality.value = String(Number(s.defaultPreviewQuality));
       }
@@ -291,6 +304,7 @@ html,body{
       defaultDevice: defaultDevice.value ? Number(defaultDevice.value) : null,
       defaultProfile: defaultProfile.value,
       defaultMode: defaultMode.value,
+      defaultBpc: Number(defaultBpc.value),
       defaultPreviewQuality: Number(defaultPreviewQuality.value),
       autoDeviceScan: autoDeviceScan.value !== "0",
       idlePreviewEnabled: idlePreviewEnabled.value !== "0",
@@ -317,6 +331,7 @@ html,body{
   const s = loadSettings();
   if (s.defaultProfile) defaultProfile.value = s.defaultProfile;
   if (s.defaultMode) defaultMode.value = s.defaultMode;
+  if (s.defaultBpc !== undefined) defaultBpc.value = String(Number(s.defaultBpc));
   if (s.defaultPreviewQuality !== undefined) {
     defaultPreviewQuality.value = String(Number(s.defaultPreviewQuality));
   }
