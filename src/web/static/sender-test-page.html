@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>HDMI Transfer — Send</title>
+<title>HDMI Transfer — Send Test</title>
 <style>
 :root {
   --bg:#16181e; --bg2:#0f1117;
@@ -70,7 +70,7 @@ html,body{
 </div>
 
 <div id="banner">
-  <strong>Default 2-PC sender wrapper.</strong> Open this page from the receiver host on the sender PC. It keeps the sender offline by default and does not enable the local receiver API.
+  <strong>Local 1-PC test wrapper.</strong> This page enables the local receiver API for bench and single-PC validation. For a real 2-PC setup, open sender.html locally on the sender PC.
 </div>
 
 <div id="layout">
@@ -84,7 +84,7 @@ html,body{
   </aside>
 
   <main id="center">
-    <iframe id="sender-frame" src="/sender/app" allow="fullscreen"></iframe>
+    <iframe id="sender-frame" src="/sender/app?receiverApi=1" allow="fullscreen"></iframe>
   </main>
 </div>
 

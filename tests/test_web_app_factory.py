@@ -10,6 +10,7 @@ def test_create_app_registers_receive_and_file_routes():
     assert "/sender" in rules
     assert "/sender/app" in rules
     assert "/sender/page" in rules
+    assert "/sender/test" in rules
 
 
 def test_sender_routes_serve_standalone_sender_and_wrapper() -> None:
@@ -20,9 +21,10 @@ def test_sender_routes_serve_standalone_sender_and_wrapper() -> None:
 
     sender = client.get("/sender")
     assert sender.status_code == 200
-    assert b"Local 1-PC test wrapper" in sender.data
-    assert b"open sender.html locally on the sender PC" in sender.data
-    assert b'<iframe id="sender-frame" src="/sender/app?receiverApi=1"' in sender.data
+    assert b"Default 2-PC sender wrapper" in sender.data
+    assert b"Open this page from the receiver host on the sender PC" in sender.data
+    assert b'<iframe id="sender-frame" src="/sender/app"' in sender.data
+    assert b"receiverApi=1" not in sender.data
 
     sender_app = client.get("/sender/app")
     assert sender_app.status_code == 200
@@ -30,8 +32,15 @@ def test_sender_routes_serve_standalone_sender_and_wrapper() -> None:
 
     sender_page = client.get("/sender/page")
     assert sender_page.status_code == 200
-    assert b"Local 1-PC test wrapper" in sender_page.data
-    assert b'<iframe id="sender-frame" src="/sender/app?receiverApi=1"' in sender_page.data
+    assert b"Default 2-PC sender wrapper" in sender_page.data
+    assert b'<iframe id="sender-frame" src="/sender/app"' in sender_page.data
+    assert b"receiverApi=1" not in sender_page.data
+
+    sender_test = client.get("/sender/test")
+    assert sender_test.status_code == 200
+    assert b"Local 1-PC test wrapper" in sender_test.data
+    assert b"single-PC validation" in sender_test.data
+    assert b'<iframe id="sender-frame" src="/sender/app?receiverApi=1"' in sender_test.data
 
 
 def test_history_page_exposes_filters_and_static_script() -> None:

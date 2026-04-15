@@ -92,6 +92,10 @@ def _register_page_routes(app: Flask, static_dir: Path) -> None:
     def sender_page_wrapper():
         return send_from_directory(str(static_dir), "sender-page.html")
 
+    @app.route("/sender/test")
+    def sender_test_page():
+        return send_from_directory(str(static_dir), "sender-test-page.html")
+
     @app.route("/sender/app")
     def sender_app():
         return _send_sender_html()
