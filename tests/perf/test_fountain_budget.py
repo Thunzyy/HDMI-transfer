@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from hdmi_exfil.core.protocols.fountain_tuning import DEFAULT_FOUNTAIN_TUNING
+from hdmi_transfer.core.protocols.fountain_tuning import DEFAULT_FOUNTAIN_TUNING
 from tests.test_fountain_overhead import measure_overhead
 
 

@@ -17,7 +17,7 @@ class _FakeCapture:
 
 
 def test_capture_manager_reuses_matching_persistent_handle() -> None:
-    from hdmi_exfil.adapters.capture.capture_manager import CaptureManager
+    from hdmi_transfer.adapters.capture.capture_manager import CaptureManager
 
     capture = _FakeCapture()
     manager = CaptureManager()
@@ -30,7 +30,7 @@ def test_capture_manager_reuses_matching_persistent_handle() -> None:
 
 
 def test_capture_manager_release_clears_persistent_handle() -> None:
-    from hdmi_exfil.adapters.capture.capture_manager import CaptureManager
+    from hdmi_transfer.adapters.capture.capture_manager import CaptureManager
 
     capture = _FakeCapture()
     manager = CaptureManager()
@@ -45,7 +45,7 @@ def test_capture_manager_release_clears_persistent_handle() -> None:
 
 
 def test_capture_manager_opens_distinct_open_source_for_logical_device() -> None:
-    from hdmi_exfil.adapters.capture.capture_manager import CaptureManager
+    from hdmi_transfer.adapters.capture.capture_manager import CaptureManager
 
     calls = []
     capture = _FakeCapture()
@@ -65,7 +65,7 @@ def test_capture_manager_opens_distinct_open_source_for_logical_device() -> None
 
 
 def test_capture_manager_accepts_named_open_source() -> None:
-    from hdmi_exfil.adapters.capture.capture_manager import CaptureManager
+    from hdmi_transfer.adapters.capture.capture_manager import CaptureManager
 
     calls = []
     capture = _FakeCapture()

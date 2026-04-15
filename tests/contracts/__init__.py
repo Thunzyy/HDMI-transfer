@@ -1,1 +1,1 @@
-"""Contract tests for current HDMI Exfil behavior."""
+"""Contract tests for current HDMI Transfer behavior."""

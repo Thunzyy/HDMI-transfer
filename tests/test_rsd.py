@@ -11,14 +11,14 @@ import math
 
 import pytest
 
-from hdmi_exfil.protocols.degree import (
+from hdmi_transfer.protocols.degree import (
     DEFAULT_C,
     DEFAULT_DELTA,
     ideal_soliton,
     robust_soliton_cdf,
     sample_degree,
 )
-from hdmi_exfil.prng import PRNG
+from hdmi_transfer.prng import PRNG
 
 
 class TestIdealSoliton:

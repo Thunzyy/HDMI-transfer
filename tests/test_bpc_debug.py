@@ -6,8 +6,8 @@ from dataclasses import replace
 
 import numpy as np
 
-from hdmi_exfil.core.config import PROFILES
-from hdmi_exfil.core.protocols.encoding import (
+from hdmi_transfer.core.config import PROFILES
+from hdmi_transfer.core.protocols.encoding import (
     DECODE_THRESHOLDS,
     bytes_to_pixels,
     pixels_to_bytes,

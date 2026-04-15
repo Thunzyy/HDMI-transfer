@@ -10,9 +10,9 @@ import zlib
 
 import numpy as np
 
-from hdmi_exfil import config
-from hdmi_exfil.capture.sampler import sample_frame
-from hdmi_exfil.protocols.fountain import (
+from hdmi_transfer import config
+from hdmi_transfer.capture.sampler import sample_frame
+from hdmi_transfer.protocols.fountain import (
     FOUNT_HEADER_CURRENT_SIZE,
     FOUNT_HEADER_V1_FMT,
     FOUNT_HEADER_V1_PRE_CRC,
@@ -131,7 +131,7 @@ def test_3bpp_fountain_full_roundtrip():
     max_droplets = K + 15
     seed = 1
 
-    from hdmi_exfil.prng import choose_indices
+    from hdmi_transfer.prng import choose_indices
 
     for _ in range(max_droplets):
         if decoder.is_complete():
@@ -200,7 +200,7 @@ def test_3bpp_fountain_roundtrip_from_mid_stream_seed():
     original_data = b"".join(chunks)
     decoder = FountainDecoder(total_chunks=K, payload_size=PAYLOAD_SIZE)
 
-    from hdmi_exfil.prng import choose_indices
+    from hdmi_transfer.prng import choose_indices
 
     seed = 50_000
     max_droplets = K + 20
@@ -255,7 +255,7 @@ def test_3bpp_decode_legacy_v1_header(monkeypatch):
     raw = header_pre + struct.pack(">I", crc) + payload
 
     monkeypatch.setattr(
-        "hdmi_exfil.core.protocols.encoding.pixels_to_bytes",
+        "hdmi_transfer.core.protocols.encoding.pixels_to_bytes",
         lambda _grid, _bpc: raw,
     )
 

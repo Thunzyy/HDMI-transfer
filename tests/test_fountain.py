@@ -2,22 +2,22 @@
 
 Tests the fountain coding pipeline (LT codes with SplitMix32 PRNG) without
 any hardware. Verifies single-chunk, multi-chunk, partial-chunk, and edge
-cases using in-memory encoding and FountainDecoder from the hdmi_exfil package.
+cases using in-memory encoding and FountainDecoder from the hdmi_transfer package.
 
 IMPORTANT: Fountain mode uses different constants from sequential mode.
-All constants are imported from the hdmi_exfil.protocols.fountain module.
+All constants are imported from the hdmi_transfer.protocols.fountain module.
 """
 
 import os
 import struct
 import hashlib
 
-from hdmi_exfil.prng import PRNG, choose_indices
-from hdmi_exfil.protocols.degree import robust_soliton_cdf, sample_degree
-from hdmi_exfil.protocols.fountain import (
+from hdmi_transfer.prng import PRNG, choose_indices
+from hdmi_transfer.protocols.degree import robust_soliton_cdf, sample_degree
+from hdmi_transfer.protocols.fountain import (
     FountainDecoder, FOUNTAIN_BYTES_PER_FRAME, PAYLOAD_SIZE,
 )
-from hdmi_exfil.file_handling.metadata import parse_fountain_metadata
+from hdmi_transfer.file_handling.metadata import parse_fountain_metadata
 
 # Fountain-specific constants (from package)
 FOUNTAIN_HEADER_LEN = 12  # magic(2) + seed(4) + K(2) + crc(4)

@@ -5,8 +5,8 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from hdmi_exfil.core.capture.sampler import sample_frame
-from hdmi_exfil.core.config import ResolutionProfile
+from hdmi_transfer.core.capture.sampler import sample_frame
+from hdmi_transfer.core.config import ResolutionProfile
 
 
 def ensure_frame_size(frame, profile: ResolutionProfile):

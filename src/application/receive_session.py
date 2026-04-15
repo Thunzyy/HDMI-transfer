@@ -6,8 +6,8 @@ import time
 
 import numpy as np
 
-from hdmi_exfil.application.events import ReceiveEvent
-from hdmi_exfil.core.config import (
+from hdmi_transfer.application.events import ReceiveEvent
+from hdmi_transfer.core.config import (
     DEFAULT_PROFILE,
     FRAME_TYPE_DATA,
     FRAME_TYPE_END,
@@ -15,14 +15,14 @@ from hdmi_exfil.core.config import (
     PROFILES,
     ResolutionProfile,
 )
-from hdmi_exfil.core.file_handling.metadata import (
+from hdmi_transfer.core.file_handling.metadata import (
     parse_fountain_metadata,
     parse_start_metadata,
 )
-from hdmi_exfil.core.file_handling.writer import verify_integrity
-from hdmi_exfil.core.protocols import get_protocol
-from hdmi_exfil.core.protocols.base import FrameResult
-from hdmi_exfil.core.protocols.fountain import FountainDecoder
+from hdmi_transfer.core.file_handling.writer import verify_integrity
+from hdmi_transfer.core.protocols import get_protocol
+from hdmi_transfer.core.protocols.base import FrameResult
+from hdmi_transfer.core.protocols.fountain import FountainDecoder
 
 
 class ReceiveSession:

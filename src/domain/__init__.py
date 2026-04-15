@@ -1,6 +1,6 @@
 """Domain-level shared models and manifests."""
 
-from hdmi_exfil.domain.models import (
+from hdmi_transfer.domain.models import (
     FOUNTAIN_HEADER_SIZE,
     SEQUENTIAL_HEADER_SIZE,
     FountainSpec,
@@ -8,7 +8,7 @@ from hdmi_exfil.domain.models import (
     ResolutionProfile,
     SequentialSpec,
 )
-from hdmi_exfil.domain.protocol_manifest import get_protocol_manifest
+from hdmi_transfer.domain.protocol_manifest import get_protocol_manifest
 
 __all__ = [
     "FOUNTAIN_HEADER_SIZE",

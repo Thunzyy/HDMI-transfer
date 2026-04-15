@@ -45,7 +45,7 @@ class _FakeVideoCapture:
 
 
 def test_capture_source_accepts_black_dshow_frames_when_reads_succeed(monkeypatch):
-    from hdmi_exfil.receiver.capture.source import CaptureSource
+    from hdmi_transfer.receiver.capture.source import CaptureSource
 
     black = np.zeros((1080, 1920, 3), dtype=np.uint8)
 
@@ -63,7 +63,7 @@ def test_capture_source_accepts_black_dshow_frames_when_reads_succeed(monkeypatc
 
 
 def test_capture_source_rejects_dshow_when_no_frames_are_read(monkeypatch):
-    from hdmi_exfil.receiver.capture.source import CaptureSource
+    from hdmi_transfer.receiver.capture.source import CaptureSource
 
     monkeypatch.setattr(
         cv2,
@@ -80,7 +80,7 @@ def test_capture_source_rejects_dshow_when_no_frames_are_read(monkeypatch):
 
 
 def test_capture_source_opens_named_ffmpeg_dshow_source(monkeypatch):
-    from hdmi_exfil.receiver.capture.source import CaptureSource
+    from hdmi_transfer.receiver.capture.source import CaptureSource
 
     frame = np.arange(4 * 2 * 3, dtype=np.uint8).reshape((2, 4, 3))
     frame_bytes = frame.tobytes()

@@ -7,9 +7,9 @@ classes, and a convenience ``get_protocol`` factory function.  Both
 
 from __future__ import annotations
 
-from hdmi_exfil.core.protocols.base import EncodingProtocol, FrameResult
-from hdmi_exfil.core.protocols.fountain import FountainDecoder, FountainProtocol
-from hdmi_exfil.core.protocols.sequential import SequentialProtocol, TransferState
+from hdmi_transfer.core.protocols.base import EncodingProtocol, FrameResult
+from hdmi_transfer.core.protocols.fountain import FountainDecoder, FountainProtocol
+from hdmi_transfer.core.protocols.sequential import SequentialProtocol, TransferState
 
 # ---------------------------------------------------------------------------
 # Protocol registry -- maps canonical name -> protocol class

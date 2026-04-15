@@ -9,14 +9,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from hdmi_exfil.application.events import FramePacket
-from hdmi_exfil.core.config import DEFAULT_PROFILE, PROFILES, ResolutionProfile
-from hdmi_exfil.core.file_handling.metadata import build_start_metadata
-from hdmi_exfil.core.file_handling.reader import read_input
-from hdmi_exfil.core.prng import choose_indices
-from hdmi_exfil.core.protocols import get_protocol
-from hdmi_exfil.core.protocols.base import EncodingProtocol
-from hdmi_exfil.core.protocols.xor_ops import xor_into
+from hdmi_transfer.application.events import FramePacket
+from hdmi_transfer.core.config import DEFAULT_PROFILE, PROFILES, ResolutionProfile
+from hdmi_transfer.core.file_handling.metadata import build_start_metadata
+from hdmi_transfer.core.file_handling.reader import read_input
+from hdmi_transfer.core.prng import choose_indices
+from hdmi_transfer.core.protocols import get_protocol
+from hdmi_transfer.core.protocols.base import EncodingProtocol
+from hdmi_transfer.core.protocols.xor_ops import xor_into
 
 
 @dataclass(frozen=True)

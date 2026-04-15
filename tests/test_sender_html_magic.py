@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hdmi_exfil.core.config import SEQ_MAGIC
-from hdmi_exfil.domain.protocol_manifest import get_protocol_manifest
+from hdmi_transfer.core.config import SEQ_MAGIC
+from hdmi_transfer.domain.protocol_manifest import get_protocol_manifest
 from tools.build_sender_html import render_sender_html
 
 
@@ -28,7 +28,7 @@ def test_sender_html_defaults_match_python_sender_behavior() -> None:
     assert "fountainAutoStop: true," in text
     assert 'sequentialRedundancy: 1,' in text
     assert 'fpsMode: "profile"' in text
-    assert 'const APP_SETTINGS_KEY = "hdmi_exfil_settings";' in text
+    assert 'const APP_SETTINGS_KEY = "hdmi_transfer_settings";' in text
     assert "applySharedAppDefaults()" in text
     assert "Recommended for most 2-PC setups: Fountain + Balanced + 2 bpc." in text
     assert "Speed is capped here; use a dedicated 120Hz+ HDMI path for gains." in text

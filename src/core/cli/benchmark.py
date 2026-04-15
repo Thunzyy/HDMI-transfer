@@ -21,9 +21,9 @@ from dataclasses import asdict, dataclass
 
 import numpy as np
 
-from hdmi_exfil.core.capture.sampler import sample_frame
-from hdmi_exfil.core.config import DEFAULT_PROFILE, PROFILES, ResolutionProfile
-from hdmi_exfil.core.protocols import get_protocol
+from hdmi_transfer.core.capture.sampler import sample_frame
+from hdmi_transfer.core.config import DEFAULT_PROFILE, PROFILES, ResolutionProfile
+from hdmi_transfer.core.protocols import get_protocol
 
 
 @dataclass
@@ -146,9 +146,9 @@ def _bench_fountain(
     duration_sec: float,
 ) -> BenchmarkResult:
     """Benchmark fountain encode/decode roundtrip in memory."""
-    from hdmi_exfil.core.prng import choose_indices
-    from hdmi_exfil.core.protocols.fountain import FountainDecoder
-    from hdmi_exfil.core.protocols.xor_ops import xor_into
+    from hdmi_transfer.core.prng import choose_indices
+    from hdmi_transfer.core.protocols.fountain import FountainDecoder
+    from hdmi_transfer.core.protocols.xor_ops import xor_into
 
     proto = get_protocol("fountain", profile=profile)
     payload_per_frame = profile.fount_bytes_per_frame
@@ -249,7 +249,7 @@ def _bench_fountain(
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hdmi-bench",
-        description="HDMI Exfiltration Benchmark -- measure encode/decode throughput",
+        description="HDMI Transfer Benchmark -- measure encode/decode throughput",
     )
     parser.add_argument(
         "--profile",

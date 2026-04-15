@@ -24,32 +24,32 @@ import time
 import cv2
 import numpy as np
 
-from hdmi_exfil.application.preflight import (
+from hdmi_transfer.application.preflight import (
     PREFLIGHT_BITS_PER_CHANNEL,
     is_preflight_start_result,
 )
-from hdmi_exfil.application.receive_geometry import (
+from hdmi_transfer.application.receive_geometry import (
     build_geometry_candidates,
     decode_with_sampling_fallbacks,
     ensure_frame_size,
     estimate_sampling_from_frame,
     sample_grid,
 )
-from hdmi_exfil.application.receive_session import ReceiveSession
-from hdmi_exfil.core.config import (
+from hdmi_transfer.application.receive_session import ReceiveSession
+from hdmi_transfer.core.config import (
     FRAME_TYPE_DATA,
     FRAME_TYPE_END,
     FRAME_TYPE_START,
     ResolutionProfile,
 )
-from hdmi_exfil.core.file_handling.metadata import (
+from hdmi_transfer.core.file_handling.metadata import (
     parse_fountain_metadata,
     parse_start_metadata,
 )
-from hdmi_exfil.core.file_handling.writer import verify_integrity, write_output
-from hdmi_exfil.core.protocols import get_protocol
-from hdmi_exfil.core.protocols.fountain import FountainDecoder
-from hdmi_exfil.receiver.capture.source import CaptureSource
+from hdmi_transfer.core.file_handling.writer import verify_integrity, write_output
+from hdmi_transfer.core.protocols import get_protocol
+from hdmi_transfer.core.protocols.fountain import FountainDecoder
+from hdmi_transfer.receiver.capture.source import CaptureSource
 
 
 _LOW_SIGNAL_DETECTED_AFTER_S = 1.0

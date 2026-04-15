@@ -27,9 +27,9 @@ src/
 
 ## Source de verite
 
-- `hdmi_exfil.domain.protocol_manifest` est la source de verite pour les profils, magics, tailles de header et parametres exposes au sender navigateur.
+- `hdmi_transfer.domain.protocol_manifest` est la source de verite pour les profils, magics, tailles de header et parametres exposes au sender navigateur.
 - `tools/build_sender_html.py` genere `sender.html` et `protocol.generated.js` a partir du manifest. Le HTML standalone n'est plus une implementation manuelle du protocole.
-- `hdmi_exfil.application.send_session.SendSession` et `hdmi_exfil.application.receive_session.ReceiveSession` portent les machines d'etat communes. CLI et web appellent ces services au lieu de dupliquer la logique.
+- `hdmi_transfer.application.send_session.SendSession` et `hdmi_transfer.application.receive_session.ReceiveSession` portent les machines d'etat communes. CLI et web appellent ces services au lieu de dupliquer la logique.
 
 ## Flux d'envoi
 
@@ -47,14 +47,14 @@ src/
 
 ## Web app
 
-- `hdmi_exfil.interfaces.web.app_factory.create_app` cree l'application Flask.
+- `hdmi_transfer.interfaces.web.app_factory.create_app` cree l'application Flask.
 - `routes_devices.py`, `routes_receive.py` et `routes_files.py` portent le routage HTTP.
 - `preview_stream.py` reste dans la couche interface car il expose un flux HTTP, mais il depend du `CaptureManager` pour la capture.
-- `hdmi_exfil.web.server` est desormais un shim de compatibilite.
+- `hdmi_transfer.web.server` est desormais un shim de compatibilite.
 
 ## Compatibilite
 
-- Les anciens imports (`hdmi_exfil.protocols`, `hdmi_exfil.config`, `hdmi_exfil.cli.*`, etc.) restent disponibles via `hdmi_exfil.compat.imports.reexport`.
+- Les anciens imports (`hdmi_transfer.protocols`, `hdmi_transfer.config`, `hdmi_transfer.cli.*`, etc.) restent disponibles via `hdmi_transfer.compat.imports.reexport`.
 - Les wrappers legacy peuvent emettre un avertissement si `HDMI_EXFIL_WARN_LEGACY_IMPORTS=1`.
 - Toute nouvelle contribution doit viser les chemins canoniques, pas les shims.
 

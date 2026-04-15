@@ -14,7 +14,7 @@ import json
 import numpy as np
 import pytest
 
-from hdmi_exfil.config import PROFILES
+from hdmi_transfer.config import PROFILES
 
 
 # ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ from hdmi_exfil.config import PROFILES
 
 def test_checkerboard_shape() -> None:
     """generate_checkerboard returns correct shape for speed profile."""
-    from hdmi_exfil.display.test_patterns import generate_checkerboard
+    from hdmi_transfer.display.test_patterns import generate_checkerboard
 
     profile = PROFILES["speed"]
     frame = generate_checkerboard(profile)
@@ -35,7 +35,7 @@ def test_checkerboard_shape() -> None:
 
 def test_checkerboard_shape_quality() -> None:
     """generate_checkerboard returns correct shape for quality (4K) profile."""
-    from hdmi_exfil.display.test_patterns import generate_checkerboard
+    from hdmi_transfer.display.test_patterns import generate_checkerboard
 
     profile = PROFILES["quality"]
     frame = generate_checkerboard(profile)
@@ -46,7 +46,7 @@ def test_checkerboard_shape_quality() -> None:
 
 def test_checkerboard_pattern() -> None:
     """Verify alternating blocks: (0,0) is white, (0,1) is black."""
-    from hdmi_exfil.display.test_patterns import generate_checkerboard
+    from hdmi_transfer.display.test_patterns import generate_checkerboard
 
     profile = PROFILES["speed"]
     frame = generate_checkerboard(profile)
@@ -72,7 +72,7 @@ def test_checkerboard_pattern() -> None:
 
 def test_checkerboard_only_bw() -> None:
     """All pixel values in the checkerboard are either 0 or 255."""
-    from hdmi_exfil.display.test_patterns import generate_checkerboard
+    from hdmi_transfer.display.test_patterns import generate_checkerboard
 
     profile = PROFILES["speed"]
     frame = generate_checkerboard(profile)
@@ -88,7 +88,7 @@ def test_checkerboard_only_bw() -> None:
 
 def test_snr_perfect_capture() -> None:
     """compute_snr with frame == expected returns 60.0 (perfect)."""
-    from hdmi_exfil.display.test_patterns import compute_snr, generate_checkerboard
+    from hdmi_transfer.display.test_patterns import compute_snr, generate_checkerboard
 
     profile = PROFILES["speed"]
     frame = generate_checkerboard(profile)
@@ -99,7 +99,7 @@ def test_snr_perfect_capture() -> None:
 
 def test_snr_with_noise() -> None:
     """Adding gaussian noise should decrease SNR but keep it positive."""
-    from hdmi_exfil.display.test_patterns import compute_snr, generate_checkerboard
+    from hdmi_transfer.display.test_patterns import compute_snr, generate_checkerboard
 
     profile = PROFILES["speed"]
     expected = generate_checkerboard(profile)
@@ -118,7 +118,7 @@ def test_snr_with_noise() -> None:
 
 def test_snr_heavy_noise() -> None:
     """Very heavy noise should produce low SNR."""
-    from hdmi_exfil.display.test_patterns import compute_snr, generate_checkerboard
+    from hdmi_transfer.display.test_patterns import compute_snr, generate_checkerboard
 
     profile = PROFILES["speed"]
     expected = generate_checkerboard(profile)
@@ -141,7 +141,7 @@ def test_snr_heavy_noise() -> None:
 
 def test_benchmark_result_json() -> None:
     """BenchmarkResult.to_json() produces valid JSON with all expected keys."""
-    from hdmi_exfil.cli.benchmark import BenchmarkResult
+    from hdmi_transfer.cli.benchmark import BenchmarkResult
 
     r = BenchmarkResult(
         profile="speed",
@@ -175,7 +175,7 @@ def test_benchmark_result_json() -> None:
 
 def test_benchmark_result_json_roundtrip() -> None:
     """BenchmarkResult JSON values match constructor arguments exactly."""
-    from hdmi_exfil.cli.benchmark import BenchmarkResult
+    from hdmi_transfer.cli.benchmark import BenchmarkResult
 
     r = BenchmarkResult(
         profile="quality",
@@ -203,7 +203,7 @@ def test_benchmark_result_json_roundtrip() -> None:
 
 def test_benchmark_sequential_roundtrip() -> None:
     """run_benchmark with sequential mode completes with zero errors."""
-    from hdmi_exfil.cli.benchmark import run_benchmark
+    from hdmi_transfer.cli.benchmark import run_benchmark
 
     profile = PROFILES["speed"]
     result = run_benchmark(profile, "sequential", payload_size_kb=10, duration_sec=30)

@@ -12,7 +12,7 @@ import sys
 
 import numpy as np
 
-from hdmi_exfil.config import DEFAULT_PROFILE, ResolutionProfile
+from hdmi_transfer.config import DEFAULT_PROFILE, ResolutionProfile
 
 
 # ---------------------------------------------------------------------------
@@ -25,7 +25,7 @@ class TestNoCv2InSequential:
 
     def test_no_cv2_import_in_source(self):
         """AST parse sequential.py to confirm no cv2 import statement."""
-        import hdmi_exfil.protocols.sequential as mod
+        import hdmi_transfer.protocols.sequential as mod
 
         src = ast.parse(open(mod.__file__).read())
         cv2_imports = [
@@ -38,7 +38,7 @@ class TestNoCv2InSequential:
 
     def test_encode_frame_shape(self):
         """encode_frame output has correct profile dimensions."""
-        from hdmi_exfil.protocols.sequential import SequentialProtocol
+        from hdmi_transfer.protocols.sequential import SequentialProtocol
 
         proto = SequentialProtocol()
         profile = DEFAULT_PROFILE
@@ -49,7 +49,7 @@ class TestNoCv2InSequential:
 
     def test_encode_frame_uses_np_repeat(self):
         """Verify the np.repeat pattern produces same output as cv2.resize."""
-        from hdmi_exfil.protocols.sequential import SequentialProtocol
+        from hdmi_transfer.protocols.sequential import SequentialProtocol
 
         proto = SequentialProtocol()
         profile = DEFAULT_PROFILE
@@ -71,7 +71,7 @@ class TestNoCv2InFountain:
 
     def test_no_cv2_import_in_source(self):
         """AST parse fountain.py to confirm no cv2 import statement."""
-        import hdmi_exfil.protocols.fountain as mod
+        import hdmi_transfer.protocols.fountain as mod
 
         src = ast.parse(open(mod.__file__).read())
         cv2_imports = [
@@ -84,7 +84,7 @@ class TestNoCv2InFountain:
 
     def test_encode_frame_shape(self):
         """encode_frame output has correct profile dimensions."""
-        from hdmi_exfil.protocols.fountain import FountainProtocol
+        from hdmi_transfer.protocols.fountain import FountainProtocol
 
         proto = FountainProtocol()
         profile = DEFAULT_PROFILE
@@ -95,7 +95,7 @@ class TestNoCv2InFountain:
 
     def test_encode_frame_block_uniformity(self):
         """Verify blocks are uniform after np.repeat upscale."""
-        from hdmi_exfil.protocols.fountain import FountainProtocol
+        from hdmi_transfer.protocols.fountain import FountainProtocol
 
         proto = FountainProtocol()
         profile = DEFAULT_PROFILE
@@ -120,7 +120,7 @@ class TestNoCv2InSampler:
 
     def test_no_cv2_import_in_source(self):
         """AST parse sampler.py to confirm no cv2 import statement."""
-        import hdmi_exfil.capture.sampler as mod
+        import hdmi_transfer.capture.sampler as mod
 
         src = ast.parse(open(mod.__file__).read())
         cv2_imports = [
@@ -133,7 +133,7 @@ class TestNoCv2InSampler:
 
     def test_sample_frame_matching_dimensions(self):
         """sample_frame works when frame dimensions match expected."""
-        from hdmi_exfil.capture.sampler import sample_frame
+        from hdmi_transfer.capture.sampler import sample_frame
 
         profile = DEFAULT_PROFILE
         frame = np.random.randint(0, 256, (profile.height, profile.width, 3), dtype=np.uint8)
@@ -142,7 +142,7 @@ class TestNoCv2InSampler:
 
     def test_sample_frame_mismatched_dimensions(self):
         """sample_frame handles frame dimension mismatch via numpy resize."""
-        from hdmi_exfil.capture.sampler import sample_frame
+        from hdmi_transfer.capture.sampler import sample_frame
 
         profile = DEFAULT_PROFILE
         # Create frame with different dimensions (e.g. 720p instead of 1080p)

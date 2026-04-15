@@ -1,1 +1,1 @@
-"""HDMI Exfil web application -- browser-based sender & receiver."""
+"""HDMI Transfer web application -- browser-based sender & receiver."""

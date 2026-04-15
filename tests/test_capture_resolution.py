@@ -6,7 +6,7 @@ import cv2
 
 
 def test_resolve_capture_target_maps_logical_capture_card_to_dshow_index():
-    from hdmi_exfil.adapters.capture.resolver import resolve_capture_target
+    from hdmi_transfer.adapters.capture.resolver import resolve_capture_target
 
     devices = [
         {
@@ -33,7 +33,7 @@ def test_resolve_capture_target_maps_logical_capture_card_to_dshow_index():
 
 
 def test_resolve_capture_target_prefers_raw_dshow_index_over_named_ffmpeg_source():
-    from hdmi_exfil.adapters.capture.resolver import resolve_capture_target
+    from hdmi_transfer.adapters.capture.resolver import resolve_capture_target
 
     devices = [
         {
@@ -60,7 +60,7 @@ def test_resolve_capture_target_prefers_raw_dshow_index_over_named_ffmpeg_source
 
 
 def test_resolve_saved_capture_target_auto_heals_changed_logical_index():
-    from hdmi_exfil.adapters.capture.resolver import resolve_saved_capture_target
+    from hdmi_transfer.adapters.capture.resolver import resolve_saved_capture_target
 
     devices = [
         {
@@ -89,7 +89,7 @@ def test_resolve_saved_capture_target_auto_heals_changed_logical_index():
 
 
 def test_resolve_capture_target_raw_prefix_skips_detection():
-    from hdmi_exfil.adapters.capture.resolver import resolve_capture_target
+    from hdmi_transfer.adapters.capture.resolver import resolve_capture_target
 
     def fail_detector():
         raise AssertionError("detector should not be called for raw: selectors")
@@ -102,8 +102,8 @@ def test_resolve_capture_target_raw_prefix_skips_detection():
 
 
 def test_run_receive_uses_resolved_capture_target(monkeypatch, capsys):
-    import hdmi_exfil.interfaces.cli.receive as receive
-    from hdmi_exfil.adapters.capture.resolver import ResolvedCaptureTarget
+    import hdmi_transfer.interfaces.cli.receive as receive
+    from hdmi_transfer.adapters.capture.resolver import ResolvedCaptureTarget
 
     resolved = ResolvedCaptureTarget(
         requested_source="0",
@@ -174,8 +174,8 @@ def test_run_receive_uses_resolved_capture_target(monkeypatch, capsys):
 
 
 def test_calibrate_open_capture_uses_resolved_capture_target(monkeypatch, capsys):
-    import hdmi_exfil.interfaces.cli.calibrate as calibrate
-    from hdmi_exfil.adapters.capture.resolver import ResolvedCaptureTarget
+    import hdmi_transfer.interfaces.cli.calibrate as calibrate
+    from hdmi_transfer.adapters.capture.resolver import ResolvedCaptureTarget
 
     resolved = ResolvedCaptureTarget(
         requested_source="0",
@@ -214,16 +214,16 @@ def test_calibrate_open_capture_uses_resolved_capture_target(monkeypatch, capsys
     assert "Auto-fixed capture target" in capsys.readouterr().out
 
 
-@patch("hdmi_exfil.interfaces.cli.receiver_console.run_receive")
-@patch("hdmi_exfil.interfaces.cli.receiver_console.resolve_saved_capture_target")
-@patch("hdmi_exfil.interfaces.cli.receiver_console.settings")
+@patch("hdmi_transfer.interfaces.cli.receiver_console.run_receive")
+@patch("hdmi_transfer.interfaces.cli.receiver_console.resolve_saved_capture_target")
+@patch("hdmi_transfer.interfaces.cli.receiver_console.settings")
 def test_receiver_console_auto_updates_saved_device_index(
     mock_settings,
     mock_resolve_saved_target,
     mock_run_receive,
 ):
-    from hdmi_exfil.adapters.capture.resolver import ResolvedCaptureTarget
-    from hdmi_exfil.interfaces.cli.receiver_console import _action_receive
+    from hdmi_transfer.adapters.capture.resolver import ResolvedCaptureTarget
+    from hdmi_transfer.interfaces.cli.receiver_console import _action_receive
 
     mock_settings.load.return_value = {
         "receiver": {

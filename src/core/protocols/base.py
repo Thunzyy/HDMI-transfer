@@ -2,7 +2,7 @@
 
 This module defines the contract that every encoding protocol must fulfil.
 It is intentionally config-agnostic -- concrete protocols import grid
-dimensions from ``hdmi_exfil.core.config`` themselves.
+dimensions from ``hdmi_transfer.core.config`` themselves.
 """
 
 from __future__ import annotations

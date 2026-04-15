@@ -22,10 +22,10 @@ import time
 import cv2
 import numpy as np
 
-from hdmi_exfil.adapters.capture.resolver import resolve_capture_target
-from hdmi_exfil.core.config import DEFAULT_PROFILE, PROFILES, ResolutionProfile
-from hdmi_exfil.receiver.capture.source import CaptureSource
-from hdmi_exfil.sender.display.test_patterns import (
+from hdmi_transfer.adapters.capture.resolver import resolve_capture_target
+from hdmi_transfer.core.config import DEFAULT_PROFILE, PROFILES, ResolutionProfile
+from hdmi_transfer.receiver.capture.source import CaptureSource
+from hdmi_transfer.sender.display.test_patterns import (
     compute_alignment,
     compute_snr,
     generate_checkerboard,
@@ -35,7 +35,7 @@ from hdmi_exfil.sender.display.test_patterns import (
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hdmi-calibrate",
-        description="HDMI Exfiltration Calibration -- display and analyze test patterns",
+        description="HDMI Transfer Calibration -- display and analyze test patterns",
     )
     parser.add_argument(
         "--profile",
@@ -223,7 +223,7 @@ def _cmd_send(profile: ResolutionProfile, args: argparse.Namespace) -> None:
     renderer_name = getattr(args, "renderer", "cv2")
 
     if renderer_name == "pygame":
-        from hdmi_exfil.sender.display.renderer import PygameRenderer
+        from hdmi_transfer.sender.display.renderer import PygameRenderer
 
         with PygameRenderer(
             width=profile.width, height=profile.height

@@ -9,6 +9,7 @@ Set-StrictMode -Version Latest
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $DefaultVenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
+$DefaultVenvBench = Join-Path $RepoRoot ".venv\Scripts\hdmi-bench.exe"
 
 if ($Python -eq "python" -and (Test-Path $DefaultVenvPython)) {
     $Python = $DefaultVenvPython
@@ -59,10 +60,9 @@ try {
         "--check"
     )
 
-    $benchCommand = Get-Command "hdmi-bench" -ErrorAction SilentlyContinue
-    if ($null -ne $benchCommand) {
+    if (Test-Path $DefaultVenvBench) {
         Invoke-Step -Name "Benchmark smoke" -Command @(
-            $benchCommand.Source,
+            $DefaultVenvBench,
             "--profile",
             "balanced",
             "--mode",
@@ -70,16 +70,28 @@ try {
             "--no-json"
         )
     } else {
-        Invoke-Step -Name "Benchmark smoke" -Command @(
-            $Python,
-            "-m",
-            "hdmi_exfil.core.cli.benchmark",
-            "--profile",
-            "balanced",
-            "--mode",
-            "fountain",
-            "--no-json"
-        )
+        $benchCommand = Get-Command "hdmi-bench" -ErrorAction SilentlyContinue
+        if ($null -ne $benchCommand) {
+            Invoke-Step -Name "Benchmark smoke" -Command @(
+                $benchCommand.Source,
+                "--profile",
+                "balanced",
+                "--mode",
+                "fountain",
+                "--no-json"
+            )
+        } else {
+            Invoke-Step -Name "Benchmark smoke" -Command @(
+                $Python,
+                "-m",
+                "hdmi_transfer.core.cli.benchmark",
+                "--profile",
+                "balanced",
+                "--mode",
+                "fountain",
+                "--no-json"
+            )
+        }
     }
 } finally {
     Pop-Location

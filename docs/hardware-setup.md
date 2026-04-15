@@ -2,7 +2,7 @@
 
 ## Scenario recommande
 
-Le setup le plus simple pour developper et valider HDMI Exfil reste le loopback sur un seul PC :
+Le setup le plus simple pour developper et valider HDMI Transfer reste le loopback sur un seul PC :
 
 ```text
 GPU ─── HDMI ──► ecran secondaire (sender)
@@ -44,7 +44,7 @@ for i in range(10):
 
 ```bash
 python -c "
-from hdmi_exfil.sender.display.monitors import get_monitors
+from hdmi_transfer.sender.display.monitors import get_monitors
 for i, m in enumerate(get_monitors()):
     print(f'Monitor {i}: {m[\"width\"]}x{m[\"height\"]} at ({m[\"left\"]}, {m[\"top\"]})')
 "

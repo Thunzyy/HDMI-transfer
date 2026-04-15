@@ -6,7 +6,7 @@ import json
 from importlib.resources import files
 from typing import Final
 
-from hdmi_exfil.application.preflight import (
+from hdmi_transfer.application.preflight import (
     PREFLIGHT_BITS_PER_CHANNEL,
     PREFLIGHT_FILENAME,
     PREFLIGHT_FILE_BYTES,
@@ -17,10 +17,10 @@ from hdmi_exfil.application.preflight import (
     PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS,
     PREFLIGHT_TOTAL_FRAMES,
 )
-from hdmi_exfil.core.config import FRAME_TYPE_DATA, FRAME_TYPE_END, FRAME_TYPE_START
-from hdmi_exfil.domain.protocol_manifest import get_protocol_manifest
+from hdmi_transfer.core.config import FRAME_TYPE_DATA, FRAME_TYPE_END, FRAME_TYPE_START
+from hdmi_transfer.domain.protocol_manifest import get_protocol_manifest
 
-_ASSET_PACKAGE: Final[str] = "hdmi_exfil.interfaces.browser_sender"
+_ASSET_PACKAGE: Final[str] = "hdmi_transfer.interfaces.browser_sender"
 _SCRIPT_BODY_PLACEHOLDER: Final[str] = "{{ SCRIPT_BODY }}"
 
 

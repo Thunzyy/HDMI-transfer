@@ -4,9 +4,9 @@ from dataclasses import replace
 
 import numpy as np
 
-from hdmi_exfil.core.config import PROFILES
-from hdmi_exfil.core.protocols import get_protocol
-from hdmi_exfil.web.receiver_worker import ReceiverWorker
+from hdmi_transfer.core.config import PROFILES
+from hdmi_transfer.core.protocols import get_protocol
+from hdmi_transfer.web.receiver_worker import ReceiverWorker
 
 
 def _worker(profile_name: str = "balanced") -> ReceiverWorker:

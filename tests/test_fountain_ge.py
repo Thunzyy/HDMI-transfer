@@ -19,9 +19,9 @@ import os
 import numpy as np
 import pytest
 
-from hdmi_exfil.prng import PRNG, choose_indices
-from hdmi_exfil.protocols.degree import robust_soliton_cdf, sample_degree
-from hdmi_exfil.protocols.fountain import FountainDecoder, PAYLOAD_SIZE
+from hdmi_transfer.prng import PRNG, choose_indices
+from hdmi_transfer.protocols.degree import robust_soliton_cdf, sample_degree
+from hdmi_transfer.protocols.fountain import FountainDecoder, PAYLOAD_SIZE
 
 
 # ---- helpers ---------------------------------------------------------------

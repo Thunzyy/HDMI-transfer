@@ -39,7 +39,7 @@ class FrameRenderer:
 
     def __init__(
         self,
-        window_name: str = "HDMI Exfil",
+        window_name: str = "HDMI Transfer",
         x_offset: int = 0,
         y_offset: int = 0,
     ) -> None:

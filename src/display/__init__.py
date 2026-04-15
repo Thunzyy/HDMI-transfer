@@ -1,5 +1,5 @@
-"""Backward-compatible import shim -- canonical location: hdmi_exfil.sender.display."""
+"""Backward-compatible import shim -- canonical location: hdmi_transfer.sender.display."""
 
-from hdmi_exfil.compat.imports import reexport
+from hdmi_transfer.compat.imports import reexport
 
-reexport(globals(), "hdmi_exfil.sender.display")
+reexport(globals(), "hdmi_transfer.sender.display")

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from hdmi_exfil.core.config import FRAME_TYPE_START
-from hdmi_exfil.core.file_handling.metadata import build_start_metadata, parse_start_metadata
-from hdmi_exfil.core.protocols.base import FrameResult
+from hdmi_transfer.core.config import FRAME_TYPE_START
+from hdmi_transfer.core.file_handling.metadata import build_start_metadata, parse_start_metadata
+from hdmi_transfer.core.protocols.base import FrameResult
 
 PREFLIGHT_FILENAME = "__hdmi_preflight__.bin"
 PREFLIGHT_FILE_BYTES = b"HDMI_EXFIL_PREFLIGHT_V1"

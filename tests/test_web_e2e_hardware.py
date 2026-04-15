@@ -168,7 +168,7 @@ def _launch_server(output_dir: Path, log_path: Path) -> tuple[subprocess.Popen[s
     runner = (
         "import sys\n"
         f"sys.path.insert(0, {str(SRC_ROOT)!r})\n"
-        "from hdmi_exfil.web.server import create_app\n"
+        "from hdmi_transfer.web.server import create_app\n"
         f"app = create_app(output_dir={str(output_dir)!r})\n"
         f"app.run(host='127.0.0.1', port={port}, debug=False, threaded=True)\n"
     )
@@ -228,7 +228,7 @@ def _chrome_session(
     width: int | None = None,
     height: int | None = None,
 ) -> webdriver.Chrome:
-    profile_dir = Path(tempfile.mkdtemp(prefix="hdmi-exfil-web-e2e-"))
+    profile_dir = Path(tempfile.mkdtemp(prefix="hdmi-transfer-web-e2e-"))
     options = Options()
     options.page_load_strategy = "eager"
     if app_url:
@@ -717,14 +717,14 @@ def _launch_python_sender(
         "from dataclasses import replace\n"
         "import numpy as np\n"
         f"sys.path.insert(0, {str(SRC_ROOT)!r})\n"
-        "from hdmi_exfil.core.config import PROFILES\n"
-        "from hdmi_exfil.core.file_handling.metadata import build_start_metadata\n"
-        "from hdmi_exfil.core.file_handling.reader import read_input\n"
-        "from hdmi_exfil.core.prng import choose_indices\n"
-        "from hdmi_exfil.core.protocols import get_protocol\n"
-        "from hdmi_exfil.core.protocols.xor_ops import warmup as warmup_numba, xor_into\n"
-        "from hdmi_exfil.sender.display.monitors import get_monitors\n"
-        "from hdmi_exfil.sender.display.renderer import PygameRenderer\n"
+        "from hdmi_transfer.core.config import PROFILES\n"
+        "from hdmi_transfer.core.file_handling.metadata import build_start_metadata\n"
+        "from hdmi_transfer.core.file_handling.reader import read_input\n"
+        "from hdmi_transfer.core.prng import choose_indices\n"
+        "from hdmi_transfer.core.protocols import get_protocol\n"
+        "from hdmi_transfer.core.protocols.xor_ops import warmup as warmup_numba, xor_into\n"
+        "from hdmi_transfer.sender.display.monitors import get_monitors\n"
+        "from hdmi_transfer.sender.display.renderer import PygameRenderer\n"
         "\n"
         "def main() -> None:\n"
         "    input_path = sys.argv[1]\n"

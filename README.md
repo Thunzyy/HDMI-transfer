@@ -1,4 +1,4 @@
-# HDMI Exfil
+# HDMI Transfer
 
 Transfert de fichiers par signal video HDMI. Le sender affiche des frames encodees sur une sortie ecran, le receiver lit ce signal via une carte de capture et reconstruit le fichier sans utiliser le reseau pour les donnees.
 
@@ -16,7 +16,7 @@ src/
   web/
 ```
 
-Le nom logique du package reste `hdmi_exfil`, mais les sources ne vivent plus dans un sous-dossier `src/hdmi_exfil/`.
+Le nom logique du package reste `hdmi_transfer`, mais les sources ne vivent plus dans un sous-dossier `src/hdmi_transfer/`.
 
 ## Quick Start
 
@@ -30,8 +30,8 @@ Setup recommande: `2 PC`.
 Sur le receiver:
 
 ```bash
-git clone git@github.com:Thunzyy/HDMI_exfil.git
-cd HDMI_exfil
+git clone git@github.com:Thunzyy/HDMI-transfer.git
+cd HDMI-transfer
 uv sync --extra web
 ```
 

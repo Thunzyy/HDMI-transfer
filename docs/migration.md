@@ -8,26 +8,26 @@ Quand vous touchez du code, utilisez les modules canoniques. Les anciens imports
 
 | Legacy | Canonique |
 |--------|-----------|
-| `hdmi_exfil.config` | `hdmi_exfil.core.config` |
-| `hdmi_exfil.prng` | `hdmi_exfil.core.prng` |
-| `hdmi_exfil.protocols.*` | `hdmi_exfil.core.protocols.*` |
-| `hdmi_exfil.capture.*` | `hdmi_exfil.core.capture.*` |
-| `hdmi_exfil.file_handling.*` | `hdmi_exfil.core.file_handling.*` |
-| `hdmi_exfil.display.*` | `hdmi_exfil.sender.display.*` |
-| `hdmi_exfil.sender.cli.*` | `hdmi_exfil.interfaces.cli.*` |
-| `hdmi_exfil.receiver.cli.*` | `hdmi_exfil.interfaces.cli.*` |
-| `hdmi_exfil.web.server` | `hdmi_exfil.interfaces.web.app_factory` |
+| `hdmi_transfer.config` | `hdmi_transfer.core.config` |
+| `hdmi_transfer.prng` | `hdmi_transfer.core.prng` |
+| `hdmi_transfer.protocols.*` | `hdmi_transfer.core.protocols.*` |
+| `hdmi_transfer.capture.*` | `hdmi_transfer.core.capture.*` |
+| `hdmi_transfer.file_handling.*` | `hdmi_transfer.core.file_handling.*` |
+| `hdmi_transfer.display.*` | `hdmi_transfer.sender.display.*` |
+| `hdmi_transfer.sender.cli.*` | `hdmi_transfer.interfaces.cli.*` |
+| `hdmi_transfer.receiver.cli.*` | `hdmi_transfer.interfaces.cli.*` |
+| `hdmi_transfer.web.server` | `hdmi_transfer.interfaces.web.app_factory` |
 
 ## Nouveaux points d'entree
 
 | Usage | Point d'entree |
 |------|----------------|
-| Sender CLI | `hdmi_exfil.interfaces.cli.send` |
-| Receiver CLI | `hdmi_exfil.interfaces.cli.receive` |
-| Calibration CLI | `hdmi_exfil.interfaces.cli.calibrate` |
-| Sender console | `hdmi_exfil.interfaces.cli.sender_console` |
-| Receiver console | `hdmi_exfil.interfaces.cli.receiver_console` |
-| Web app | `hdmi_exfil.interfaces.web.create_app` |
+| Sender CLI | `hdmi_transfer.interfaces.cli.send` |
+| Receiver CLI | `hdmi_transfer.interfaces.cli.receive` |
+| Calibration CLI | `hdmi_transfer.interfaces.cli.calibrate` |
+| Sender console | `hdmi_transfer.interfaces.cli.sender_console` |
+| Receiver console | `hdmi_transfer.interfaces.cli.receiver_console` |
+| Web app | `hdmi_transfer.interfaces.web.create_app` |
 
 ## Sender navigateur
 
@@ -44,7 +44,7 @@ uv run python tools/build_sender_html.py --check
 
 1. Trouver le chemin canonique cible.
 2. Deplacer la logique reelle dans `domain`, `application`, `adapters` ou `interfaces`.
-3. Laisser le module legacy comme wrapper explicite via `hdmi_exfil.compat.imports.reexport`.
+3. Laisser le module legacy comme wrapper explicite via `hdmi_transfer.compat.imports.reexport`.
 4. Ajouter ou mettre a jour les tests de compatibilite.
 
 ## Politique de compatibilite

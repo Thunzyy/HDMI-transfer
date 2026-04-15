@@ -1,6 +1,6 @@
 (() => {
-  const STORAGE_KEY = "hdmi_exfil_history";
-  const PREFS_KEY = "hdmi_exfil_history_filters";
+  const STORAGE_KEY = "hdmi_transfer_history";
+  const PREFS_KEY = "hdmi_transfer_history_filters";
   const DEFAULT_PREFS = {
     search: "",
     type: "all",

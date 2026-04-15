@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from hdmi_exfil.core.config import FRAME_TYPE_START
-from hdmi_exfil.core.file_handling.metadata import build_start_metadata
-from hdmi_exfil.core.protocols.base import FrameResult
+from hdmi_transfer.core.config import FRAME_TYPE_START
+from hdmi_transfer.core.file_handling.metadata import build_start_metadata
+from hdmi_transfer.core.protocols.base import FrameResult
 
 
 def test_preflight_detects_expected_start_frame() -> None:
-    from hdmi_exfil.application.preflight import (
+    from hdmi_transfer.application.preflight import (
         build_preflight_start_payload,
         is_preflight_start_result,
     )
@@ -23,7 +23,7 @@ def test_preflight_detects_expected_start_frame() -> None:
 
 
 def test_preflight_rejects_regular_start_frame() -> None:
-    from hdmi_exfil.application.preflight import is_preflight_start_result
+    from hdmi_transfer.application.preflight import is_preflight_start_result
 
     result = FrameResult(
         data=build_start_metadata("payload.bin", b"hello"),
@@ -37,7 +37,7 @@ def test_preflight_rejects_regular_start_frame() -> None:
 
 
 def test_preflight_filler_preserves_prefix_and_densifies_tail() -> None:
-    from hdmi_exfil.application.preflight import (
+    from hdmi_transfer.application.preflight import (
         PREFLIGHT_BITS_PER_CHANNEL,
         apply_preflight_visual_filler,
     )

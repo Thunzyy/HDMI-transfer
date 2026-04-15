@@ -21,11 +21,11 @@ import sys
 from InquirerPy import inquirer
 from InquirerPy.separator import Separator
 
-from hdmi_exfil.adapters.capture.device_registry import detect_devices
-from hdmi_exfil.adapters.capture.resolver import resolve_saved_capture_target
-from hdmi_exfil.core.config import PROFILES, ResolutionProfile
-from hdmi_exfil.core import settings
-from hdmi_exfil.interfaces.cli.receive import run_receive
+from hdmi_transfer.adapters.capture.device_registry import detect_devices
+from hdmi_transfer.adapters.capture.resolver import resolve_saved_capture_target
+from hdmi_transfer.core.config import PROFILES, ResolutionProfile
+from hdmi_transfer.core import settings
+from hdmi_transfer.interfaces.cli.receive import run_receive
 
 
 # ------------------------------------------------------------------
@@ -226,7 +226,7 @@ def _action_calibrate() -> None:
     profile = PROFILES[profile_name]
 
     # Import and call the calibrate recv function
-    from hdmi_exfil.interfaces.cli.calibrate import _cmd_recv
+    from hdmi_transfer.interfaces.cli.calibrate import _cmd_recv
 
     # Build a minimal args namespace (calibrate recv needs source and frames)
     args = argparse.Namespace(source=str(source_idx), frames=10, output_dir=None)

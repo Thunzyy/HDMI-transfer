@@ -4,7 +4,7 @@ Extracted from receiver_fountain.py -- bit-exact port of the JavaScript
 SplitMix32 implementation used by sender.html.
 
 The ``choose_indices`` helper uses the Robust Soliton Distribution (RSD)
-from ``hdmi_exfil.core.protocols.degree`` for degree selection, replacing the
+from ``hdmi_transfer.core.protocols.degree`` for degree selection, replacing the
 former ad-hoc distribution.
 """
 
@@ -49,7 +49,7 @@ def choose_indices(seed: int, K: int) -> frozenset[int]:
     """
     # Lazy import to avoid circular dependency:
     # prng -> protocols.degree -> (protocols.__init__ -> fountain -> prng)
-    from hdmi_exfil.core.protocols.degree import robust_soliton_cdf, sample_degree
+    from hdmi_transfer.core.protocols.degree import robust_soliton_cdf, sample_degree
 
     prng = PRNG(seed)
 

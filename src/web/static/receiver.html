@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>HDMI Exfil — Receiver</title>
+<title>HDMI Transfer — Receiver</title>
 <style>
 :root {
   --bg:#16181e; --bg2:#0f1117; --panel:rgba(22,24,30,0.92);
@@ -289,7 +289,7 @@ html,body{
 
 <div id="header">
   <div class="h-left">
-    <span class="h-title">HDMI Exfil</span>
+    <span class="h-title">HDMI Transfer</span>
   </div>
   <div class="h-pill">
     <span class="h-dot idle" id="linkDot"></span>
@@ -495,8 +495,8 @@ html,body{
   let expectedDroplets = null;
   let activeProtocol = null;
   const MAX_PTS = 30, GRID_N = 40;
-  const SETTINGS_KEY = "hdmi_exfil_settings";
-  const LEGACY_PREVIEW_SETTINGS_KEY = "hdmi_exfil_preview_settings";
+  const SETTINGS_KEY = "hdmi_transfer_settings";
+  const LEGACY_PREVIEW_SETTINGS_KEY = "hdmi_transfer_preview_settings";
   let autoScanEnabled = true;
   let idlePreviewEnabled = true;
   let previewLastFrameAt = 0;
@@ -637,7 +637,7 @@ html,body{
   }
 
   /* ── Devices ───────────────────────────── */
-  const DEVICE_CACHE_KEY = "hdmi_exfil_devices";
+  const DEVICE_CACHE_KEY = "hdmi_transfer_devices";
 
   function populateDevices(devs) {
     deviceSelect.innerHTML = "";
@@ -1058,7 +1058,7 @@ html,body{
 
   function saveHistory(entry) {
     try {
-      const key = "hdmi_exfil_history";
+      const key = "hdmi_transfer_history";
       const items = JSON.parse(localStorage.getItem(key) || "[]");
       items.push(entry);
       if (items.length > 200) items.splice(0, items.length - 200);

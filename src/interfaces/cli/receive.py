@@ -2,7 +2,7 @@
 
 Orchestrates video capture, frame sampling, protocol decoding, and file
 saving.  Contains no decode logic; it is a thin wiring layer over the
-``hdmi_exfil`` package modules.
+``hdmi_transfer`` package modules.
 
 Usage::
 
@@ -23,28 +23,28 @@ import time
 import cv2
 import numpy as np
 
-from hdmi_exfil.adapters.capture.resolver import resolve_capture_target
-from hdmi_exfil.application.receive_geometry import (
+from hdmi_transfer.adapters.capture.resolver import resolve_capture_target
+from hdmi_transfer.application.receive_geometry import (
     build_geometry_candidates,
     decode_with_sampling_fallbacks,
     ensure_frame_size,
 )
-from hdmi_exfil.application.receive_session import ReceiveSession
-from hdmi_exfil.core.cli.progress import ProgressTracker
-from hdmi_exfil.receiver.capture.source import CaptureSource
-from hdmi_exfil.core.capture.threaded import FPSReporter, ThreadedCapture
-from hdmi_exfil.core.config import (
+from hdmi_transfer.application.receive_session import ReceiveSession
+from hdmi_transfer.core.cli.progress import ProgressTracker
+from hdmi_transfer.receiver.capture.source import CaptureSource
+from hdmi_transfer.core.capture.threaded import FPSReporter, ThreadedCapture
+from hdmi_transfer.core.config import (
     DEFAULT_PROFILE,
     PROFILES,
     ResolutionProfile,
 )
-from hdmi_exfil.core.file_handling.writer import write_output
+from hdmi_transfer.core.file_handling.writer import write_output
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hdmi-recv",
-        description="HDMI Exfiltration Receiver -- capture and decode HDMI frames",
+        description="HDMI Transfer Receiver -- capture and decode HDMI frames",
     )
     parser.add_argument(
         "source",
@@ -428,7 +428,7 @@ def _run_receiver_worker(
     profile: ResolutionProfile,
 ) -> None:
     """Run the validated web receiver worker as the CLI capture engine."""
-    from hdmi_exfil.web.receiver_worker import ReceiverWorker
+    from hdmi_transfer.web.receiver_worker import ReceiverWorker
 
     worker = ReceiverWorker(
         device=resolved_source.open_source,

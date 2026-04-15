@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from hdmi_exfil.core.protocols.fountain import (
+from hdmi_transfer.core.protocols.fountain import (
     FOUNT_HEADER_CURRENT_PRE_CRC,
     FOUNT_MAGIC_V2,
 )
-from hdmi_exfil.domain.protocol_manifest import get_protocol_manifest
+from hdmi_transfer.domain.protocol_manifest import get_protocol_manifest
 
 
 def test_protocol_manifest_exposes_profiles_and_headers() -> None:

@@ -12,7 +12,7 @@ import math
 
 import numpy as np
 
-from hdmi_exfil.core.config import ResolutionProfile
+from hdmi_transfer.core.config import ResolutionProfile
 
 
 def generate_checkerboard(profile: ResolutionProfile) -> np.ndarray:
@@ -79,7 +79,7 @@ def generate_known_payload(
         ``(height, width, 3)`` uint8 and *expected_payload* is the raw bytes
         that a correct decode should recover.
     """
-    from hdmi_exfil.core.protocols.sequential import SequentialProtocol
+    from hdmi_transfer.core.protocols.sequential import SequentialProtocol
 
     proto = SequentialProtocol(profile=profile)
     payload_size = profile.seq_bytes_per_frame

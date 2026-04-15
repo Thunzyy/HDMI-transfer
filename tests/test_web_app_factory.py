@@ -1,5 +1,5 @@
 def test_create_app_registers_receive_and_file_routes():
-    from hdmi_exfil.interfaces.web.app_factory import create_app
+    from hdmi_transfer.interfaces.web.app_factory import create_app
 
     app = create_app(runtime=False)
 
@@ -13,7 +13,7 @@ def test_create_app_registers_receive_and_file_routes():
 
 
 def test_sender_routes_serve_standalone_sender_and_wrapper() -> None:
-    from hdmi_exfil.interfaces.web.app_factory import create_app
+    from hdmi_transfer.interfaces.web.app_factory import create_app
 
     app = create_app(runtime=False)
     client = app.test_client()
@@ -35,7 +35,7 @@ def test_sender_routes_serve_standalone_sender_and_wrapper() -> None:
 
 
 def test_history_page_exposes_filters_and_static_script() -> None:
-    from hdmi_exfil.interfaces.web.app_factory import create_app
+    from hdmi_transfer.interfaces.web.app_factory import create_app
 
     app = create_app(runtime=False)
     client = app.test_client()
@@ -48,12 +48,12 @@ def test_history_page_exposes_filters_and_static_script() -> None:
 
     history_script = client.get("/static/history.js")
     assert history_script.status_code == 200
-    assert b"hdmi_exfil_history_filters" in history_script.data
+    assert b"hdmi_transfer_history_filters" in history_script.data
     assert b"Clear the local browser history log?" in history_script.data
 
 
 def test_create_app_runtime_primes_persistent_capture_for_raw_dshow_source(monkeypatch):
-    from hdmi_exfil.interfaces.web.app_factory import create_app
+    from hdmi_transfer.interfaces.web.app_factory import create_app
 
     cached_device = {
         "index": 0,
@@ -87,19 +87,19 @@ def test_create_app_runtime_primes_persistent_capture_for_raw_dshow_source(monke
             self.prime_calls.append(dict(kwargs))
 
     monkeypatch.setattr(
-        "hdmi_exfil.interfaces.web.app_factory._load_disk_cache",
+        "hdmi_transfer.interfaces.web.app_factory._load_disk_cache",
         lambda: [cached_device],
     )
     monkeypatch.setattr(
-        "hdmi_exfil.adapters.capture.device_registry.DeviceRegistry",
+        "hdmi_transfer.adapters.capture.device_registry.DeviceRegistry",
         FakeRegistry,
     )
     monkeypatch.setattr(
-        "hdmi_exfil.adapters.capture.capture_manager.CaptureManager",
+        "hdmi_transfer.adapters.capture.capture_manager.CaptureManager",
         FakeCaptureManager,
     )
     monkeypatch.setattr(
-        "hdmi_exfil.receiver.capture.source.open_capture",
+        "hdmi_transfer.receiver.capture.source.open_capture",
         lambda *args, **kwargs: None,
     )
 
@@ -113,7 +113,7 @@ def test_create_app_runtime_primes_persistent_capture_for_raw_dshow_source(monke
 
 
 def test_shutdown_runtime_stops_worker_and_releases_capture() -> None:
-    from hdmi_exfil.interfaces.web.app_factory import create_app, shutdown_runtime
+    from hdmi_transfer.interfaces.web.app_factory import create_app, shutdown_runtime
 
     class FakeWorker:
         def __init__(self) -> None:

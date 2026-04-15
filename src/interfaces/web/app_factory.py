@@ -1,4 +1,4 @@
-"""Flask app factory for HDMI Exfil web interfaces."""
+"""Flask app factory for HDMI Transfer web interfaces."""
 
 from __future__ import annotations
 
@@ -118,12 +118,12 @@ def create_app(
     if runtime:
         import cv2
 
-        from hdmi_exfil.adapters.capture.capture_manager import CaptureManager
-        from hdmi_exfil.adapters.capture.device_registry import (
+        from hdmi_transfer.adapters.capture.capture_manager import CaptureManager
+        from hdmi_transfer.adapters.capture.device_registry import (
             DeviceRegistry,
             resolve_device_open_target,
         )
-        from hdmi_exfil.receiver.capture.source import open_capture
+        from hdmi_transfer.receiver.capture.source import open_capture
 
         app._device_registry = DeviceRegistry(CACHE_FILE)
 
@@ -140,7 +140,7 @@ def create_app(
         )
 
         def detect_and_cache() -> list[dict]:
-            from hdmi_exfil.receiver.cli.console import _detect_devices
+            from hdmi_transfer.receiver.cli.console import _detect_devices
 
             return app._device_registry.detect(_detect_devices)
 

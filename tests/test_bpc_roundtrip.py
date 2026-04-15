@@ -12,8 +12,8 @@ import zlib
 
 import numpy as np
 
-from hdmi_exfil.core.config import PROFILES, ResolutionProfile
-from hdmi_exfil.core.protocols.encoding import (
+from hdmi_transfer.core.config import PROFILES, ResolutionProfile
+from hdmi_transfer.core.protocols.encoding import (
     DECODE_THRESHOLDS,
     ENCODE_LEVELS,
     bytes_to_pixels,
@@ -70,8 +70,8 @@ def test_encoding_roundtrip():
 def test_sequential_roundtrip():
     """Test full sequential protocol encode/decode roundtrip."""
     from dataclasses import replace
-    from hdmi_exfil.core.protocols.sequential import SequentialProtocol
-    from hdmi_exfil.core.config import FRAME_TYPE_DATA, SEQ_MAGIC
+    from hdmi_transfer.core.protocols.sequential import SequentialProtocol
+    from hdmi_transfer.core.config import FRAME_TYPE_DATA, SEQ_MAGIC
 
     profile_base = PROFILES["balanced"]
 
@@ -89,7 +89,7 @@ def test_sequential_roundtrip():
         img = proto.encode_frame(payload, frame_index=5, total_frames=10)
 
         # img is BGR (OpenCV format). Simulate capture: sample block centers
-        from hdmi_exfil.core.capture.sampler import sample_frame
+        from hdmi_transfer.core.capture.sampler import sample_frame
         sampled = sample_frame(img, profile.rows, profile.cols, profile.block_size)
 
         # Decode
@@ -105,7 +105,7 @@ def test_sequential_roundtrip():
 def test_fountain_roundtrip():
     """Test full fountain protocol encode/decode roundtrip."""
     from dataclasses import replace
-    from hdmi_exfil.core.protocols.fountain import FountainProtocol
+    from hdmi_transfer.core.protocols.fountain import FountainProtocol
 
     profile_base = PROFILES["balanced"]
 
@@ -123,7 +123,7 @@ def test_fountain_roundtrip():
         img = proto.encode_frame(payload, frame_index=1, total_frames=10, seed=42)
 
         # Simulate capture
-        from hdmi_exfil.core.capture.sampler import sample_frame
+        from hdmi_transfer.core.capture.sampler import sample_frame
         sampled = sample_frame(img, profile.rows, profile.cols, profile.block_size)
 
         # Decode

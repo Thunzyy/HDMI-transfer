@@ -2,9 +2,9 @@ import shutil
 from pathlib import Path
 import uuid
 
-import hdmi_exfil.interfaces.web.app_factory as app_factory
-import hdmi_exfil.interfaces.web.routes_files as routes_files
-import hdmi_exfil.web.server as server
+import hdmi_transfer.interfaces.web.app_factory as app_factory
+import hdmi_transfer.interfaces.web.routes_files as routes_files
+import hdmi_transfer.web.server as server
 import pytest
 
 

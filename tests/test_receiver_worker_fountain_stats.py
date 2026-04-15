@@ -4,8 +4,8 @@ import time
 from dataclasses import replace
 from types import SimpleNamespace
 
-from hdmi_exfil.core.config import PROFILES
-from hdmi_exfil.web.receiver_worker import ReceiverWorker
+from hdmi_transfer.core.config import PROFILES
+from hdmi_transfer.web.receiver_worker import ReceiverWorker
 
 
 def test_publish_fountain_progress_includes_unique_droplet_count():

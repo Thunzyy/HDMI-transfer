@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hdmi_exfil.domain.protocol_manifest import get_protocol_manifest
+from hdmi_transfer.domain.protocol_manifest import get_protocol_manifest
 from tools.build_sender_html import build_sender_assets, build_sender_html, check_sender_assets
 
 

@@ -7,7 +7,7 @@ import time
 import numpy as np
 import pytest
 
-from hdmi_exfil.capture.threaded import FPSReporter, ThreadedCapture
+from hdmi_transfer.capture.threaded import FPSReporter, ThreadedCapture
 
 
 # ---------------------------------------------------------------------------

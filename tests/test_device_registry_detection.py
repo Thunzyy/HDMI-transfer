@@ -53,8 +53,8 @@ class _FakeCap:
 
 
 def test_detect_devices_includes_dshow_only_capture_card(monkeypatch):
-    from hdmi_exfil.adapters.capture.device_registry import detect_devices
-    import hdmi_exfil.receiver.capture.source as source
+    from hdmi_transfer.adapters.capture.device_registry import detect_devices
+    import hdmi_transfer.receiver.capture.source as source
 
     monkeypatch.setattr(sys, "platform", "win32")
 
@@ -133,8 +133,8 @@ def test_detect_devices_includes_dshow_only_capture_card(monkeypatch):
 
 
 def test_detect_devices_keeps_msmf_when_matched_dshow_capture_card_is_dead(monkeypatch):
-    from hdmi_exfil.adapters.capture.device_registry import detect_devices
-    import hdmi_exfil.receiver.capture.source as source
+    from hdmi_transfer.adapters.capture.device_registry import detect_devices
+    import hdmi_transfer.receiver.capture.source as source
 
     monkeypatch.setattr(sys, "platform", "win32")
 
@@ -214,8 +214,8 @@ def test_detect_devices_keeps_msmf_when_matched_dshow_capture_card_is_dead(monke
 
 
 def test_detect_devices_matches_msmf_and_dshow_by_visual_similarity(monkeypatch):
-    from hdmi_exfil.adapters.capture.device_registry import detect_devices
-    import hdmi_exfil.receiver.capture.source as source
+    from hdmi_transfer.adapters.capture.device_registry import detect_devices
+    import hdmi_transfer.receiver.capture.source as source
 
     monkeypatch.setattr(sys, "platform", "win32")
 
@@ -308,8 +308,8 @@ def test_detect_devices_matches_msmf_and_dshow_by_visual_similarity(monkeypatch)
 
 
 def test_detect_devices_recovers_capture_card_dshow_index_by_exact_name(monkeypatch):
-    from hdmi_exfil.adapters.capture.device_registry import detect_devices
-    import hdmi_exfil.receiver.capture.source as source
+    from hdmi_transfer.adapters.capture.device_registry import detect_devices
+    import hdmi_transfer.receiver.capture.source as source
 
     monkeypatch.setattr(sys, "platform", "win32")
 
@@ -381,8 +381,8 @@ def test_detect_devices_recovers_capture_card_dshow_index_by_exact_name(monkeypa
 
 
 def test_detect_devices_does_not_assign_capture_card_to_unmatched_zero_dshow_source(monkeypatch):
-    from hdmi_exfil.adapters.capture.device_registry import detect_devices
-    import hdmi_exfil.receiver.capture.source as source
+    from hdmi_transfer.adapters.capture.device_registry import detect_devices
+    import hdmi_transfer.receiver.capture.source as source
 
     monkeypatch.setattr(sys, "platform", "win32")
 

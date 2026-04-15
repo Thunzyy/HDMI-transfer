@@ -188,8 +188,8 @@
     updateDerivedStats(); updateChips(); saveSettings();
   }
 
-  const APP_SETTINGS_KEY = "hdmi_exfil_settings";
-  const STORAGE_KEY = "hdmi_exfil_sender_settings";
+  const APP_SETTINGS_KEY = "hdmi_transfer_settings";
+  const STORAGE_KEY = "hdmi_transfer_sender_settings";
   function saveSettings() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({
       settingsVersion: 2,
@@ -341,7 +341,7 @@
       else status = "TX";
     }
     document.title =
-      `HDMI Exfil — Sender [${status}] ` +
+      `HDMI Transfer — Sender [${status}] ` +
       `f=${state.frame} k=${state.K} ` +
       `inner=${window.innerWidth}x${window.innerHeight} ` +
       `screen=${window.screenX},${window.screenY}`;
@@ -1120,7 +1120,7 @@
 
   function saveHistory(entry) {
     try {
-      const key = "hdmi_exfil_history";
+      const key = "hdmi_transfer_history";
       const items = JSON.parse(localStorage.getItem(key) || "[]");
       items.push(entry);
       if (items.length > 200) items.splice(0, items.length - 200);

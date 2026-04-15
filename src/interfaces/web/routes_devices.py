@@ -6,8 +6,8 @@ import logging
 
 from flask import Flask, jsonify, request
 
-from hdmi_exfil.adapters.capture.device_registry import resolve_device_open_target
-from hdmi_exfil.core.config import PROFILES
+from hdmi_transfer.adapters.capture.device_registry import resolve_device_open_target
+from hdmi_transfer.core.config import PROFILES
 
 log = logging.getLogger(__name__)
 

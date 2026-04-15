@@ -10,7 +10,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from hdmi_exfil.interfaces.browser_sender import (
+from hdmi_transfer.interfaces.browser_sender import (
     render_protocol_javascript,
     render_sender_html,
 )

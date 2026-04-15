@@ -2,7 +2,7 @@
 
 Orchestrates file reading, protocol encoding, monitor detection, and frame
 display.  Contains no encoding logic; it is a thin wiring layer over the
-``hdmi_exfil`` package modules.
+``hdmi_transfer`` package modules.
 
 Usage::
 
@@ -21,21 +21,21 @@ import time
 
 import numpy as np
 
-from hdmi_exfil.application.send_session import SendSession
-from hdmi_exfil.core.config import (
+from hdmi_transfer.application.send_session import SendSession
+from hdmi_transfer.core.config import (
     DEFAULT_PROFILE,
     PROFILES,
     ResolutionProfile,
 )
-from hdmi_exfil.sender.display.monitors import get_monitors
-from hdmi_exfil.sender.display.renderer import FrameRenderer, PygameRenderer
-from hdmi_exfil.core.protocols.xor_ops import warmup as warmup_numba
+from hdmi_transfer.sender.display.monitors import get_monitors
+from hdmi_transfer.sender.display.renderer import FrameRenderer, PygameRenderer
+from hdmi_transfer.core.protocols.xor_ops import warmup as warmup_numba
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hdmi-send",
-        description="HDMI Exfiltration Sender -- encode and display files as HDMI frames",
+        description="HDMI Transfer Sender -- encode and display files as HDMI frames",
     )
     parser.add_argument("input_path", help="File or directory to send")
     parser.add_argument(
@@ -426,7 +426,7 @@ def run_send(
     else:
         renderer_cls = FrameRenderer
         renderer_kwargs = {
-            "window_name": "HDMI Exfil Sender",
+            "window_name": "HDMI Transfer Sender",
             "x_offset": x_offset,
             "y_offset": y_offset,
         }

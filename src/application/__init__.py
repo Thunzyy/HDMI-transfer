@@ -1,7 +1,7 @@
-"""Application services and workflow models for HDMI Exfil."""
+"""Application services and workflow models for HDMI Transfer."""
 
-from hdmi_exfil.application.events import FramePacket, ReceiveEvent
-from hdmi_exfil.application.receive_session import ReceiveSession
-from hdmi_exfil.application.send_session import SendSession
+from hdmi_transfer.application.events import FramePacket, ReceiveEvent
+from hdmi_transfer.application.receive_session import ReceiveSession
+from hdmi_transfer.application.send_session import SendSession
 
 __all__ = ["FramePacket", "ReceiveEvent", "ReceiveSession", "SendSession"]

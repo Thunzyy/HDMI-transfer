@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import cv2
 
-import hdmi_exfil.web.server as server
-from hdmi_exfil.core.config import PROFILES
+import hdmi_transfer.web.server as server
+from hdmi_transfer.core.config import PROFILES
 
 
 class _FakeRegistry:
@@ -58,7 +58,7 @@ def test_api_receive_start_passes_explicit_preflight_flag(monkeypatch, tmp_path)
         def start(self) -> None:
             return None
 
-    monkeypatch.setattr("hdmi_exfil.web.receiver_worker.ReceiverWorker", FakeWorker)
+    monkeypatch.setattr("hdmi_transfer.web.receiver_worker.ReceiverWorker", FakeWorker)
     client = app.test_client()
 
     response = client.post("/api/receive/start", json={

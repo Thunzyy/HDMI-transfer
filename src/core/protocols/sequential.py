@@ -14,7 +14,7 @@ from enum import Enum, auto
 
 import numpy as np
 
-from hdmi_exfil.core.config import (
+from hdmi_transfer.core.config import (
     DEFAULT_PROFILE,
     FRAME_TYPE_DATA,
     FRAME_TYPE_END,
@@ -25,8 +25,8 @@ from hdmi_exfil.core.config import (
     SEQ_HEADER_PRE_CRC,
     SEQ_MAGIC,
 )
-from hdmi_exfil.core.file_handling.metadata import build_start_metadata
-from hdmi_exfil.core.protocols.base import EncodingProtocol, FrameResult
+from hdmi_transfer.core.file_handling.metadata import build_start_metadata
+from hdmi_transfer.core.protocols.base import EncodingProtocol, FrameResult
 
 LEGACY_WEB_SEQ_MAGIC = 0xDAEA
 
@@ -107,7 +107,7 @@ class SequentialProtocol(EncodingProtocol):
         full_data = header_pre_crc + crc_bytes + data
 
         # Convert bytes to pixel grid using multi-bpc encoding
-        from hdmi_exfil.core.protocols.encoding import bytes_to_pixels
+        from hdmi_transfer.core.protocols.encoding import bytes_to_pixels
         blocks_grid = bytes_to_pixels(
             full_data, self._profile.blocks_per_frame,
             self._profile.rows, self._profile.cols,
@@ -131,7 +131,7 @@ class SequentialProtocol(EncodingProtocol):
         """
         # OpenCV captures in BGR order; flip to RGB to match the sender's
         # bit packing (R channel = first bit, G = second, B = third).
-        from hdmi_exfil.core.protocols.encoding import pixels_to_bytes
+        from hdmi_transfer.core.protocols.encoding import pixels_to_bytes
         rgb_grid = sampled_grid[..., ::-1]
         frame_bytes = pixels_to_bytes(rgb_grid, self._profile.bits_per_channel)
 
@@ -220,7 +220,7 @@ class SequentialProtocol(EncodingProtocol):
     ) -> np.ndarray:
         """Encode a START frame with file metadata.
 
-        Uses :func:`~hdmi_exfil.core.file_handling.metadata.build_start_metadata`
+        Uses :func:`~hdmi_transfer.core.file_handling.metadata.build_start_metadata`
         to construct the payload, then encodes via :meth:`encode_frame` with
         ``frame_type=FRAME_TYPE_START``.
         """

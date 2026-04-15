@@ -10,11 +10,11 @@ from dataclasses import replace
 
 from flask import Flask, Response, jsonify, request
 
-from hdmi_exfil.adapters.capture.device_registry import (
+from hdmi_transfer.adapters.capture.device_registry import (
     list_device_open_targets,
     resolve_device_open_target,
 )
-from hdmi_exfil.core.config import PROFILES
+from hdmi_transfer.core.config import PROFILES
 
 from .preview_stream import create_preview_response
 
@@ -131,7 +131,7 @@ def register_receive_routes(app: Flask) -> None:
                     )
                 )
 
-            from hdmi_exfil.web.receiver_worker import ReceiverWorker
+            from hdmi_transfer.web.receiver_worker import ReceiverWorker
 
             worker = ReceiverWorker(
                 device=decode_device,

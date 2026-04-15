@@ -10,8 +10,8 @@ matching the same 3bpp pattern used by SequentialProtocol.  This gives
 original 1bpp (4,050 bytes / 4,038 payload) encoding.
 
 Migrated from the monolithic ``receiver_fountain.py`` -- all logic is
-functionally identical, but now uses the shared ``hdmi_exfil.core.prng.PRNG``
-class and the canonical ``hdmi_exfil.core.config`` constants.
+functionally identical, but now uses the shared ``hdmi_transfer.core.prng.PRNG``
+class and the canonical ``hdmi_transfer.core.config`` constants.
 """
 
 from __future__ import annotations
@@ -22,13 +22,13 @@ import zlib
 
 import numpy as np
 
-from hdmi_exfil.core import config
-from hdmi_exfil.core.config import DEFAULT_PROFILE, ResolutionProfile
-from hdmi_exfil.core.prng import PRNG
-from hdmi_exfil.core.protocols.fountain_tuning import DEFAULT_FOUNTAIN_TUNING
-from hdmi_exfil.core.protocols.base import EncodingProtocol, FrameResult
-from hdmi_exfil.core.protocols.degree import robust_soliton_cdf, sample_degree
-from hdmi_exfil.core.protocols.xor_ops import xor_into
+from hdmi_transfer.core import config
+from hdmi_transfer.core.config import DEFAULT_PROFILE, ResolutionProfile
+from hdmi_transfer.core.prng import PRNG
+from hdmi_transfer.core.protocols.fountain_tuning import DEFAULT_FOUNTAIN_TUNING
+from hdmi_transfer.core.protocols.base import EncodingProtocol, FrameResult
+from hdmi_transfer.core.protocols.degree import robust_soliton_cdf, sample_degree
+from hdmi_transfer.core.protocols.xor_ops import xor_into
 
 # ---------------------------------------------------------------------------
 # Fountain-specific constants (protocol-level, not in config.py)
@@ -423,7 +423,7 @@ class FountainProtocol(EncodingProtocol):
             frame_bytes += b"\x00" * (self._total_bytes - len(frame_bytes))
 
         # Convert bytes to pixel grid using multi-bpc encoding
-        from hdmi_exfil.core.protocols.encoding import bytes_to_pixels
+        from hdmi_transfer.core.protocols.encoding import bytes_to_pixels
         blocks_grid = bytes_to_pixels(
             frame_bytes, self._profile.blocks_per_frame,
             self._profile.rows, self._profile.cols,
@@ -454,7 +454,7 @@ class FountainProtocol(EncodingProtocol):
         """
         # OpenCV captures in BGR order; flip to RGB to match the sender's
         # bit packing (R channel = first bit, G = second, B = third).
-        from hdmi_exfil.core.protocols.encoding import pixels_to_bytes
+        from hdmi_transfer.core.protocols.encoding import pixels_to_bytes
         rgb_grid = sampled_grid[..., ::-1]
         raw_bytes = pixels_to_bytes(rgb_grid, self._profile.bits_per_channel)
 

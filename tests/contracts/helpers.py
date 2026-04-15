@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from hdmi_exfil.core.config import (
+from hdmi_transfer.core.config import (
     FRAME_TYPE_DATA,
     HEADER_SIZE,
     PROFILES,
@@ -14,17 +14,17 @@ from hdmi_exfil.core.config import (
     SEQ_HEADER_PRE_CRC,
     SEQ_MAGIC,
 )
-from hdmi_exfil.core.file_handling.metadata import (
+from hdmi_transfer.core.file_handling.metadata import (
     build_start_metadata,
     parse_fountain_metadata,
 )
-from hdmi_exfil.core.protocols.encoding import bytes_to_pixels
-from hdmi_exfil.core.protocols.fountain import (
+from hdmi_transfer.core.protocols.encoding import bytes_to_pixels
+from hdmi_transfer.core.protocols.fountain import (
     FOUNT_HEADER_CURRENT_SIZE,
     FOUNT_MAGIC_V2,
     FountainProtocol,
 )
-from hdmi_exfil.core.protocols.sequential import (
+from hdmi_transfer.core.protocols.sequential import (
     LEGACY_WEB_SEQ_MAGIC,
     SequentialProtocol,
 )

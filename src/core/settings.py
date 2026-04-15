@@ -1,4 +1,4 @@
-"""Persistent user settings stored in ~/.hdmi-exfil/settings.json.
+"""Persistent user settings stored in ~/.hdmi-transfer/settings.json.
 
 Provides load/save/get/set for sender and receiver defaults so users
 don't have to re-select capture device, monitor, profile, etc. every time.
@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-_SETTINGS_DIR = Path.home() / ".hdmi-exfil"
+_SETTINGS_DIR = Path.home() / ".hdmi-transfer"
 _SETTINGS_FILE = _SETTINGS_DIR / "settings.json"
 
 _DEFAULTS: dict[str, Any] = {

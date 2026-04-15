@@ -1,4 +1,4 @@
-"""CLI interface layer for HDMI Exfil."""
+"""CLI interface layer for HDMI Transfer."""
 
 __all__ = [
     "calibrate",

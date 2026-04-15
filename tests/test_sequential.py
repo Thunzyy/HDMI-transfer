@@ -14,19 +14,19 @@ import numpy as np
 import hashlib
 import math
 
-from hdmi_exfil.protocols.sequential import SequentialProtocol, TransferState
-from hdmi_exfil.capture.sampler import sample_frame
-from hdmi_exfil.file_handling.metadata import build_start_metadata, parse_start_metadata
-from hdmi_exfil.config import (
+from hdmi_transfer.protocols.sequential import SequentialProtocol, TransferState
+from hdmi_transfer.capture.sampler import sample_frame
+from hdmi_transfer.file_handling.metadata import build_start_metadata, parse_start_metadata
+from hdmi_transfer.config import (
     BYTES_PER_FRAME, BLOCKS_PER_FRAME, ROWS, COLS, BLOCK_SIZE,
     SEQ_MAGIC, SEQ_HEADER_FMT, SEQ_HEADER_PRE_CRC,
     HEADER_SIZE, FRAME_TYPE_DATA, FRAME_TYPE_START,
     FRAME_TYPE_END, FOUNTAIN_MAGIC,
 )
-from hdmi_exfil.protocols.fountain import (
+from hdmi_transfer.protocols.fountain import (
     FOUNT_HEADER_FMT, FOUNT_HEADER_PRE_CRC, FOUNT_HEADER_SIZE,
 )
-from hdmi_exfil.core.protocols.encoding import pixels_to_bytes
+from hdmi_transfer.core.protocols.encoding import pixels_to_bytes
 
 # Module-level protocol instance for encode/decode
 _proto = SequentialProtocol()

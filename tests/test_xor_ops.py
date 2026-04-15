@@ -8,12 +8,12 @@ import os
 
 import numpy as np
 
-from hdmi_exfil.protocols.xor_ops import warmup, xor_into
-from hdmi_exfil.protocols.fountain import (
+from hdmi_transfer.protocols.xor_ops import warmup, xor_into
+from hdmi_transfer.protocols.fountain import (
     FountainDecoder,
     PAYLOAD_SIZE,
 )
-from hdmi_exfil.prng import choose_indices
+from hdmi_transfer.prng import choose_indices
 
 
 def test_xor_into_basic():

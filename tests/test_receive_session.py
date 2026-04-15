@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import math
 
-from hdmi_exfil.core.config import FRAME_TYPE_DATA, PROFILES
-from hdmi_exfil.core.file_handling.metadata import build_start_metadata
-from hdmi_exfil.core.protocols import get_protocol
-from hdmi_exfil.core.protocols.base import FrameResult
+from hdmi_transfer.core.config import FRAME_TYPE_DATA, PROFILES
+from hdmi_transfer.core.file_handling.metadata import build_start_metadata
+from hdmi_transfer.core.protocols import get_protocol
+from hdmi_transfer.core.protocols.base import FrameResult
 
 
 def _sample_frame_centers(frame, *, block_size: int):
@@ -16,7 +16,7 @@ def _sample_frame_centers(frame, *, block_size: int):
 
 
 def test_receive_session_emits_progress_and_complete_for_sequential_transfer():
-    from hdmi_exfil.application.receive_session import ReceiveSession
+    from hdmi_transfer.application.receive_session import ReceiveSession
 
     profile = PROFILES["balanced"]
     protocol = get_protocol("sequential", profile=profile)
@@ -65,7 +65,7 @@ def test_receive_session_emits_progress_and_complete_for_sequential_transfer():
 
 
 def test_receive_session_finalizes_after_wrap_without_end_frame():
-    from hdmi_exfil.application.receive_session import ReceiveSession
+    from hdmi_transfer.application.receive_session import ReceiveSession
 
     session = ReceiveSession(mode="sequential", profile_name="balanced")
     events = []
@@ -106,7 +106,7 @@ def test_receive_session_finalizes_after_wrap_without_end_frame():
 
 
 def test_receive_session_completes_single_chunk_fountain_transfer():
-    from hdmi_exfil.application.receive_session import ReceiveSession
+    from hdmi_transfer.application.receive_session import ReceiveSession
 
     profile = PROFILES["balanced"]
     protocol = get_protocol("fountain", profile=profile)

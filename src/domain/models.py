@@ -1,4 +1,4 @@
-"""Shared immutable models for the HDMI Exfil domain."""
+"""Shared immutable models for the HDMI Transfer domain."""
 
 from __future__ import annotations
 

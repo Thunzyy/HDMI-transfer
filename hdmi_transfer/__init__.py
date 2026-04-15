@@ -1,4 +1,4 @@
-"""Local import shim for the hdmi_exfil package when running from the repo."""
+"""Local import shim for the hdmi_transfer package when running from the repo."""
 
 from __future__ import annotations
 

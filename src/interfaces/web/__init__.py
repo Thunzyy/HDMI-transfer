@@ -1,4 +1,4 @@
-"""Web interface modules for HDMI Exfil."""
+"""Web interface modules for HDMI Transfer."""
 
 from .app_factory import create_app
 

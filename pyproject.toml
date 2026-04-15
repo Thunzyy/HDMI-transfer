@@ -3,7 +3,7 @@ requires = ["setuptools >= 61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hdmi-exfil"
+name = "hdmi-transfer"
 version = "0.1.0"
 description = "Maximum throughput data transfer over HDMI signal encoding"
 requires-python = ">= 3.11"
@@ -47,52 +47,52 @@ dev = [
 ]
 
 [project.scripts]
-hdmi-send = "hdmi_exfil.interfaces.cli.send:main"
-hdmi-recv = "hdmi_exfil.interfaces.cli.receive:main"
-hdmi-calibrate = "hdmi_exfil.interfaces.cli.calibrate:main"
-hdmi-bench = "hdmi_exfil.cli.benchmark:main"
-hdmi-sender = "hdmi_exfil.interfaces.cli.sender_console:main"
-hdmi-receiver = "hdmi_exfil.interfaces.cli.receiver_console:main"
-hdmi-web = "hdmi_exfil.web.__main__:main"
+hdmi-send = "hdmi_transfer.interfaces.cli.send:main"
+hdmi-recv = "hdmi_transfer.interfaces.cli.receive:main"
+hdmi-calibrate = "hdmi_transfer.interfaces.cli.calibrate:main"
+hdmi-bench = "hdmi_transfer.cli.benchmark:main"
+hdmi-sender = "hdmi_transfer.interfaces.cli.sender_console:main"
+hdmi-receiver = "hdmi_transfer.interfaces.cli.receiver_console:main"
+hdmi-web = "hdmi_transfer.web.__main__:main"
 
 [tool.setuptools]
 packages = [
-    "hdmi_exfil",
-    "hdmi_exfil.adapters",
-    "hdmi_exfil.adapters.capture",
-    "hdmi_exfil.application",
-    "hdmi_exfil.capture",
-    "hdmi_exfil.cli",
-    "hdmi_exfil.compat",
-    "hdmi_exfil.core",
-    "hdmi_exfil.core.capture",
-    "hdmi_exfil.core.cli",
-    "hdmi_exfil.core.file_handling",
-    "hdmi_exfil.core.protocols",
-    "hdmi_exfil.display",
-    "hdmi_exfil.domain",
-    "hdmi_exfil.file_handling",
-    "hdmi_exfil.interfaces",
-    "hdmi_exfil.interfaces.browser_sender",
-    "hdmi_exfil.interfaces.cli",
-    "hdmi_exfil.interfaces.web",
-    "hdmi_exfil.protocols",
-    "hdmi_exfil.receiver",
-    "hdmi_exfil.receiver.capture",
-    "hdmi_exfil.receiver.cli",
-    "hdmi_exfil.sender",
-    "hdmi_exfil.sender.cli",
-    "hdmi_exfil.sender.display",
-    "hdmi_exfil.web",
+    "hdmi_transfer",
+    "hdmi_transfer.adapters",
+    "hdmi_transfer.adapters.capture",
+    "hdmi_transfer.application",
+    "hdmi_transfer.capture",
+    "hdmi_transfer.cli",
+    "hdmi_transfer.compat",
+    "hdmi_transfer.core",
+    "hdmi_transfer.core.capture",
+    "hdmi_transfer.core.cli",
+    "hdmi_transfer.core.file_handling",
+    "hdmi_transfer.core.protocols",
+    "hdmi_transfer.display",
+    "hdmi_transfer.domain",
+    "hdmi_transfer.file_handling",
+    "hdmi_transfer.interfaces",
+    "hdmi_transfer.interfaces.browser_sender",
+    "hdmi_transfer.interfaces.cli",
+    "hdmi_transfer.interfaces.web",
+    "hdmi_transfer.protocols",
+    "hdmi_transfer.receiver",
+    "hdmi_transfer.receiver.capture",
+    "hdmi_transfer.receiver.cli",
+    "hdmi_transfer.sender",
+    "hdmi_transfer.sender.cli",
+    "hdmi_transfer.sender.display",
+    "hdmi_transfer.web",
 ]
 
 [tool.setuptools.package-dir]
-"hdmi_exfil" = "src"
+"hdmi_transfer" = "src"
 
 [tool.setuptools.package-data]
-"hdmi_exfil.core" = ["constants.json"]
-"hdmi_exfil.interfaces.browser_sender" = ["*.html", "*.js"]
-"hdmi_exfil.web" = ["static/*.html", "static/*.js"]
+"hdmi_transfer.core" = ["constants.json"]
+"hdmi_transfer.interfaces.browser_sender" = ["*.html", "*.js"]
+"hdmi_transfer.web" = ["static/*.html", "static/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

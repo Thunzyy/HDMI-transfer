@@ -20,7 +20,7 @@ import bisect
 import math
 from functools import lru_cache
 
-from hdmi_exfil.core.protocols.fountain_tuning import DEFAULT_FOUNTAIN_TUNING
+from hdmi_transfer.core.protocols.fountain_tuning import DEFAULT_FOUNTAIN_TUNING
 
 # ---------------------------------------------------------------------------
 # Default parameters
@@ -138,7 +138,7 @@ def sample_degree(cdf: tuple[float, ...], prng: object) -> int:
     """Sample a degree from the RSD using the given PRNG.
 
     Uses binary search on the CDF for O(log K) lookup.  The *prng* must
-    expose a ``next_float() -> float`` method (e.g. ``hdmi_exfil.core.prng.PRNG``).
+    expose a ``next_float() -> float`` method (e.g. ``hdmi_transfer.core.prng.PRNG``).
 
     Parameters
     ----------

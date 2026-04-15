@@ -11,11 +11,11 @@ import numpy as np
 from hypothesis import given, settings, assume
 from hypothesis.strategies import binary, integers
 
-from hdmi_exfil.protocols.sequential import SequentialProtocol
-from hdmi_exfil.capture.sampler import sample_frame
-from hdmi_exfil.config import BYTES_PER_FRAME, ROWS, COLS, BLOCK_SIZE
-from hdmi_exfil.prng import PRNG, choose_indices
-from hdmi_exfil.protocols.fountain import FountainDecoder
+from hdmi_transfer.protocols.sequential import SequentialProtocol
+from hdmi_transfer.capture.sampler import sample_frame
+from hdmi_transfer.config import BYTES_PER_FRAME, ROWS, COLS, BLOCK_SIZE
+from hdmi_transfer.prng import PRNG, choose_indices
+from hdmi_transfer.protocols.fountain import FountainDecoder
 
 # Module-level protocol instance
 _proto = SequentialProtocol()

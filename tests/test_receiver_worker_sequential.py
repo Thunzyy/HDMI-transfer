@@ -6,9 +6,9 @@ import cv2
 import numpy as np
 import pytest
 
-from hdmi_exfil.core.config import FRAME_TYPE_DATA, FRAME_TYPE_START, PROFILES
-from hdmi_exfil.core.protocols.base import FrameResult
-from hdmi_exfil.web.receiver_worker import (
+from hdmi_transfer.core.config import FRAME_TYPE_DATA, FRAME_TYPE_START, PROFILES
+from hdmi_transfer.core.protocols.base import FrameResult
+from hdmi_transfer.web.receiver_worker import (
     ReceiverWorker,
     _CaptureFallbackRequested,
 )
@@ -98,7 +98,7 @@ def test_sequential_finalizes_after_wrap_without_end_frame(
         })
         return str(tmp_path / filename)
 
-    monkeypatch.setattr("hdmi_exfil.web.receiver_worker.write_output", fake_write_output)
+    monkeypatch.setattr("hdmi_transfer.web.receiver_worker.write_output", fake_write_output)
 
     def fake_decode(frame, profile, decode_frame, geometry_candidates, geometry_cursor):
         try:
@@ -152,7 +152,7 @@ def test_worker_retries_alternate_capture_target_when_runtime_fallback_requested
             worker._request_capture_fallback("retry")
         worker._publish("complete", {"filename": "ok.bin"})
 
-    monkeypatch.setattr("hdmi_exfil.web.receiver_worker.CaptureSource", FakeCaptureSource)
+    monkeypatch.setattr("hdmi_transfer.web.receiver_worker.CaptureSource", FakeCaptureSource)
     monkeypatch.setattr(worker, "_run_sequential", fake_run_sequential)
     original_publish = worker._publish
 
@@ -176,7 +176,7 @@ def test_worker_retries_alternate_capture_target_when_runtime_fallback_requested
 
 
 def test_worker_waits_for_preflight_before_receive_loop(monkeypatch) -> None:
-    from hdmi_exfil.application.preflight import build_preflight_start_payload
+    from hdmi_transfer.application.preflight import build_preflight_start_payload
 
     profile = replace(PROFILES["balanced"], bits_per_channel=1)
     worker = ReceiverWorker(
@@ -232,7 +232,7 @@ def test_worker_waits_for_preflight_before_receive_loop(monkeypatch) -> None:
 
 
 def test_worker_preflight_negotiates_lower_transfer_bpc(monkeypatch) -> None:
-    from hdmi_exfil.application.preflight import build_preflight_start_payload
+    from hdmi_transfer.application.preflight import build_preflight_start_payload
 
     profile = replace(PROFILES["balanced"], bits_per_channel=3)
     worker = ReceiverWorker(
@@ -293,7 +293,7 @@ def test_worker_preflight_negotiates_lower_transfer_bpc(monkeypatch) -> None:
 
 
 def test_worker_preflight_falls_back_to_safe_transfer_bpc_when_only_bpc1_is_visible(monkeypatch) -> None:
-    from hdmi_exfil.application.preflight import build_preflight_start_payload
+    from hdmi_transfer.application.preflight import build_preflight_start_payload
 
     profile = replace(PROFILES["balanced"], bits_per_channel=3)
     worker = ReceiverWorker(
@@ -367,7 +367,7 @@ def test_worker_marks_preflight_low_signal_from_elapsed_time(monkeypatch) -> Non
     times = iter([0.0, 1.2, 2.4, 3.6, 4.8, 6.0, 7.2, 8.4, 9.6, 10.8])
 
     monkeypatch.setattr(
-        "hdmi_exfil.web.receiver_worker.time.time",
+        "hdmi_transfer.web.receiver_worker.time.time",
         lambda: next(times, 6.0),
     )
     worker._decode_with_sampling_fallbacks = fake_decode  # type: ignore[method-assign]
@@ -460,7 +460,7 @@ def test_worker_named_dshow_source_prefers_raw_dshow_before_msmf(monkeypatch) ->
             return
         worker._publish("complete", {"filename": "ok.bin"})
 
-    monkeypatch.setattr("hdmi_exfil.web.receiver_worker.CaptureSource", FakeCaptureSource)
+    monkeypatch.setattr("hdmi_transfer.web.receiver_worker.CaptureSource", FakeCaptureSource)
     monkeypatch.setattr(worker, "_run_sequential", fake_run_sequential)
 
     worker.run()

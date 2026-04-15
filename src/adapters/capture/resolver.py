@@ -7,7 +7,7 @@ from typing import Callable
 
 import cv2
 
-from hdmi_exfil.adapters.capture.device_registry import (
+from hdmi_transfer.adapters.capture.device_registry import (
     detect_devices,
     list_device_open_targets,
     resolve_device_open_target,

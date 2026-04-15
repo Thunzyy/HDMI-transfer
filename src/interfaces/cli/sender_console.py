@@ -18,10 +18,10 @@ import webbrowser
 from InquirerPy import inquirer
 from InquirerPy.separator import Separator
 
-from hdmi_exfil.core.config import PROFILES, ResolutionProfile
-from hdmi_exfil.core import settings
-from hdmi_exfil.interfaces.cli.send import run_send
-from hdmi_exfil.sender.display.monitors import get_monitors
+from hdmi_transfer.core.config import PROFILES, ResolutionProfile
+from hdmi_transfer.core import settings
+from hdmi_transfer.interfaces.cli.send import run_send
+from hdmi_transfer.sender.display.monitors import get_monitors
 
 
 # ------------------------------------------------------------------
@@ -153,7 +153,7 @@ def _action_calibrate() -> None:
     profile = PROFILES[profile_name]
 
     # Import and call the calibrate send function
-    from hdmi_exfil.interfaces.cli.calibrate import _cmd_send
+    from hdmi_transfer.interfaces.cli.calibrate import _cmd_send
 
     # Build a minimal args namespace with renderer attribute
     args = argparse.Namespace(renderer="pygame")
@@ -174,7 +174,7 @@ def _action_detect() -> None:
 
 def _action_benchmark() -> None:
     """Run benchmark with interactively selected parameters."""
-    from hdmi_exfil.core.cli.benchmark import run_benchmark
+    from hdmi_transfer.core.cli.benchmark import run_benchmark
 
     profile_name = inquirer.select(
         message="Resolution profile:",

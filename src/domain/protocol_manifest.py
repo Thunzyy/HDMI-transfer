@@ -7,7 +7,7 @@ import struct
 from functools import lru_cache
 from importlib.resources import files
 
-from hdmi_exfil.domain.models import (
+from hdmi_transfer.domain.models import (
     FOUNTAIN_HEADER_SIZE,
     ProtocolManifest,
     ResolutionProfile,
@@ -26,7 +26,7 @@ FOUNTAIN_CURRENT_MAGIC_OFFSET = 1
 
 @lru_cache(maxsize=1)
 def get_protocol_manifest() -> ProtocolManifest:
-    constants_path = files("hdmi_exfil.core").joinpath("constants.json")
+    constants_path = files("hdmi_transfer.core").joinpath("constants.json")
     constants = json.loads(constants_path.read_text(encoding="utf-8"))
 
     profiles = {

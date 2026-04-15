@@ -122,7 +122,7 @@ def detect_devices(max_index: int = 10) -> list[dict]:
     import cv2
     import numpy as np
 
-    from hdmi_exfil.receiver.capture.source import _get_backends, open_capture
+    from hdmi_transfer.receiver.capture.source import _get_backends, open_capture
 
     @contextlib.contextmanager
     def suppress_stderr():

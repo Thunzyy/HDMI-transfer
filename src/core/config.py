@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from hdmi_exfil.domain.models import ResolutionProfile
-from hdmi_exfil.domain.protocol_manifest import get_protocol_manifest
+from hdmi_transfer.domain.models import ResolutionProfile
+from hdmi_transfer.domain.protocol_manifest import get_protocol_manifest
 
 _manifest = get_protocol_manifest()
 

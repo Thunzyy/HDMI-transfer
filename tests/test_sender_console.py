@@ -19,13 +19,13 @@ import pytest
 
 def test_cli_entry_points_import_from_interfaces_layer():
     """New interface-layer CLI entry points are importable and callable."""
-    from hdmi_exfil.interfaces.cli.calibrate import main as calibrate_main
-    from hdmi_exfil.interfaces.cli.receive import main as receive_main
-    from hdmi_exfil.interfaces.cli.receiver_console import (
+    from hdmi_transfer.interfaces.cli.calibrate import main as calibrate_main
+    from hdmi_transfer.interfaces.cli.receive import main as receive_main
+    from hdmi_transfer.interfaces.cli.receiver_console import (
         main as receiver_console_main,
     )
-    from hdmi_exfil.interfaces.cli.send import main as send_main
-    from hdmi_exfil.interfaces.cli.sender_console import (
+    from hdmi_transfer.interfaces.cli.send import main as send_main
+    from hdmi_transfer.interfaces.cli.sender_console import (
         main as sender_console_main,
     )
 
@@ -43,7 +43,7 @@ def test_cli_entry_points_import_from_interfaces_layer():
 
 def test_dispatch_table_covers_all_actions():
     """Verify every non-Quit menu item has a dispatch handler."""
-    from hdmi_exfil.interfaces.cli.sender_console import (
+    from hdmi_transfer.interfaces.cli.sender_console import (
         _DISPATCH,
         _MENU_BENCHMARK,
         _MENU_CALIBRATE,
@@ -69,10 +69,10 @@ def test_dispatch_table_covers_all_actions():
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.interfaces.cli.sender_console.get_monitors")
+@patch("hdmi_transfer.interfaces.cli.sender_console.get_monitors")
 def test_action_detect(mock_monitors, capsys):
     """_action_detect prints detected monitors."""
-    from hdmi_exfil.interfaces.cli.sender_console import _action_detect
+    from hdmi_transfer.interfaces.cli.sender_console import _action_detect
 
     mock_monitors.return_value = [
         {"width": 1920, "height": 1080, "left": 0, "top": 0},
@@ -90,12 +90,12 @@ def test_action_detect(mock_monitors, capsys):
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.interfaces.cli.sender_console.run_send")
-@patch("hdmi_exfil.interfaces.cli.sender_console.get_monitors")
-@patch("hdmi_exfil.interfaces.cli.sender_console.inquirer")
+@patch("hdmi_transfer.interfaces.cli.sender_console.run_send")
+@patch("hdmi_transfer.interfaces.cli.sender_console.get_monitors")
+@patch("hdmi_transfer.interfaces.cli.sender_console.inquirer")
 def test_action_send_python(mock_inq, mock_monitors, mock_run_send):
     """_action_send_python collects parameters and calls run_send()."""
-    from hdmi_exfil.interfaces.cli.sender_console import _action_send_python
+    from hdmi_transfer.interfaces.cli.sender_console import _action_send_python
 
     # Mock single monitor (skips monitor selection prompt)
     mock_monitors.return_value = [
@@ -128,16 +128,16 @@ def test_action_send_python(mock_inq, mock_monitors, mock_run_send):
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.interfaces.cli.sender_console.inquirer")
+@patch("hdmi_transfer.interfaces.cli.sender_console.inquirer")
 def test_action_benchmark(mock_inq):
     """_action_benchmark calls run_benchmark with correct params."""
-    from hdmi_exfil.interfaces.cli.sender_console import _action_benchmark
+    from hdmi_transfer.interfaces.cli.sender_console import _action_benchmark
 
     mock_select = MagicMock()
     mock_select.execute.side_effect = ["speed", "fountain"]
     mock_inq.select.return_value = mock_select
 
-    with patch("hdmi_exfil.core.cli.benchmark.run_benchmark") as mock_bench:
+    with patch("hdmi_transfer.core.cli.benchmark.run_benchmark") as mock_bench:
         mock_bench.return_value = MagicMock(
             frames_per_sec=100.0,
             bytes_per_sec=50000.0,
@@ -154,10 +154,10 @@ def test_action_benchmark(mock_inq):
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.interfaces.cli.sender_console._show_main_menu")
+@patch("hdmi_transfer.interfaces.cli.sender_console._show_main_menu")
 def test_main_ctrl_c_exits_cleanly(mock_menu):
     """main() exits cleanly on KeyboardInterrupt without traceback."""
-    from hdmi_exfil.interfaces.cli.sender_console import main
+    from hdmi_transfer.interfaces.cli.sender_console import main
 
     mock_menu.side_effect = KeyboardInterrupt()
     # Should NOT raise -- exits cleanly
@@ -169,10 +169,10 @@ def test_main_ctrl_c_exits_cleanly(mock_menu):
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.interfaces.cli.sender_console._show_main_menu")
+@patch("hdmi_transfer.interfaces.cli.sender_console._show_main_menu")
 def test_main_quit_breaks_loop(mock_menu):
     """Selecting Quit breaks the main loop."""
-    from hdmi_exfil.interfaces.cli.sender_console import _MENU_QUIT, main
+    from hdmi_transfer.interfaces.cli.sender_console import _MENU_QUIT, main
 
     mock_menu.return_value = _MENU_QUIT
     main()  # Should return normally
@@ -184,10 +184,10 @@ def test_main_quit_breaks_loop(mock_menu):
 # ------------------------------------------------------------------
 
 
-@patch("hdmi_exfil.interfaces.cli.sender_console._show_main_menu")
+@patch("hdmi_transfer.interfaces.cli.sender_console._show_main_menu")
 def test_main_dispatches_action(mock_menu):
     """main() dispatches a menu selection to the correct handler."""
-    from hdmi_exfil.interfaces.cli.sender_console import (
+    from hdmi_transfer.interfaces.cli.sender_console import (
         _DISPATCH,
         _MENU_DETECT,
         _MENU_QUIT,

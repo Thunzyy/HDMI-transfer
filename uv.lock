@@ -206,7 +206,7 @@ wheels = [
 ]
 
 [[package]]
-name = "hdmi-exfil"
+name = "hdmi-transfer"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
