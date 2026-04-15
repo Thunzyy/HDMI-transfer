@@ -14,6 +14,7 @@
     cols: 0, rows: 0, bitsPerFrame: 0, bytesPerFrame: 0, payloadSize: 0,
   };
   const runtimeOptions = {
+    receiverApi: false,
     apiBaseUrl: "",
     debugTitle: false,
   };
@@ -117,6 +118,7 @@
   const detectedHzEl = document.getElementById("detectedHz");
   const derivedStatsEl = document.getElementById("derivedStats");
   const configWarningEl = document.getElementById("configWarning");
+  const modeCallout = document.getElementById("modeCallout");
   const advToggle = document.getElementById("advToggle");
   const advBody = document.getElementById("advBody");
 
@@ -309,8 +311,10 @@
     if (fountainAutoStop !== null) {
       config.fountainAutoStop = fountainAutoStop;
     }
+    const receiverApi = parseBoolParam(params.get("receiverApi"));
     const apiBaseUrl = params.get("apiBaseUrl");
     runtimeOptions.apiBaseUrl = apiBaseUrl ? apiBaseUrl.trim() : "";
+    runtimeOptions.receiverApi = receiverApi === true || runtimeOptions.apiBaseUrl.length > 0;
     runtimeOptions.debugTitle = parseBoolParam(params.get("debugTitle")) === true;
 
     return {
@@ -322,6 +326,10 @@
 
   function resolveReceiverApiUrl(path) {
     return new URL(path, runtimeOptions.apiBaseUrl || window.location.origin).toString();
+  }
+
+  function isReceiverApiEnabled() {
+    return runtimeOptions.receiverApi || runtimeOptions.apiBaseUrl.length > 0;
   }
 
   function updateDebugTitle() {
@@ -363,6 +371,19 @@
       return;
     }
     detectedHzEl.textContent = "Detecting refresh rate...";
+  }
+
+  function updateModeCallout() {
+    if (!modeCallout) return;
+    if (isReceiverApiEnabled()) {
+      modeCallout.className = "callout mode-callout warn";
+      modeCallout.textContent =
+        "Mode: Local 1-PC test. Receiver API is enabled for preflight and auto-stop coordination on this machine.";
+      return;
+    }
+    modeCallout.className = "callout mode-callout";
+    modeCallout.textContent =
+      "Mode: 2-PC offline sender. No receiver API calls unless you explicitly enable local test mode.";
   }
 
   function getDisplayedThroughputKbps() {
@@ -478,12 +499,16 @@
   }
 
   async function getReceiverStatus() {
+    if (!isReceiverApiEnabled()) {
+      throw new Error("Receiver API disabled for offline sender mode");
+    }
     const response = await fetch(resolveReceiverApiUrl("/api/receive/status"), { cache: "no-store" });
     if (!response.ok) throw new Error(`Receiver status unavailable (${response.status})`);
     return response.json();
   }
 
   async function shouldUseReceiverPreflight() {
+    if (!isReceiverApiEnabled()) return false;
     try {
       const status = await getReceiverStatus();
       return status.active && status.preflight_required === true;
@@ -1287,6 +1312,7 @@
   // ── Init ───────────────────────────────
   loadSettings();
   const urlOptions = applyUrlParams();
+  updateModeCallout();
   recalcDerived();
   bpcSelect.value = String(config.bpc);
   protocolSelect.value = config.protocol;

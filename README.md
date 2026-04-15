@@ -60,7 +60,9 @@ uv run hdmi-web --host 0.0.0.0 --port 5000
 Ouvre ensuite:
 
 - receiver UI: `http://localhost:5000/`
-- sender UI depuis le PC sender: `http://<IP_DU_RECEIVER>:5000/sender`
+- sender UI integree locale: `http://localhost:5000/sender`
+
+Pour un vrai setup `2 PC` isole, n'utilise pas `/sender` via le receiver. Utilise `sender.html` directement sur le PC sender. Le sender standalone est `offline` par defaut et ne fait aucun appel API tant que tu n'actives pas explicitement le mode test `1 PC`.
 
 ### 3. Regler les bons defaults
 
@@ -84,7 +86,7 @@ Sur le receiver:
 
 Sur le sender:
 
-1. Ouvre `Send`
+1. Ouvre `sender.html` localement sur le PC sender
 2. Charge un fichier
 3. Mets la fenetre sender en plein ecran sur la sortie HDMI envoyee a la carte de capture
 4. Clique `Start transmission`
@@ -123,6 +125,9 @@ uv run python tools/build_sender_html.py --check
 ```
 
 Le sender standalone est aussi servi par le web sur `/sender/app`.
+
+- `sender.html` ou `/sender/app`: mode sender standalone, `offline` par defaut
+- `/sender`: page wrapper pour le setup de test `1 PC`, avec API locale active explicitement
 
 ## Profils
 

@@ -30,6 +30,15 @@ html,body{
 .h-title{color:var(--bright);font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
 
 #layout{flex:1;display:flex;overflow:hidden}
+#banner{
+  padding:10px 16px;
+  background:rgba(251,191,36,0.08);
+  border-bottom:1px solid rgba(251,191,36,0.18);
+  color:var(--text);
+  font-size:12px;
+  line-height:1.6;
+}
+#banner strong{color:var(--bright)}
 
 #sidebar{
   width:220px;border-right:1px solid var(--accent-border);
@@ -60,6 +69,10 @@ html,body{
   </div>
 </div>
 
+<div id="banner">
+  <strong>Local 1-PC test wrapper.</strong> This page enables the local receiver API for bench and single-PC validation. For a real 2-PC setup, open sender.html locally on the sender PC.
+</div>
+
 <div id="layout">
   <aside id="sidebar">
     <nav class="nav">
@@ -71,7 +84,7 @@ html,body{
   </aside>
 
   <main id="center">
-    <iframe id="sender-frame" src="/sender/app" allow="fullscreen"></iframe>
+    <iframe id="sender-frame" src="/sender/app?receiverApi=1" allow="fullscreen"></iframe>
   </main>
 </div>
 

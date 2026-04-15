@@ -20,7 +20,9 @@ def test_sender_routes_serve_standalone_sender_and_wrapper() -> None:
 
     sender = client.get("/sender")
     assert sender.status_code == 200
-    assert b'<iframe id="sender-frame" src="/sender/app"' in sender.data
+    assert b"Local 1-PC test wrapper" in sender.data
+    assert b"open sender.html locally on the sender PC" in sender.data
+    assert b'<iframe id="sender-frame" src="/sender/app?receiverApi=1"' in sender.data
 
     sender_app = client.get("/sender/app")
     assert sender_app.status_code == 200
@@ -28,7 +30,8 @@ def test_sender_routes_serve_standalone_sender_and_wrapper() -> None:
 
     sender_page = client.get("/sender/page")
     assert sender_page.status_code == 200
-    assert b'<iframe id="sender-frame" src="/sender/app"' in sender_page.data
+    assert b"Local 1-PC test wrapper" in sender_page.data
+    assert b'<iframe id="sender-frame" src="/sender/app?receiverApi=1"' in sender_page.data
 
 
 def test_history_page_exposes_filters_and_static_script() -> None:
