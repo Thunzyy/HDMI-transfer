@@ -65,18 +65,27 @@ html,body{
 
 /* Config */
 .config{
-  padding:16px;margin-top:auto;
+  padding:14px 16px 16px;margin-top:auto;
   border-top:1px solid var(--accent-border);
+  display:flex;flex-direction:column;gap:10px;
 }
+.config-section-title{
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.6px;
+  color:var(--accent);margin-bottom:2px;
+  display:flex;align-items:center;gap:8px;
+}
+.config-section-title::after{
+  content:"";flex:1;height:1px;background:rgba(124,138,255,0.18);
+}
+.config-field{display:flex;flex-direction:column;gap:5px}
 .config-label{
-  display:block;font-size:11px;font-weight:600;
-  text-transform:uppercase;letter-spacing:1.5px;
-  color:var(--muted);margin-bottom:6px;margin-top:12px;
+  display:block;font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:1.2px;
+  color:var(--muted);
 }
-.config-label:first-child{margin-top:0}
 .config-head{
   display:flex;align-items:center;justify-content:flex-start;gap:6px;
-  width:fit-content;max-width:100%;margin-bottom:6px;
+  width:fit-content;max-width:100%;
 }
 .config-head .config-label{margin-bottom:0}
 .help-tip{
@@ -99,71 +108,88 @@ html,body{
 .help-tip:hover .help-bubble,
 .help-tip:focus-visible .help-bubble{opacity:1}
 .config-select{
-  width:100%;height:34px;padding:0 10px;
-  background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);
-  border-radius:5px;color:var(--text);font-family:inherit;font-size:13px;
+  width:100%;height:32px;padding:0 28px 0 10px;
+  background:rgba(0,0,0,0.32);border:1px solid rgba(255,255,255,0.1);
+  border-radius:6px;color:var(--text);font-family:inherit;font-size:12px;
   outline:none;cursor:pointer;appearance:none;
-  padding-right:26px;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:right 6px center;
-  transition:border-color .15s;
+  background-repeat:no-repeat;background-position:right 8px center;
+  transition:border-color .15s,background .15s;
 }
-.config-select:focus{border-color:rgba(255,255,255,0.2)}
-.config-select:disabled{opacity:.35;cursor:not-allowed}
+.config-select:hover{border-color:rgba(255,255,255,0.2)}
+.config-select:focus{border-color:var(--accent)}
+.config-select:disabled{opacity:.4;cursor:not-allowed}
 .btn-detect{
-  width:100%;height:34px;margin-top:12px;border:1px solid rgba(255,255,255,0.12);
-  border-radius:5px;background:transparent;color:var(--muted);
-  font-family:inherit;font-size:12px;font-weight:600;
-  text-transform:uppercase;letter-spacing:1px;cursor:pointer;
+  width:100%;height:30px;border:1px dashed rgba(255,255,255,0.14);
+  border-radius:6px;background:transparent;color:var(--muted);
+  font-family:inherit;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.8px;cursor:pointer;
   transition:all .15s;
 }
-.btn-detect:hover{border-color:rgba(255,255,255,0.2);color:var(--text)}
+.btn-detect:hover{border-style:solid;border-color:var(--accent);color:var(--accent)}
 .btn-detect:disabled{opacity:.3;cursor:not-allowed}
 /* ── Center ──────────────────────────────── */
-#center{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#center{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 .center-top{
-  padding:14px 20px 10px;
-  display:flex;justify-content:space-between;align-items:center;
+  padding:16px 22px 12px;
+  display:flex;justify-content:space-between;align-items:center;gap:18px;
+  border-bottom:1px solid rgba(255,255,255,0.04);
 }
 .center-top h2{
-  font-size:16px;font-weight:700;color:var(--bright);
+  font-size:17px;font-weight:700;color:var(--bright);
   text-transform:uppercase;letter-spacing:.5px;
 }
-.center-top .sub{font-size:12px;color:var(--muted);margin-top:3px}
-.top-btns{display:flex;gap:6px}
+.center-top .sub{font-size:12px;color:var(--muted);margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cfg-chip{
+  display:inline-flex;align-items:center;
+  padding:3px 9px;border-radius:999px;
+  background:rgba(124,138,255,0.1);border:1px solid rgba(124,138,255,0.2);
+  font-size:10px;font-weight:700;color:var(--accent);
+  text-transform:uppercase;letter-spacing:.6px;font-family:var(--font-ui);
+}
+.cfg-chip-sep{color:rgba(255,255,255,0.15);font-size:10px;margin:0 -2px}
+.top-btns{display:flex;gap:8px;align-items:center;flex-shrink:0}
 .cbtn{
-  padding:8px 18px;border-radius:5px;
-  font-family:inherit;font-size:13px;font-weight:700;
-  text-transform:uppercase;letter-spacing:.8px;
+  padding:10px 20px;border-radius:7px;
+  font-family:inherit;font-size:12px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.9px;
   cursor:pointer;transition:all .15s;
 }
 .cbtn-start{
+  padding:11px 28px;font-size:13px;letter-spacing:1.1px;
   background:var(--accent);border:1px solid var(--accent);
   color:#fff;
+  box-shadow:0 4px 14px rgba(124,138,255,0.28);
 }
-.cbtn-start:hover{background:#6b7bff;border-color:#6b7bff}
-.cbtn-start:disabled{opacity:.3;cursor:not-allowed}
+.cbtn-start:hover:not(:disabled){background:#6b7bff;border-color:#6b7bff;transform:translateY(-1px);box-shadow:0 6px 18px rgba(124,138,255,0.4)}
+.cbtn-start:active:not(:disabled){transform:translateY(0)}
+.cbtn-start:disabled{opacity:.3;cursor:not-allowed;box-shadow:none}
 .cbtn-stop{
   background:transparent;border:1px solid rgba(255,255,255,0.15);
   color:var(--text);
 }
-.cbtn-stop:hover{color:var(--bright);border-color:rgba(255,255,255,0.3)}
+.cbtn-stop:hover:not(:disabled){color:var(--red);border-color:var(--red)}
 .cbtn-stop:disabled{opacity:.25;cursor:not-allowed}
 .cbtn-reset{
-  background:transparent;border:1px solid rgba(124,138,255,0.45);
+  background:transparent;border:1px solid rgba(124,138,255,0.4);
   color:var(--accent);
 }
-.cbtn-reset:hover{border-color:var(--accent);color:#a9b4ff}
+.cbtn-reset:hover:not(:disabled){border-color:var(--accent);color:#a9b4ff;background:rgba(124,138,255,0.08)}
 .cbtn-reset:disabled{opacity:.25;cursor:not-allowed}
-#statusMsg{font-size:12px;color:var(--muted);padding:0 20px;min-height:16px}
+#statusMsg{
+  font-size:12px;color:var(--muted);padding:8px 22px 0;min-height:0;
+  transition:all .15s;
+}
+#statusMsg:empty{padding:0}
 
-.center-body{flex:1;display:flex;flex-direction:column;gap:12px;padding:0 20px 14px;overflow:hidden}
+.center-body{flex:1;display:flex;flex-direction:column;gap:14px;padding:14px 22px 16px;overflow:hidden}
 
 /* Preview area */
 #preview{
-  flex:1;border:1px solid var(--accent-border);border-radius:6px;
+  flex:1;border:1px solid var(--accent-border);border-radius:10px;
   overflow:hidden;position:relative;background:var(--bg2);
   display:flex;flex-direction:column;min-height:180px;min-width:0;
+  box-shadow:0 6px 24px rgba(0,0,0,0.18);
 }
 .preview-badges{position:absolute;top:10px;left:10px;z-index:2;display:flex;gap:5px}
 .badge{
@@ -193,15 +219,26 @@ html,body{
   background:var(--bg2);image-rendering:pixelated;
 }
 .preview-idle{
-  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  z-index:1;color:var(--muted);font-size:14px;font-weight:600;
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  z-index:1;color:var(--muted);font-size:13px;font-weight:600;
   text-transform:uppercase;letter-spacing:2px;
+  background:radial-gradient(ellipse at center, rgba(124,138,255,0.05), transparent 65%);
+}
+.preview-idle::before{
+  content:"";width:48px;height:48px;border-radius:50%;
+  border:2px solid rgba(124,138,255,0.25);
+  background:radial-gradient(circle, rgba(124,138,255,0.18), transparent 70%);
+  animation:idlePulse 2.4s ease-in-out infinite;
+}
+@keyframes idlePulse{
+  0%,100%{transform:scale(1);opacity:.6}
+  50%{transform:scale(1.15);opacity:1}
 }
 .preview-idle.hidden{display:none}
 
 /* Log */
 #log{
-  height:140px;border:1px solid var(--accent-border);border-radius:6px;
+  height:140px;border:1px solid var(--accent-border);border-radius:10px;
   background:var(--bg);display:flex;flex-direction:column;
   overflow:hidden;flex-shrink:0;
 }
@@ -307,61 +344,72 @@ html,body{
       <a href="/settings">Settings</a>
     </nav>
     <div class="config">
-      <div class="config-head">
-        <label class="config-label" for="deviceSelect">Device</label>
-        <span class="help-tip" tabindex="0">?
-          <span class="help-bubble">Capture source to read on the receiver PC. In a 2-PC setup, choose the HDMI capture card that receives the sender PC output.</span>
-        </span>
+      <div class="config-section-title">Capture</div>
+      <div class="config-field">
+        <div class="config-head">
+          <label class="config-label" for="deviceSelect">Device</label>
+          <span class="help-tip" tabindex="0">?
+            <span class="help-bubble">Capture source to read on the receiver PC. In a 2-PC setup, choose the HDMI capture card that receives the sender PC output.</span>
+          </span>
+        </div>
+        <select class="config-select" id="deviceSelect" disabled>
+          <option value="">Scanning...</option>
+        </select>
+        <button class="btn-detect" id="refreshBtn">Detect devices</button>
       </div>
-      <select class="config-select" id="deviceSelect" disabled>
-        <option value="">Scanning...</option>
-      </select>
-      <div class="config-head">
-        <label class="config-label" for="profileSelect">Profile</label>
-        <span class="help-tip" tabindex="0">?
-          <span class="help-bubble">Signal geometry preset. Balanced is the safest default for mixed hardware. Use Speed only on a dedicated high-refresh HDMI path. Use Quality when you need 4K and can accept lower throughput.</span>
-        </span>
+      <div class="config-field">
+        <div class="config-head">
+          <label class="config-label" for="profileSelect">Profile</label>
+          <span class="help-tip" tabindex="0">?
+            <span class="help-bubble">Signal geometry preset. Balanced is the safest default for mixed hardware. Use Speed only on a dedicated high-refresh HDMI path. Use Quality when you need 4K and can accept lower throughput.</span>
+          </span>
+        </div>
+        <select class="config-select" id="profileSelect">
+          <option value="speed">Speed - 120/144/240Hz HDMI</option>
+          <option value="balanced" selected>Balanced - recommended</option>
+          <option value="quality">Quality - 4K cleaner</option>
+        </select>
       </div>
-      <select class="config-select" id="profileSelect">
-        <option value="speed">Speed - dedicated 120/144/240Hz HDMI path</option>
-        <option value="balanced" selected>Balanced - recommended for most 2-PC setups</option>
-        <option value="quality">Quality - 4K, slower but cleaner</option>
-      </select>
-      <div class="config-head">
-        <label class="config-label" for="modeSelect">Mode</label>
-        <span class="help-tip" tabindex="0">?
-          <span class="help-bubble">Protocol decoder to expect. Fountain is the best default. Auto can help during bring-up when you do not yet know what the sender will use. Sequential is mainly for debugging.</span>
-        </span>
+      <div class="config-field">
+        <div class="config-head">
+          <label class="config-label" for="modeSelect">Mode</label>
+          <span class="help-tip" tabindex="0">?
+            <span class="help-bubble">Protocol decoder to expect. Fountain is the best default. Auto can help during bring-up when you do not yet know what the sender will use. Sequential is mainly for debugging.</span>
+          </span>
+        </div>
+        <select class="config-select" id="modeSelect">
+          <option value="auto">Auto-detect</option>
+          <option value="fountain" selected>Fountain - recommended</option>
+          <option value="sequential">Sequential - debug</option>
+        </select>
       </div>
-      <select class="config-select" id="modeSelect">
-        <option value="auto">Auto-detect - setup fallback</option>
-        <option value="fountain" selected>Fountain - recommended default</option>
-        <option value="sequential">Sequential - debug / worst-case path</option>
-      </select>
-      <div class="config-head">
-        <label class="config-label" for="bpcSelect">Encoding</label>
-        <span class="help-tip" tabindex="0">?
-          <span class="help-bubble">Bits per color channel carried in each frame. 2 bpc is the best default. During preflight, the sender can automatically fall back if the HDMI path cannot hold it cleanly.</span>
-        </span>
+      <div class="config-field">
+        <div class="config-head">
+          <label class="config-label" for="bpcSelect">Encoding</label>
+          <span class="help-tip" tabindex="0">?
+            <span class="help-bubble">Bits per color channel carried in each frame. 2 bpc is the best default. During preflight, the sender can automatically fall back if the HDMI path cannot hold it cleanly.</span>
+          </span>
+        </div>
+        <select class="config-select" id="bpcSelect">
+          <option value="1">1 bpc - safest fallback</option>
+          <option value="2" selected>2 bpc - recommended</option>
+          <option value="3">3 bpc - very clean only</option>
+        </select>
       </div>
-      <select class="config-select" id="bpcSelect">
-        <option value="1">1 bpc - safest fallback</option>
-        <option value="2" selected>2 bpc - recommended default</option>
-        <option value="3">3 bpc - only if the HDMI path is very clean</option>
-      </select>
-      <div class="config-head">
-        <label class="config-label" for="previewQualitySelect">Preview quality</label>
-        <span class="help-tip" tabindex="0">?
-          <span class="help-bubble">Only affects the live preview UI, not the transfer itself. Lower preview quality reduces receiver load and is usually better during long transfers.</span>
-        </span>
+      <div class="config-field">
+        <div class="config-head">
+          <label class="config-label" for="previewQualitySelect">Preview quality</label>
+          <span class="help-tip" tabindex="0">?
+            <span class="help-bubble">Only affects the live preview UI, not the transfer itself. Lower preview quality reduces receiver load and is usually better during long transfers.</span>
+          </span>
+        </div>
+        <select class="config-select" id="previewQualitySelect">
+          <option value="45" selected>Low - recommended</option>
+          <option value="60">Balanced</option>
+          <option value="75">High</option>
+          <option value="90">Max</option>
+        </select>
       </div>
-      <select class="config-select" id="previewQualitySelect">
-        <option value="45" selected>Low - recommended during transfers</option>
-        <option value="60">Balanced</option>
-        <option value="75">High</option>
-        <option value="90">Max</option>
-      </select>
-      <button class="btn-detect" id="refreshBtn">Detect devices</button>
     </div>
   </aside>
 
@@ -369,7 +417,13 @@ html,body{
     <div class="center-top">
       <div>
         <h2>Receive</h2>
-        <div class="sub" id="deviceSubtitle">Recommended for most 2-PC setups: Fountain + Balanced + 2 bpc</div>
+        <div class="sub" id="deviceSubtitle">
+          <span class="cfg-chip" id="cfgChipProfile">Balanced</span>
+          <span class="cfg-chip-sep">/</span>
+          <span class="cfg-chip" id="cfgChipMode">Fountain</span>
+          <span class="cfg-chip-sep">/</span>
+          <span class="cfg-chip" id="cfgChipBpc">2 bpc</span>
+        </div>
       </div>
       <div class="top-btns">
         <button class="cbtn cbtn-start" id="startBtn" disabled>Start</button>
@@ -1190,6 +1244,27 @@ html,body{
   });
   refreshBtn.addEventListener("click", () => loadDevices(true));
   checkActiveWorker();
+})();
+
+// Live capture-config chips next to the title
+(() => {
+  const profile = document.getElementById("profileSelect");
+  const mode    = document.getElementById("modeSelect");
+  const bpc     = document.getElementById("bpcSelect");
+  const cProf   = document.getElementById("cfgChipProfile");
+  const cMode   = document.getElementById("cfgChipMode");
+  const cBpc    = document.getElementById("cfgChipBpc");
+  const profLbl = {speed:"Speed", balanced:"Balanced", quality:"Quality"};
+  const modeLbl = {auto:"Auto", fountain:"Fountain", sequential:"Sequential"};
+  function sync(){
+    cProf.textContent = profLbl[profile.value] || profile.value;
+    cMode.textContent = modeLbl[mode.value] || mode.value;
+    cBpc.textContent  = bpc.value + " bpc";
+  }
+  profile.addEventListener("change", sync);
+  mode.addEventListener("change", sync);
+  bpc.addEventListener("change", sync);
+  sync();
 })();
 </script>
 </body>
