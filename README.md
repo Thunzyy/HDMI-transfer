@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo_hdmi_animated.svg" alt="HDMI Transfer" width="220" />
+</p>
+
 # HDMI Transfer
 
 Transfert de fichiers par signal video HDMI. Le sender affiche des frames encodees sur une sortie ecran, le receiver lit ce signal via une carte de capture et reconstruit le fichier sans utiliser le reseau pour les donnees.

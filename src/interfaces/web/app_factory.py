@@ -100,6 +100,12 @@ def _register_page_routes(app: Flask, static_dir: Path) -> None:
     def sender_app():
         return _send_sender_html()
 
+    @app.route("/favicon.ico")
+    def favicon():
+        return send_from_directory(
+            str(static_dir), "logo_hdmi_static.svg", mimetype="image/svg+xml"
+        )
+
 
 def create_app(
     output_dir: str = "received_files",

@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>HDMI Transfer — Send Test</title>
+<link rel="icon" type="image/svg+xml" href="/static/logo_hdmi_static.svg"/>
 <style>
 :root {
   --bg:#16181e; --bg2:#0f1117;
@@ -27,6 +28,7 @@ html,body{
   flex-shrink:0;
 }
 .h-left{display:flex;align-items:center;gap:10px}
+.h-logo{width:26px;height:26px;display:block;flex-shrink:0}
 .h-title{color:var(--bright);font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
 
 #layout{flex:1;display:flex;overflow:hidden}
@@ -65,6 +67,7 @@ html,body{
 
 <div id="header">
   <div class="h-left">
+    <img class="h-logo" src="/static/logo_hdmi_static.svg" alt="" />
     <span class="h-title">HDMI Transfer</span>
   </div>
 </div>
