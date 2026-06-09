@@ -166,7 +166,7 @@ uv run python tools/build_sender_html.py --check
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
+- [Architecture](docs/ARCHITECTURE.md)
 - [Migration](docs/migration.md)
 - [Testing](docs/testing.md)
 - [Setup materiel](docs/hardware-setup.md)
