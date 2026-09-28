@@ -37,12 +37,32 @@ ui_*.json
 .vscode/
 .idea/
 
-# Claude / AI tooling
+# Local AI instructions, sessions and planning
 .claude/
 .planning/
 .worktrees/
 CLAUDE.md
 CLAUDE.local.md
+[Aa][Gg][Ee][Nn][Tt].[Mm][Dd]
+[Aa][Gg][Ee][Nn][Tt][Ss].[Mm][Dd]
+AGENTS.override.md
+.codex/
+.agents/
+.cursor/
+.cursorrules
+.gemini/
+GEMINI.md
+.opencode/
+.aider*
+.bmad/
+_bmad/
+_bmad-output/
+.github/copilot-instructions.md
+.github/agents/
+.github/instructions/
+.github/prompts/
+.github/hermes-agile.json
+.github/ISSUE_TEMPLATE/agent_task.yml
 
 # Device cache
 .device_cache.json

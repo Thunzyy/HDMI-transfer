@@ -7,13 +7,13 @@ body:
     attributes:
       value: |
         Cette issue est une **proposition**, pas une tâche de dev validée.
-        Les agents ne doivent pas coder cette idée avant validation Lucas/Dan.
+        Attendre la validation du mainteneur avant de commencer le développement.
   - type: textarea
     id: summary
     attributes:
       label: Résumé
       description: Décris l'idée en une phrase.
-      placeholder: Ajouter une wishlist de tenues sauvegardées.
+      placeholder: Ajouter un profil de transfert personnalisé.
     validations:
       required: true
   - type: textarea
@@ -50,9 +50,9 @@ body:
       label: Risques / questions ouvertes
       placeholder: Données manquantes, dette technique, UX à clarifier...
   - type: checkboxes
-    id: agent_rule
+    id: approval_rule
     attributes:
-      label: Règle agent
+      label: Validation préalable
       options:
-        - label: Je confirme que cette idée ne doit pas être codée tant qu'elle n'est pas validée par Lucas/Dan.
+        - label: Je confirme que cette idée ne doit pas être codée tant qu'elle n'est pas validée par le mainteneur.
           required: true

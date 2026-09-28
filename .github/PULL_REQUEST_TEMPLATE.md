@@ -23,11 +23,7 @@ Closes #
 - [ ] Captures/logs/preuves ajoutés
 - [ ] Pas d'erreurs console critiques si UI
 
-## Handoff agent
-
-Agent owner: `developper` / `techlead` / `verifier` / autre
-
-Notes pour Dan/Lucas:
+## Notes de revue
 
 -
 
