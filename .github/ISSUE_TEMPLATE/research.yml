@@ -1,0 +1,26 @@
+name: Research / Spike
+description: Recherche avant décision ou implémentation
+title: "[Research] "
+labels: ["type:research"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question à résoudre
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Contraintes / sources attendues
+  - type: textarea
+    id: output
+    attributes:
+      label: Livrable attendu
+      value: |
+        - [ ] Résumé décisionnel
+        - [ ] Options comparées
+        - [ ] Recommandation
+        - [ ] Sources/liens
+    validations:
+      required: true

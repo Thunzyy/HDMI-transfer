@@ -1,0 +1,58 @@
+name: Feature Idea
+description: Proposer une feature sans la mettre automatiquement en TODO
+title: "[Feature Idea] "
+labels: ["type:idea", "status:proposed", "priority:P3"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cette issue est une **proposition**, pas une tâche de dev validée.
+        Les agents ne doivent pas coder cette idée avant validation Lucas/Dan.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Résumé
+      description: Décris l'idée en une phrase.
+      placeholder: Ajouter une wishlist de tenues sauvegardées.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problème / opportunité
+      description: Quel problème ça résout ? Pourquoi c'est utile ?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposition
+      description: Comment la feature pourrait fonctionner ?
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact estimé
+      options: [Critique, Haut, Moyen, Faible, Nice-to-have]
+    validations:
+      required: true
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Complexité estimée
+      options: [XS, S, M, L, XL]
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risques / questions ouvertes
+      placeholder: Données manquantes, dette technique, UX à clarifier...
+  - type: checkboxes
+    id: agent_rule
+    attributes:
+      label: Règle agent
+      options:
+        - label: Je confirme que cette idée ne doit pas être codée tant qu'elle n'est pas validée par Lucas/Dan.
+          required: true

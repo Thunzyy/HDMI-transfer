@@ -1,8 +1,18 @@
 # Setup materiel
 
-## Scenario recommande
+## Transfert entre deux PC
 
-Le setup le plus simple pour developper et valider HDMI Transfer reste le loopback sur un seul PC :
+Pour utiliser HDMI Transfer, commencer avec deux machines :
+
+```text
+PC émetteur (sortie HDMI) → câble HDMI → capture HDMI (entrée) → USB → PC récepteur
+```
+
+Une carte de capture est nécessaire : le port HDMI d’un ordinateur est généralement une sortie. Préparer le sender HTML local et installer le récepteur en suivant le [guide de démarrage](getting-started.md). Commencer en Fountain + Balanced + 2 bpc des deux côtés.
+
+## Développement sur un seul PC
+
+Pour développer et valider localement la chaîne, on peut utiliser un loopback sur un seul PC :
 
 ```text
 GPU ─── HDMI ──► ecran secondaire (sender)
@@ -55,7 +65,7 @@ for i, m in enumerate(get_monitors()):
 Toujours calibrer avant un transfert reel :
 
 ```bash
-hdmi-calibrate --profile balanced loopback 1
+uv run --no-sync hdmi-calibrate --profile balanced loopback 1
 ```
 
 Regle importante : `--profile` doit etre place avant le subcommand.

@@ -30,6 +30,9 @@ body{display:flex}
   flex:1;display:flex;flex-direction:column;
   padding:28px 32px;gap:20px;overflow-y:auto;
 }
+.brand{display:flex;align-items:center;gap:12px}
+.brand-logo{width:32px;height:32px;display:block;flex-shrink:0}
+.brand-title{color:#fff;font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
 #side{
   width:280px;flex-shrink:0;
   border-left:1px solid var(--accent-border);
@@ -236,6 +239,54 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
 
 <!-- Left: main area -->
 <div id="main">
+  <div class="brand">
+    <svg class="brand-logo" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" aria-hidden="true">
+      <defs>
+        <filter id="bl-glow" x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="#48C2E1" flood-opacity="0.8"/>
+        </filter>
+        <filter id="bl-glass" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="6" stdDeviation="15" flood-color="#0A1E31" flood-opacity="0.9"/>
+        </filter>
+        <radialGradient id="bl-grad" cx="50%" cy="50%" r="55%">
+          <stop offset="0%" stop-color="#9DEEFF"/>
+          <stop offset="60%" stop-color="#48C2E1"/>
+          <stop offset="100%" stop-color="#216189"/>
+        </radialGradient>
+        <radialGradient id="bl-flare" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#48C2E1" stop-opacity="0.30"/>
+          <stop offset="30%" stop-color="#216189" stop-opacity="0.10"/>
+          <stop offset="100%" stop-color="#000000" stop-opacity="0.0"/>
+        </radialGradient>
+        <path id="bl-plug" d="M 130 180 L 370 180 L 370 260 L 310 330 L 190 330 L 130 260 Z" fill="none" stroke-linejoin="round"/>
+      </defs>
+      <circle cx="250" cy="250" r="250" fill="url(#bl-flare)"/>
+      <g filter="url(#bl-glow)">
+        <circle cx="250" cy="250" r="180" fill="none" stroke="url(#bl-grad)" stroke-width="2" stroke-dasharray="8 24" opacity="0.3" transform="rotate(25 250 250)"/>
+        <circle cx="250" cy="250" r="160" fill="none" stroke="url(#bl-grad)" stroke-width="1.5" opacity="0.4"/>
+        <circle cx="250" cy="250" r="150" fill="none" stroke="url(#bl-grad)" stroke-width="3" stroke-dasharray="60 30" opacity="0.6" transform="rotate(75 250 250)"/>
+        <circle cx="250" cy="250" r="110" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-dasharray="2 12" opacity="0.5" transform="rotate(-15 250 250)"/>
+      </g>
+      <g filter="url(#bl-glass)">
+        <use href="#bl-plug" stroke="#04121F" stroke-width="16" transform="translate(0, 8)" opacity="0.8"/>
+      </g>
+      <g filter="url(#bl-glow)">
+        <use href="#bl-plug" stroke="url(#bl-grad)" stroke-width="14"/>
+        <path d="M 160 230 L 340 230" stroke="url(#bl-grad)" stroke-width="8" stroke-linecap="round"/>
+        <g fill="url(#bl-grad)">
+          <rect x="180" y="275" width="8" height="20" rx="3"/>
+          <rect x="200" y="275" width="8" height="20" rx="3"/>
+          <rect x="220" y="275" width="8" height="20" rx="3"/>
+          <rect x="240" y="275" width="10" height="22" rx="3"/>
+          <rect x="262" y="275" width="8" height="20" rx="3"/>
+          <rect x="282" y="275" width="8" height="20" rx="3"/>
+          <rect x="302" y="275" width="8" height="20" rx="3"/>
+        </g>
+      </g>
+      <use href="#bl-plug" stroke="#FFFFFF" stroke-width="2" transform="translate(-1.5, -1.5)" opacity="0.5"/>
+    </svg>
+    <span class="brand-title">HDMI Transfer</span>
+  </div>
   <div id="dropZone">
     <input type="file" id="fileInput"/>
     <div class="dz-empty">

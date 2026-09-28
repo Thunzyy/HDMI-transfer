@@ -1,0 +1,48 @@
+name: Feature validée
+description: Feature approuvée à mettre dans le backlog ou Ready
+title: "[Feature] "
+labels: ["type:feature", "status:approved"]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objectif
+      description: Ce qu'on veut livrer.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexte
+      description: Liens, décisions, notes produit, contraintes.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critères d'acceptation
+      value: |
+        - [ ] 
+        - [ ] 
+        - [ ] 
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Preuves attendues
+      value: |
+        - [ ] Tests/build passés
+        - [ ] Capture ou preuve navigateur/API si pertinent
+        - [ ] PR liée à cette issue
+        - [ ] Validation verifier si nécessaire
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priorité
+      options: [P0, P1, P2, P3]
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Taille
+      options: [XS, S, M, L, XL]
