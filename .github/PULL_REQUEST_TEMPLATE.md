@@ -1,9 +1,9 @@
-## Résumé
+## Summary
 
 -
 -
 
-## Issue liée
+## Linked issue
 
 Closes #
 
@@ -15,21 +15,21 @@ Closes #
 - [ ] Docs
 - [ ] Infra
 
-## Tests / preuves
+## Tests / evidence
 
-- [ ] Tests unitaires / intégration passés
-- [ ] Build passé
-- [ ] Vérification navigateur/API effectuée si pertinent
-- [ ] Captures/logs/preuves ajoutés
-- [ ] Pas d'erreurs console critiques si UI
+- [ ] Unit / integration tests passed
+- [ ] Build passed
+- [ ] Browser/API checks completed when relevant
+- [ ] Screenshots/logs/evidence attached
+- [ ] No severe browser console errors for UI changes
 
-## Notes de revue
+## Review notes
 
 -
 
-## Checklist finale
+## Final checklist
 
-- [ ] La PR est focalisée sur une issue/tâche claire
-- [ ] Les critères d'acceptation sont couverts
-- [ ] Les secrets/configs sensibles ne sont pas commités
-- [ ] Le statut Project peut passer en `Review` ou `QA / Verify`
+- [ ] The PR focuses on a clear issue/task
+- [ ] Acceptance criteria are covered
+- [ ] No secrets or sensitive configuration committed
+- [ ] Project status can move to `In review`

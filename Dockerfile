@@ -16,7 +16,7 @@ RUN apt-get update \
 
 FROM base AS builder
 COPY --from=uv /uv /usr/local/bin/uv
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock README.md LICENSE ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --python /usr/local/bin/python --no-install-project \
     --extra web --extra receiver --extra docker

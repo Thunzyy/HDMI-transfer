@@ -2,12 +2,11 @@
   <img src="docs/logo_hdmi_animated.svg" alt="HDMI Transfer — file transfer over HDMI video" width="160" />
 </p>
 
-# HDMI Transfer — File Transfer over HDMI (POC)
+<h1 align="center"> HDMI Transfer</h1>
 
-<p align="center"><strong>Turn a file into a video signal. Rebuild it on another computer with a capture card.</strong></p>
+<p align="center"><strong>File Transfer over HDMI , turn a file into a video signal. Rebuild it on another computer with a capture card.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/Thunzyy/HDMI-transfer/actions/workflows/ci.yml"><img src="https://github.com/Thunzyy/HDMI-transfer/actions/workflows/ci.yml/badge.svg" alt="Windows automated tests" /></a>
   <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&amp;logoColor=white" alt="Python 3.11 or later" />
   <img src="https://img.shields.io/badge/Sender-Standalone_HTML-E34F26?logo=html5&amp;logoColor=white" alt="Standalone HTML sender" />
   <img src="https://img.shields.io/badge/Transport-HDMI-7c8aff" alt="HDMI video transport" />
@@ -19,14 +18,14 @@
   <a href="#transfer-speeds">Transfer speeds</a> ·
   <a href="docs/getting-started.md">Installation guide</a> ·
   <a href="docs/hardware-setup.md">Hardware setup</a> ·
-  <a href="#frequently-asked-questions">FAQ</a>
+  <a href="#faq">FAQ</a>
 </p>
 
 **HDMI Transfer** encodes files into video frames displayed through an HDMI output. On the receiving computer, an **HDMI-to-USB capture card** captures those frames so the software can reconstruct the original file. The file payload travels through video; no network file share is required.
 
 A browser-based sender, a USB capture-card receiver, fountain codes and a local Python/Flask web interface work together to move files between two computers.
 
-> **Proof of concept (POC):** this is an experimental project for demonstrating file transfer over HDMI video. It is not a production-ready transfer solution; reliability and performance must be validated on your hardware.
+> **Proof of concept (POC):** this is an experimental project for demonstrating file transfer over HDMI video.
 
 <p align="center">
   <img src="docs/images/receiver.png" alt="HDMI Transfer receiver: capture device selection, Balanced profile, video preview and file progress" width="1100" />
@@ -42,7 +41,7 @@ A browser-based sender, a USB capture-card receiver, fountain codes and a local 
 2. **Display** the encoded frames full-screen on the HDMI output connected to the capture card.
 3. **Receive** through the local interface, then download the reconstructed file.
 
-> Connecting two PC HDMI outputs is not enough: the receiver needs a **video input**, usually provided by a USB capture card. See the [hardware guide](docs/hardware-setup.md).
+
 
 ## Screenshots
 
@@ -51,7 +50,6 @@ A browser-based sender, a USB capture-card receiver, fountain codes and a local 
 | [![HDMI Transfer sender with a text file ready to transmit](docs/images/sender.png)](docs/images/sender.png) | [![HDMI Transfer web interface settings](docs/images/settings.png)](docs/images/settings.png) |
 | Choose a file, protocol and profile. | Adjust the settings in the local interface. |
 
-Actual interface screenshots with no capture card connected: an idle receiver and a sample file ready to send. These are not throughput measurements or evidence of a completed hardware transfer. [Reproduce the screenshots](docs/images/README.md).
 
 ## Why HDMI Transfer?
 
@@ -62,28 +60,22 @@ Actual interface screenshots with no capture card connected: an idle receiver an
 - **Explicit settings**: choose Balanced, Speed or Quality profiles and configure the encoding.
 - **CLI tools**: send, receive, calibrate and benchmark for reproducible experiments.
 
-Built for demonstrations, video-channel experiments and authorized transfers in a controlled environment. Throughput depends on the entire HDMI chain; profile frame rates are targets, not guaranteed transfer speeds.
 
 ## Quick start
 
-### Docker — one command
+### Docker
 
-With Docker Engine or Docker Desktop running, from the cloned repository:
 
 ```bash
 docker compose up --build -d --wait
 ```
 
-Open **[http://localhost:5000](http://localhost:5000)**. No local Python or uv installation is needed. The first build downloads dependencies; later starts reuse the image. Received files are kept in a Docker volume.
+Open **[http://localhost:5000](http://localhost:5000)**
 
 ```bash
 docker compose stop    # Stop; keep received files
 docker compose start  # Start again
 ```
-
-This starts the web interface on Windows, macOS or Linux. **Physical HDMI reception also requires a capture device inside the container.** Use the [Linux capture-card setup](docs/docker.md#linux-capture-card) on native Linux; Docker Desktop does not automatically expose the host's USB capture card. For capture on Windows, the native launcher below is the simplest path.
-
-See the [Docker guide](docs/docker.md) for device mapping, ports, LAN access, updates and the reproducible smoke test.
 
 ### Native installation
 
@@ -96,7 +88,6 @@ git clone https://github.com/Thunzyy/HDMI-transfer.git
 cd HDMI-transfer
 ```
 
-The repository is currently private: use an authorized GitHub account. [Cloning help](docs/getting-started.md#accès-au-dépôt).
 
 ### 2. Launch
 
@@ -144,7 +135,7 @@ uv run --no-sync hdmi-web
 | Two PCs with no shared network | Local `sender.html` + local web receiver |
 | Load the sender from the receiver on a trusted LAN | Start the server with `--host 0.0.0.0`, then open `http://RECEIVER_IP:5000/sender` |
 | Test on one PC with an HDMI capture card | `/sender/test` — explicit local test mode |
-| Automate sending or receiving | [CLI commands](docs/getting-started.md#utilisation-en-ligne-de-commande) |
+| Automate sending or receiving | [CLI commands](docs/getting-started.md#command-line-usage) |
 
 LAN mode uses the network to serve the interface. To avoid any network dependency between the two computers, prepare the standalone HTML file in advance. The local server exposes received files: restrict LAN access to a trusted network.
 
@@ -182,21 +173,18 @@ For a hardware measurement, transfer a known file, verify its SHA-256 result, an
 
 | Connection / example configuration | Rate (Mbps) | Equivalent MB/s | What the number represents |
 | --- | ---: | ---: | --- |
-| Bluetooth LE, LE 2M PHY | 2 | 0.25 | Radio PHY rate; application support is required for file transfer ([Bluetooth SIG](https://www.bluetooth.com/learn-about-bluetooth/tech-overview/)) |
 | Bluetooth Classic, EDR 3 Mb/s mode | 3 | 0.375 | Radio PHY rate, before packet overhead ([Bluetooth SIG](https://www.bluetooth.com/learn-about-bluetooth/tech-overview/)) |
 | **HDMI Transfer — Balanced** | **11.66** | **1.46** | POC payload ceiling, 1080p60 / 2 bpc |
 | HDMI Transfer — Quality | 23.32 | 2.92 | POC payload ceiling, 4K30 / 2 bpc |
 | HDMI Transfer — Speed | 46.63 | 5.83 | POC payload ceiling, 1080p240 / 2 bpc |
-| Wi-Fi 5 — Intel Wireless-AC 9462, 1×1 | 433 | 54.125 | Adapter maximum link rate ([Intel](https://www.intel.com/content/www/us/en/ark/products/series/211325/intel-wireless-ac-products.html)) |
-| Gigabit Ethernet — 1000BASE-T | 1,000 | 125 | Wired link rate ([Intel I210](https://www.intel.com/content/www/us/en/products/details/ethernet/gigabit-network-adapters/i210-server-adapters.html?grouping=rdc+Content+Types)) |
 | Wi-Fi 6 — Intel AX203, 2×2 | 1,200 | 150 | Adapter maximum link rate ([Intel](https://www.intel.com/content/www/us/en/products/details/wireless/wi-fi-6-series/downloads.html)) |
 | USB 3.2 Gen 1 — USB 5Gbps | 5,000 | 625 | Bus signaling rate, before encoding/transfer overhead ([USB-IF](https://www.usb.org/usb-32-0)) |
 
-The POC's calculated capacity sits above the Bluetooth modes shown and well below these Wi-Fi, Gigabit Ethernet and USB link rates. That does **not** establish real-world speed ratios: radio conditions, protocol overhead, storage and implementation affect actual transfers. A USB drive also needs a write and a read to move a file between PCs; its bus rate is not its flash-storage speed.
+The POC's calculated capacity sits above the Bluetooth mode shown and well below these Wi-Fi and USB link rates. That does **not** establish real-world speed ratios: radio conditions, protocol overhead, storage and implementation affect actual transfers. A USB drive also needs a write and a read to move a file between PCs; its bus rate is not its flash-storage speed.
 
 HDMI Transfer demonstrates a video-based file channel when a shared network is unavailable. For routine large-file transfers, a working Wi-Fi/Ethernet connection or suitable USB storage is generally a more practical choice. To compare actual performance, use the same file, verify its hash, and measure complete transfer time on each setup. Reference specifications checked on 2026-09-28.
 
-## Frequently asked questions
+## FAQ
 
 ### Can I transfer files with just an HDMI cable between two computers?
 
@@ -216,15 +204,14 @@ See [Transfer speeds](#transfer-speeds): the recommended Balanced configuration 
 
 ### Why is the preview black, or why does decoding fail?
 
-Check the capture source, close other applications using the card, verify the correct HDMI display and return to **Fountain + Balanced + 2 bpc** on both sides. See [troubleshooting](docs/getting-started.md#dépannage).
+Check the capture source, close other applications using the card, verify the correct HDMI display and return to **Fountain + Balanced + 2 bpc** on both sides. See [troubleshooting](docs/getting-started.md#troubleshooting).
 
 ## Documentation and development
 
-The Docker guide and `llms.txt` are in English; the other detailed guides are currently in French.
+All project documentation is available in English.
 
 | Document | Contents |
 | --- | --- |
-| [Docker](docs/docker.md) | One-command startup, persistent storage, Linux capture devices and smoke tests |
 | [Installation and quick start](docs/getting-started.md) | Prerequisites, two-PC setup, offline mode, LAN, CLI and troubleshooting |
 | [Hardware and calibration](docs/hardware-setup.md) | Wiring, displays, capture devices and loopback testing |
 | [Architecture](docs/architecture.md) | Code organization and responsibilities |
@@ -233,13 +220,8 @@ The Docker guide and `llms.txt` are in English; the other detailed guides are cu
 | [Screenshots](docs/images/README.md) | Provenance and reproducible capture |
 | [Assistant overview](llms.txt) | Project summary and source links |
 
-```powershell
-uv sync --locked --extra dev
-uv run --no-sync powershell -ExecutionPolicy Bypass -File tools/run_quality_gate.ps1
-```
 
-The sender HTML is generated: edit `src/interfaces/browser_sender/`, then run `uv run python tools/build_sender_html.py`. Check for drift with `uv run python tools/build_sender_html.py --check`.
 
 ## License
 
-There is currently no `LICENSE` file in the repository. Reuse terms remain to be specified by the author. This project is intended for education and authorized research.
+Licensed under the [MIT License](LICENSE). Copyright (c) 2026 Thunzyy.

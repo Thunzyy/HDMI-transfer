@@ -1,35 +1,35 @@
-# Installer et démarrer HDMI Transfer
+# Install and start HDMI Transfer
 
-[Retour à la présentation](../README.md)
+[Back to the overview](../README.md)
 
-## Variante Docker
+## Docker option
 
-Avec Docker démarré, lancer `docker compose up --build -d --wait`, puis ouvrir `http://localhost:5000`. Aucun Python local nécessaire. Les fichiers sont conservés dans un volume Docker. Voir le [guide Docker](docker.md) pour la capture sous Linux et les limites USB de Docker Desktop.
+With Docker running, run `docker compose up --build -d --wait`, then open `http://localhost:5000`. No local Python installation is needed. Received files persist in a Docker volume. Physical capture requires access to a capture device inside the container; Docker Desktop does not automatically expose host USB capture cards. For native Linux device mapping, see [hardware setup](hardware-setup.md#docker-on-native-linux).
 
-## Prérequis
+## Prerequisites
 
-- PC récepteur : Git, [uv](https://docs.astral.sh/uv/getting-started/installation/), pilote de la carte de capture et port USB adapté à cette carte.
-- PC émetteur : navigateur récent et sortie HDMI ; Python n’est pas nécessaire pour `sender.html`.
-- Liaison : câble HDMI et carte de capture HDMI vers USB. Deux sorties HDMI ne permettent pas une réception.
-- Python : le projet demande Python 3.11 minimum ; uv utilise la version indiquée dans `.python-version` et peut la télécharger si nécessaire.
+- Receiver PC: Git, [uv](https://docs.astral.sh/uv/getting-started/installation/), the capture-card driver and a suitable USB port.
+- Sender PC: a recent browser and an HDMI output. `sender.html` does not require Python.
+- Connection: an HDMI cable and an HDMI-to-USB capture card. Two HDMI outputs cannot receive video from each other.
+- Python: version 3.11 or later. uv uses `.python-version` and can download Python if needed.
 
-Installer uv sous Windows :
+Install uv on Windows:
 
 ```powershell
 winget install --id=astral-sh.uv -e
 ```
 
-Sur macOS avec Homebrew :
+On macOS with Homebrew:
 
 ```bash
 brew install uv
 ```
 
-Pour Linux et les autres méthodes, suivre les [instructions officielles uv](https://docs.astral.sh/uv/getting-started/installation/). Rouvrir le terminal après installation, puis vérifier `uv --version` et `git --version`.
+For Linux and other methods, follow the [official uv instructions](https://docs.astral.sh/uv/getting-started/installation/). Reopen your terminal, then check `uv --version` and `git --version`.
 
-## Accès au dépôt
+## Repository access
 
-Le dépôt est privé au moment de la rédaction. Se connecter avec un compte autorisé via Git Credential Manager, ou utiliser GitHub CLI :
+If the repository is private, sign in with an authorized account through Git Credential Manager or GitHub CLI:
 
 ```bash
 gh auth login
@@ -37,149 +37,149 @@ gh repo clone Thunzyy/HDMI-transfer
 cd HDMI-transfer
 ```
 
-Avec Git déjà authentifié :
+With Git authentication already configured:
 
 ```bash
 git clone https://github.com/Thunzyy/HDMI-transfer.git
 cd HDMI-transfer
 ```
 
-Le téléchargement ZIP depuis **Code → Download ZIP** dans GitHub convient aussi. Extraire tout le dossier, puis y ouvrir un terminal.
+You can also use **Code → Download ZIP** on GitHub. Extract the entire folder and open a terminal there.
 
-## Installer et lancer le récepteur
+## Install and launch the receiver
 
-Sous Windows :
+On Windows:
 
 ```powershell
 .\start.bat
 ```
 
-Sous Linux/macOS :
+On Linux/macOS:
 
 ```bash
 sh start.sh
 ```
 
-Ou exécuter directement :
+Or run the commands directly:
 
 ```bash
 uv sync --locked --extra web
 uv run --no-sync hdmi-web
 ```
 
-Ouvrir [http://localhost:5000](http://localhost:5000). Les lanceurs travaillent depuis le dossier du projet, synchronisent l’environnement `.venv` avec `uv.lock` et transmettent les options au serveur. Ils s’arrêtent si l’installation échoue. Le premier lancement peut télécharger Python et les dépendances ; les suivants réutilisent l’environnement.
+Open [http://localhost:5000](http://localhost:5000). The launchers run from the project directory, synchronize `.venv` with `uv.lock`, and forward arguments to the server. They stop if installation fails. The first launch may download Python and dependencies; later launches reuse the environment.
 
-Le serveur écoute sur `127.0.0.1` par défaut. Les fichiers reçus sont stockés dans `received_files/` depuis le dossier de lancement. Garder le terminal ouvert ; `Ctrl+C` arrête le serveur.
+The server listens on `127.0.0.1` by default. Received files are stored in `received_files/` relative to the launch directory. Keep the terminal open; press `Ctrl+C` to stop the server.
 
-Changer de port :
+To change the port:
 
 ```powershell
 .\start.bat --port 5001
 ```
 
-Sous POSIX : `sh start.sh --port 5001`. Ouvrir alors `http://localhost:5001`.
+On POSIX systems, use `sh start.sh --port 5001`, then open `http://localhost:5001`.
 
-## Deux PC sans réseau commun
+## Two PCs without a shared network
 
 ```text
-PC émetteur                  Carte de capture              PC récepteur
-sender.html → sortie HDMI ──→ entrée HDMI → sortie USB ──→ interface Receive
+Sender PC                   Capture card                 Receiver PC
+sender.html → HDMI output → HDMI input → USB output → Receive interface
 ```
 
-1. Installer le récepteur et copier `sender.html` sur le PC émetteur à l’avance, par un moyen autorisé.
-2. Brancher la carte et son câble USB. Utiliser le pilote et le port USB requis par le fabricant.
-3. Dans les paramètres d’affichage du PC émetteur, repérer la sortie envoyée à la carte. Choisir une résolution de 1920 × 1080 à 60 Hz pour commencer.
-4. Ouvrir `sender.html` localement, sélectionner un petit fichier de test et déplacer la fenêtre sur cette sortie. Le mode par défaut est **2-PC offline sender**, sans API récepteur.
-5. Sur le récepteur, choisir la carte dans **Receive**. Sur les deux interfaces, conserver **Fountain**, **Balanced**, **2 bpc**. Garder **Preview quality: Low** côté réception.
-6. Démarrer la réception avec **Start**, puis **Start transmission** sur l’émetteur. Accepter le plein écran si le navigateur le demande. Aucun autre contenu ne doit recouvrir le signal envoyé à la capture.
-7. Attendre **Download** côté réception, enregistrer le fichier et arrêter l’émission. Pour valider une chaîne matérielle, comparer les empreintes SHA-256 de l’original et du fichier téléchargé.
+1. Install the receiver and copy `sender.html` to the sender PC in advance using an authorized method.
+2. Connect the card and its USB cable. Use the driver and USB port required by the manufacturer.
+3. In the sender PC's display settings, identify the output connected to the card. Start at 1920 × 1080 and 60 Hz.
+4. Open `sender.html` locally, select a small test file and move the browser window to that output. The default mode is **2-PC offline sender**, with no receiver API.
+5. Select the card in **Receive**. Use **Fountain**, **Balanced** and **2 bpc** on both interfaces. Keep **Preview quality: Low** on the receiver.
+6. Click **Start** on the receiver, then **Start transmission** on the sender. Allow full-screen mode if prompted. Nothing should cover the signal shown to the capture card.
+7. Wait for **Download**, save the file and stop transmission. Compare SHA-256 hashes of the original and downloaded files to validate the hardware path.
 
-Sous PowerShell :
+In PowerShell:
 
 ```powershell
-Get-FileHash .\monfichier.zip -Algorithm SHA256
+Get-FileHash .\myfile.zip -Algorithm SHA256
 ```
 
-Exécuter cette commande de chaque côté, sur les fichiers correspondants. Un test local dans le navigateur ne remplace pas cette validation de bout en bout.
+Run this on both computers for the corresponding files. A browser-only test does not replace this end-to-end check.
 
-## Deux PC sur un LAN de confiance
+## Two PCs on a trusted LAN
 
-Pour charger le sender depuis le serveur du récepteur :
+To load the sender from the receiver's server:
 
 ```powershell
 .\start.bat --host 0.0.0.0
 ```
 
-Sous POSIX : `sh start.sh --host 0.0.0.0`.
+On POSIX systems, use `sh start.sh --host 0.0.0.0`.
 
-- Sur le récepteur : `http://localhost:5000/`.
-- Sur le PC émetteur : `http://IP_DU_RECEPTEUR:5000/sender`.
-- Sous Windows, `ipconfig` permet de trouver l’adresse IPv4 du récepteur.
+- Receiver: `http://localhost:5000/`.
+- Sender PC: `http://RECEIVER_IP:5000/sender`.
+- On Windows, use `ipconfig` to find the receiver's IPv4 address.
 
-`0.0.0.0` est l’adresse d’écoute, pas l’adresse à saisir dans le navigateur distant. Autoriser si nécessaire le port choisi sur le profil réseau privé du pare-feu. Le serveur expose réception, historique et téléchargements ; ne pas le publier directement sur Internet.
+`0.0.0.0` is the listening address, not the address to enter in a remote browser. If needed, allow the port through the firewall's private-network profile. The server exposes reception, history and downloads; do not publish it directly to the Internet.
 
-Le LAN sert l’interface. Le fichier à transférer est encodé dans le navigateur et transporté par HDMI. Pour un environnement réellement isolé du LAN, utiliser le HTML local de la section précédente.
+The LAN serves the interface. The file is encoded in the browser and carried over HDMI. To avoid a shared LAN entirely, use the local HTML file described above.
 
-## Tester avec un seul PC
+## Test with one PC
 
-Le test loopback demande toujours une sortie HDMI reliée à une capture :
+A loopback test still requires an HDMI output connected to a capture input:
 
-1. Lancer le récepteur.
-2. Ouvrir `http://localhost:5000/sender/test` pour activer explicitement l’API de test locale.
-3. Afficher le sender sur la sortie reliée à la carte, puis recevoir depuis la même machine.
+1. Start the receiver.
+2. Open `http://localhost:5000/sender/test` to enable the local test API explicitly.
+3. Show the sender on the output connected to the card and receive on the same computer.
 
-Le sender et le receiver partagent ici CPU/GPU : ce test peut être moins performant que deux PC. Voir [câblage et calibration](hardware-setup.md).
+The sender and receiver share CPU/GPU resources, so this setup may be slower than two separate PCs. See [wiring and calibration](hardware-setup.md).
 
-## Utilisation en ligne de commande
+## Command-line usage
 
-Installer les extras CLI dans chaque clone concerné :
+Install the CLI extras in each relevant clone:
 
 ```bash
 uv sync --locked --extra all
 ```
 
-Sur le récepteur :
+On the receiver:
 
 ```bash
 uv run --no-sync hdmi-recv 0 --mode fountain --profile balanced --output received_files
 ```
 
-Sur l’émetteur :
+On the sender:
 
 ```bash
-uv run --no-sync hdmi-send monfichier.zip --mode fountain --profile balanced --screen 1
+uv run --no-sync hdmi-send myfile.zip --mode fountain --profile balanced --screen 1
 ```
 
-`0` et `1` sont des exemples d’indices, à adapter à la capture et à l’écran. Le receiver accepte aussi `name:Elgato`, `raw:1` ou un chemin vidéo local. Lancer `--help` sur chaque commande pour les options complètes.
+`0` and `1` are example device and monitor indices; adjust them to your setup. The receiver also accepts `name:Elgato`, `raw:1` or a local video path. Run each command with `--help` for all options.
 
-| Commande | Usage |
+| Command | Purpose |
 | --- | --- |
-| `hdmi-web` | Interface web locale |
-| `hdmi-send` / `hdmi-recv` | Émission / réception CLI |
-| `hdmi-sender` / `hdmi-receiver` | Consoles interactives |
-| `hdmi-calibrate` | Calibration du signal |
-| `hdmi-bench` | Benchmark logiciel |
+| `hdmi-web` | Local web interface |
+| `hdmi-send` / `hdmi-recv` | CLI transmission / reception |
+| `hdmi-sender` / `hdmi-receiver` | Interactive consoles |
+| `hdmi-calibrate` | Signal calibration |
+| `hdmi-bench` | Software benchmark |
 
-Les lanceurs installent seulement l’extra `web`. Après leur utilisation, relancer `uv sync --locked --extra all` pour les commandes CLI, ou `--extra dev` pour les outils de développement.
+The launchers install only the `web` extra. After using them, run `uv sync --locked --extra all` again for CLI commands, or use `--extra dev` for development tools.
 
-## Dépannage
+## Troubleshooting
 
-| Symptôme | Vérification |
+| Symptom | Check |
 | --- | --- |
-| `uv` introuvable | Installer uv puis rouvrir le terminal. |
-| `Repository not found` | Vérifier l’accès au dépôt privé et le compte GitHub connecté. |
-| Le port 5000 est occupé | Relancer avec `--port 5001` et utiliser cette adresse. |
-| Aucune capture détectée | Vérifier USB/pilote, cliquer **Detect devices**, fermer OBS et les autres applications utilisant la carte. |
-| Preview noire | Vérifier entrée/sortie HDMI, bon écran et bonne carte ; lancer le sender pour avoir un signal. |
-| Images visibles mais décodage instable | Même protocole/profil/encodage des deux côtés ; revenir à Fountain + Balanced + 2 bpc, puis calibrer. |
-| Speed ne change rien | Vérifier la fréquence réellement négociée par toute la chaîne, y compris la capture. |
-| Le sender continue après réception | Le mode offline ne reçoit pas d’accusé de réception ; arrêter manuellement après **Download**. |
-| `/sender/app` renvoie 404 | Conserver `sender.html` à la racine du clone ou le régénérer. |
-| CLI ou pytest introuvable après un lancement web | Réinstaller l’extra `all` ou `dev` correspondant. |
+| `uv` not found | Install uv and reopen the terminal. |
+| `Repository not found` | Check repository access and the signed-in GitHub account. |
+| Port 5000 is occupied | Restart with `--port 5001` and use that address. |
+| No capture device detected | Check USB and drivers, click **Detect devices**, and close OBS or other apps using the card. |
+| Black preview | Check the HDMI input/output, display and capture device; start the sender to produce a signal. |
+| Visible frames but unstable decoding | Match protocol/profile/encoding on both sides; return to Fountain + Balanced + 2 bpc, then calibrate. |
+| Speed makes no difference | Check the actual negotiated refresh rate throughout the path, including the capture card. |
+| Sender continues after reception | Offline mode receives no acknowledgement; stop it manually after **Download**. |
+| `/sender/app` returns 404 | Keep `sender.html` at the clone root or regenerate it. |
+| CLI or pytest missing after a web launch | Reinstall the `all` or `dev` extra as appropriate. |
 
-## Développement et mise à jour
+## Development and updates
 
-Sur un clone sans modifications locales :
+In a clone with no local changes:
 
 ```bash
 git pull --ff-only
@@ -187,16 +187,16 @@ uv sync --locked --extra dev
 uv run --no-sync python tools/build_sender_html.py --check
 ```
 
-`sender.html` est généré depuis `src/interfaces/browser_sender/`. Pour le reconstruire :
+`sender.html` is generated from `src/interfaces/browser_sender/`. To rebuild it:
 
 ```bash
 uv run --no-sync python tools/build_sender_html.py
 ```
 
-Sous Windows, exécuter le [contrôle qualité](testing.md) :
+On Windows, run the [quality gate](testing.md):
 
 ```powershell
 uv run --no-sync powershell -ExecutionPolicy Bypass -File tools/run_quality_gate.ps1
 ```
 
-Aucune validation matérielle Linux/macOS n’est revendiquée par ce guide. Les tests logiciels et les captures ne prouvent pas la compatibilité de chaque carte de capture.
+This guide does not claim hardware validation on Linux/macOS. Software tests and screenshots do not prove compatibility with every capture card.

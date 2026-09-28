@@ -43,6 +43,11 @@ ui_*.json
 .worktrees/
 CLAUDE.md
 CLAUDE.local.md
+# Explicit filenames plus case-insensitive variants (also match subdirectories)
+AGENTS.md
+agents.md
+AGENT.md
+agent.md
 [Aa][Gg][Ee][Nn][Tt].[Mm][Dd]
 [Aa][Gg][Ee][Nn][Tt][Ss].[Mm][Dd]
 AGENTS.override.md

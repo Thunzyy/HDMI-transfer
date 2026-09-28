@@ -1,13 +1,13 @@
 # Migration
 
-## Regle simple
+## General rule
 
-Quand vous touchez du code, utilisez les modules canoniques. Les anciens imports restent supportes pour ne pas casser les scripts existants, mais ils ne sont plus la cible de developpement.
+Use canonical modules when changing code. Historical imports remain supported to avoid breaking existing scripts, but new development should not target them.
 
-## Mappage des modules
+## Module mapping
 
-| Legacy | Canonique |
-|--------|-----------|
+| Legacy | Canonical |
+| --- | --- |
 | `hdmi_transfer.config` | `hdmi_transfer.core.config` |
 | `hdmi_transfer.prng` | `hdmi_transfer.core.prng` |
 | `hdmi_transfer.protocols.*` | `hdmi_transfer.core.protocols.*` |
@@ -18,44 +18,42 @@ Quand vous touchez du code, utilisez les modules canoniques. Les anciens imports
 | `hdmi_transfer.receiver.cli.*` | `hdmi_transfer.interfaces.cli.*` |
 | `hdmi_transfer.web.server` | `hdmi_transfer.interfaces.web.app_factory` |
 
-## Nouveaux points d'entree
+## Entry points
 
-| Usage | Point d'entree |
-|------|----------------|
+| Use | Entry point |
+| --- | --- |
 | Sender CLI | `hdmi_transfer.interfaces.cli.send` |
 | Receiver CLI | `hdmi_transfer.interfaces.cli.receive` |
 | Calibration CLI | `hdmi_transfer.interfaces.cli.calibrate` |
 | Sender console | `hdmi_transfer.interfaces.cli.sender_console` |
 | Receiver console | `hdmi_transfer.interfaces.cli.receiver_console` |
-| Web app | `hdmi_transfer.interfaces.web.create_app` |
+| Web application | `hdmi_transfer.interfaces.web.create_app` |
 
-## Sender navigateur
+## Browser sender
 
-- Le protocole JS n'est plus edite a la main dans `sender.html`.
-- Modifier les sources dans `src/interfaces/browser_sender/`.
-- Regenerer ensuite:
+Edit the sources in `src/interfaces/browser_sender/`, not the generated `sender.html`. Rebuild and verify with:
 
 ```bash
 uv run python tools/build_sender_html.py
 uv run python tools/build_sender_html.py --check
 ```
 
-## Comment migrer une zone legacy
+## Migrating a legacy area
 
-1. Trouver le chemin canonique cible.
-2. Deplacer la logique reelle dans `domain`, `application`, `adapters` ou `interfaces`.
-3. Laisser le module legacy comme wrapper explicite via `hdmi_transfer.compat.imports.reexport`.
-4. Ajouter ou mettre a jour les tests de compatibilite.
+1. Identify the target canonical module.
+2. Move the implementation into `domain`, `application`, `adapters` or `interfaces`.
+3. Keep the legacy module as an explicit wrapper using `hdmi_transfer.compat.imports.reexport`.
+4. Add or update compatibility tests.
 
-## Politique de compatibilite
+## Compatibility policy
 
-- Les shims legacy restent acceptes tant que les scripts publics et les imports historiques doivent continuer a fonctionner.
-- Les nouveaux tests doivent viser les modules canoniques.
-- Si vous voulez visualiser les imports a migrer, definir `HDMI_EXFIL_WARN_LEGACY_IMPORTS=1`.
+- Keep legacy shims while public scripts and historical imports need them.
+- Target canonical modules in new tests.
+- Set `HDMI_EXFIL_WARN_LEGACY_IMPORTS=1` to identify imports that need migration.
 
-## Ce qui ne doit plus arriver
+## Patterns to avoid
 
-- Une seconde implementation du protocole dans le sender navigateur.
-- Une logique de decodage dans `receiver_worker.py` ou dans une route Flask.
-- Une logique de session dans `sender/cli/send.py` ou `receiver/cli/receive.py`.
-- Une gestion ad hoc du cycle de vie de capture dans le code web.
+- A second protocol implementation in the browser sender.
+- Decoding logic in `receiver_worker.py` or a Flask route.
+- Session logic in `sender/cli/send.py` or `receiver/cli/receive.py`.
+- Ad hoc capture lifecycle management in web code.

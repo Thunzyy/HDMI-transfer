@@ -1,14 +1,14 @@
 # Testing
 
-## Gate local canonique
+## Standard local quality gate
 
-Le point d'entree unique pour valider la branche localement est :
+Use this entry point to validate a branch locally:
 
 ```powershell
 uv run powershell -ExecutionPolicy Bypass -File tools/run_quality_gate.ps1
 ```
 
-Le script execute dans l'ordre :
+It runs these checks in order:
 
 ```text
 uv run pytest -m "not hardware"
@@ -17,11 +17,11 @@ uv run python tools/build_sender_html.py --check
 uv run hdmi-bench --profile balanced --mode fountain --no-json
 ```
 
-## Fallback local optionnel
+## Optional local fallback
 
-Le gate complet passe maintenant avec `tests/test_loopback.py` inclus. Le switch `-SkipNativeLoopback` reste disponible uniquement comme secours local si une installation OpenCV est defectueuse sur un poste de dev particulier.
+The full gate includes `tests/test_loopback.py`. Use `-SkipNativeLoopback` only as a local fallback when a development machine has a broken OpenCV installation.
 
-## Commandes ciblees utiles
+## Targeted checks
 
 ```bash
 uv run pytest tests/contracts -v
@@ -33,29 +33,36 @@ uv run pytest tests/test_sender_build.py tests/test_sender_html_magic.py -v
 uv run pytest tests/test_fountain_overhead.py tests/perf/test_fountain_budget.py -v
 ```
 
-## Validation hardware
+## Docker smoke test
 
-Le hardware n'entre pas dans la CI standard. Il doit etre valide manuellement sur une machine preparee :
+With Docker and Python available, run:
+
+```bash
+python tools/docker_smoke.py
+```
+
+This builds the image and starts a uniquely named temporary Compose project. It checks health, web pages, APIs, non-root execution, downloads and file persistence after container recreation. It then removes only its own test containers and volume. GitHub Actions runs this check on Linux; the Python quality gate runs on Windows. This does not test physical HDMI reception.
+
+## Hardware validation
+
+Hardware tests are excluded from standard CI. Run them manually on a prepared machine:
 
 1. `hdmi-calibrate --profile balanced loopback <capture-index>`
 2. `uv run hdmi-recv <capture-index> --profile balanced`
 3. `uv run hdmi-send <payload> --mode sequential --profile balanced --screen <screen-index>`
 4. `uv run hdmi-send <payload> --mode fountain --profile balanced --screen <screen-index>`
-5. `uv run hdmi-web`, puis verification des pages `/`, `/sender`, `/history` et `/settings`
+5. `uv run hdmi-web`, then check `/`, `/sender`, `/history` and `/settings`.
 
-## Ce que couvrent les tests
+## Test coverage
 
-- Contrats protocole et compatibilite Python/browser
-- Sessions shared send/receive
-- Capture manager et backoff sur lecture ratee
-- Interfaces web Flask et wrappers CLI
-- Budgets de performance fountain
-- Compatibilite des imports legacy
-- Proprietes deterministes PRNG/RSD
+- Protocol contracts and Python/browser compatibility.
+- Shared send/receive sessions.
+- Capture management and backoff after failed reads.
+- Flask interfaces and CLI wrappers.
+- Fountain performance budgets.
+- Legacy import compatibility.
+- Deterministic PRNG/RSD properties.
 
-## Regle de sortie
+## Completion criteria
 
-Une branche n'est pas prete a etre mergee tant que :
-- `uv run powershell -ExecutionPolicy Bypass -File tools/run_quality_gate.ps1` ne passe pas
-- `uv run python tools/build_sender_html.py --check` ne passe pas
-- les checks hardware manuels requis n'ont pas ete executes sur une machine equipee
+A branch is ready to merge when the quality gate and generated-sender check pass, and any hardware checks required by the change have been run on a properly equipped machine. Record software and hardware results separately.

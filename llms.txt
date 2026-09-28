@@ -8,7 +8,6 @@ This is not a production-ready transfer solution. Theoretical Fountain payload c
 
 ## Documentation
 
-- [Docker startup, persistence and capture devices](docs/docker.md)
 - [Overview and screenshots](README.md)
 - [Comparison with Bluetooth, Wi-Fi, Ethernet and USB](README.md#compared-with-wi-fi-bluetooth-ethernet-and-usb) — sourced example link rates, not measured file-copy speeds.
 - [Installation, offline setup, LAN setup and CLI](docs/getting-started.md)
@@ -30,4 +29,4 @@ This is not a production-ready transfer solution. Theoretical Fountain payload c
 
 ## Boundaries
 
-Python 3.11+ is required; the repository pins its development version in `.python-version`. Windows is the CI platform. Native hardware compatibility on Linux/macOS requires separate validation. Profile frame rates are targets, not measured throughput guarantees. Screenshots show an idle receiver and a prepared sample file, not a completed hardware transfer. Video encoding is not encryption. The local web server defaults to loopback; LAN hosting exposes receiver and file-management endpoints and is intended for trusted networks. The repository is currently private and has no LICENSE file; do not describe it as publicly available or MIT licensed.
+Python 3.11+ is required; the repository pins its development version in `.python-version`. The Python quality gate runs on Windows; the Docker smoke test runs on Linux. Native hardware compatibility on Linux/macOS requires separate validation. Profile frame rates are targets, not measured throughput guarantees. Screenshots show an idle receiver and a prepared sample file, not a completed hardware transfer. Video encoding is not encryption. The local web server defaults to loopback; LAN hosting exposes receiver and file-management endpoints and is intended for trusted networks. The project is licensed under the MIT License (see LICENSE). A license does not imply that repository access is public.

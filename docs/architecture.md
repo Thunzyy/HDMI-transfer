@@ -1,69 +1,69 @@
 # Architecture
 
-## Objectif
+## Goal
 
-Le projet est maintenant structure autour d'un moteur de transfert unique, d'un manifest protocolaire unique, et d'interfaces minces. Le code UI, CLI et web n'embarque plus sa propre logique protocolaire.
+The project is organized around a shared transfer engine, a single protocol manifest and thin interfaces. Protocol behavior belongs in shared modules rather than separate UI, CLI or web implementations.
 
-## Couches
+## Layers
 
 ```text
 src/
-  domain/          Donnees canoniques du protocole
-  application/     Sessions send/receive et evenements
-  adapters/        Capture, stockage et integrations techniques
-  interfaces/      CLI, web Flask et sender navigateur
-  compat/          Shims d'import legacy, explicites et testes
+  domain/          Canonical protocol data
+  application/     Send/receive sessions and events
+  adapters/        Capture, storage and technical integrations
+  interfaces/      CLI, Flask web interface and browser sender
+  compat/          Explicit, tested legacy import shims
 ```
 
-## Responsabilites
+## Responsibilities
 
-| Couche | Role | Ce qui n'a pas le droit d'y vivre |
-|--------|------|------------------------------------|
-| `domain` | Manifest protocolaire, modeles immuables, constantes partagees | IO, capture, Flask, pygame, OpenCV |
-| `application` | Orchestration de session, evenements, progression, cutover send/receive | Acces materiel direct, rendu UI |
-| `adapters` | Capture persistante, registry devices, stockage et bridges techniques | Regles metier du protocole |
-| `interfaces` | Commandes CLI, routes web, preview, generation sender HTML | Etats de protocole, heuristiques de decodage |
-| `compat` | Reexports legacy uniformes et strategie d'avertissement | Nouvelle logique produit |
+| Layer | Responsibility | Keep out of this layer |
+| --- | --- | --- |
+| `domain` | Protocol manifest, immutable models, shared constants | I/O, capture, Flask, pygame, OpenCV |
+| `application` | Session orchestration, events, progress, send/receive transitions | Direct hardware access, UI rendering |
+| `adapters` | Persistent capture, device registry, storage and integrations | Protocol rules |
+| `interfaces` | CLI commands, web routes, preview, sender HTML generation | Protocol state machines and decoding heuristics |
+| `compat` | Consistent legacy re-exports and warning behavior | New product logic |
 
-## Source de verite
+## Sources of truth
 
-- `hdmi_transfer.domain.protocol_manifest` est la source de verite pour les profils, magics, tailles de header et parametres exposes au sender navigateur.
-- `tools/build_sender_html.py` genere `sender.html` et `protocol.generated.js` a partir du manifest. Le HTML standalone n'est plus une implementation manuelle du protocole.
-- `hdmi_transfer.application.send_session.SendSession` et `hdmi_transfer.application.receive_session.ReceiveSession` portent les machines d'etat communes. CLI et web appellent ces services au lieu de dupliquer la logique.
+- `hdmi_transfer.domain.protocol_manifest` defines profiles, magic values, header sizes and parameters exposed to the browser sender.
+- `tools/build_sender_html.py` generates `sender.html` and `protocol.generated.js` from the manifest and browser sources. Do not edit the standalone HTML directly.
+- `hdmi_transfer.application.send_session.SendSession` and `hdmi_transfer.application.receive_session.ReceiveSession` provide shared state machines. CLI and web interfaces use these services instead of duplicating behavior.
 
-## Flux d'envoi
+## Sending flow
 
-1. L'interface CLI ou web collecte les options utilisateur.
-2. `SendSession` lit le payload, construit les metadonnees et produit les packets/frame events.
-3. Le renderer choisi affiche les frames.
-4. Le sender navigateur suit le meme contrat protocolaire via les assets generes.
+1. The interface collects user options.
+2. `SendSession` reads the payload, builds metadata and produces packets/frame events.
+3. The selected renderer displays the frames.
+4. The browser sender follows the same wire protocol through generated assets.
 
-## Flux de reception
+## Receiving flow
 
-1. `CaptureManager` ouvre ou reutilise une capture persistante.
-2. La couche interface lit les frames et les transforme en grilles echantillonnees.
-3. `ReceiveSession` detecte le protocole, gere la progression et reconstruit le fichier.
-4. Les routes web ou le CLI ne font qu'exposer les evenements et les fichiers produits.
+1. `CaptureManager` opens or reuses a persistent capture handle.
+2. The interface reads frames and converts them into sampled grids.
+3. `ReceiveSession` detects the protocol, tracks progress and reconstructs the file.
+4. Web routes or CLI commands expose events and resulting files.
 
-## Web app
+## Web application
 
-- `hdmi_transfer.interfaces.web.app_factory.create_app` cree l'application Flask.
-- `routes_devices.py`, `routes_receive.py` et `routes_files.py` portent le routage HTTP.
-- `preview_stream.py` reste dans la couche interface car il expose un flux HTTP, mais il depend du `CaptureManager` pour la capture.
-- `hdmi_transfer.web.server` est desormais un shim de compatibilite.
+- `hdmi_transfer.interfaces.web.app_factory.create_app` creates the Flask application.
+- `routes_devices.py`, `routes_receive.py` and `routes_files.py` define HTTP routes.
+- `preview_stream.py` belongs to the interface layer because it serves an HTTP stream; it uses `CaptureManager` for capture.
+- `hdmi_transfer.web.server` is a compatibility shim.
 
-## Compatibilite
+## Compatibility
 
-- Les anciens imports (`hdmi_transfer.protocols`, `hdmi_transfer.config`, `hdmi_transfer.cli.*`, etc.) restent disponibles via `hdmi_transfer.compat.imports.reexport`.
-- Les wrappers legacy peuvent emettre un avertissement si `HDMI_EXFIL_WARN_LEGACY_IMPORTS=1`.
-- Toute nouvelle contribution doit viser les chemins canoniques, pas les shims.
+- Historical imports such as `hdmi_transfer.protocols`, `hdmi_transfer.config` and `hdmi_transfer.cli.*` remain available through `hdmi_transfer.compat.imports.reexport`.
+- Legacy wrappers can emit warnings when `HDMI_EXFIL_WARN_LEGACY_IMPORTS=1`.
+- New contributions should use canonical paths rather than shims.
 
-## Regles de qualite
+## Quality checks
 
-- Les performances fountain sont bloquees par `tests/test_fountain_overhead.py` et `tests/perf/test_fountain_budget.py`.
-- La generation du sender navigateur est verifiee par `uv run python tools/build_sender_html.py --check`.
-- Le gate local et CI passe par `tools/run_quality_gate.ps1`.
+- Fountain performance budgets are enforced by `tests/test_fountain_overhead.py` and `tests/perf/test_fountain_budget.py`.
+- Check generated browser assets with `uv run python tools/build_sender_html.py --check`.
+- Run the local/CI quality gate through `tools/run_quality_gate.ps1`.
 
-## Decision importante
+## Migration direction
 
-Le projet reste en strangler refactor: les shims legacy existent encore, mais l'architecture cible est deja en place. Le prochain travail doit retirer les points morts, pas reintroduire de logique protocolaire dans les interfaces.
+The project is being migrated incrementally. Legacy shims remain while the target architecture is in place. Continue moving behavior into shared modules; do not reintroduce protocol logic into interfaces.

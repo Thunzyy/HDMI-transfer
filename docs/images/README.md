@@ -1,24 +1,24 @@
-# Captures de HDMI Transfer
+# HDMI Transfer screenshots
 
-Ces PNG proviennent des pages réelles de l’application dans Chrome, sans retouche de l’interface ni injection de statistiques.
+These PNGs show the application's actual pages in Chrome, without interface retouching or injected statistics.
 
-| Fichier | État présenté |
+| File | State shown |
 | --- | --- |
-| `receiver.png` | Récepteur au repos, aucun périphérique de capture exposé. |
-| `sender.png` | Sender offline avec `hello-hdmi.txt` chargé ; aucune transmission lancée. |
-| `settings.png` | Page des réglages. |
+| `receiver.png` | Idle receiver with no capture device exposed. |
+| `sender.png` | Offline sender with `hello-hdmi.txt` loaded; transmission has not started. |
+| `settings.png` | Settings page. |
 
-Le serveur utilise un dossier temporaire vide et la détection matérielle est désactivée. Le script ne lit pas l’historique réel et n’ouvre aucune carte de capture. Ces images illustrent l’interface ; elles ne prouvent ni un transfert matériel réussi ni un débit mesuré.
+The server uses an empty temporary directory with hardware detection disabled. The script does not read real transfer history or open a capture card. These images illustrate the interface; they are not evidence of a completed hardware transfer or measured throughput.
 
-La valeur « Throughput » du sender est une estimation calculée par l’interface, pas le résultat d’une mesure sur une carte HDMI.
+The sender's **Throughput** value is an estimate calculated by the interface, not a capture-card measurement.
 
-## Régénération
+## Regenerate
 
-Installer Chrome, puis depuis la racine du dépôt :
+Install Chrome, then run from the repository root:
 
 ```bash
 uv sync --locked --extra dev
 uv run --no-sync python tools/capture_docs.py
 ```
 
-Selenium Manager peut télécharger le pilote Chrome à la première exécution. Le script démarre un serveur local sur un port libre, ouvre un navigateur headless isolé, capture les trois pages et ferme ses ressources. Il échoue en cas d’erreur console sévère. Relire visuellement les captures avant de les publier.
+Selenium Manager may download the Chrome driver on the first run. The script starts a local server on a free port, opens an isolated headless browser, captures the three pages and releases its resources. It fails on severe console errors. Visually review the screenshots before publishing them.

@@ -1,24 +1,24 @@
-name: Feature validée
-description: Feature approuvée à mettre dans le backlog ou Ready
+name: Approved feature
+description: Approved feature ready for the backlog or implementation
 title: "[Feature] "
 labels: ["type:feature", "status:approved"]
 body:
   - type: textarea
     id: objective
     attributes:
-      label: Objectif
-      description: Ce qu'on veut livrer.
+      label: Objective
+      description: What should be delivered.
     validations:
       required: true
   - type: textarea
     id: context
     attributes:
-      label: Contexte
-      description: Liens, décisions, notes produit, contraintes.
+      label: Context
+      description: Links, decisions, product notes and constraints.
   - type: textarea
     id: acceptance
     attributes:
-      label: Critères d'acceptation
+      label: Acceptance criteria
       value: |
         - [ ] 
         - [ ] 
@@ -28,21 +28,21 @@ body:
   - type: textarea
     id: evidence
     attributes:
-      label: Preuves attendues
+      label: Expected evidence
       value: |
-        - [ ] Tests/build passés
-        - [ ] Capture ou preuve navigateur/API si pertinent
-        - [ ] PR liée à cette issue
-        - [ ] Validation verifier si nécessaire
+        - [ ] Tests/build passed
+        - [ ] Screenshot or browser/API evidence when relevant
+        - [ ] PR linked to this issue
+        - [ ] Independent review when required
   - type: dropdown
     id: priority
     attributes:
-      label: Priorité
+      label: Priority
       options: [P0, P1, P2, P3]
     validations:
       required: true
   - type: dropdown
     id: size
     attributes:
-      label: Taille
+      label: Size
       options: [XS, S, M, L, XL]

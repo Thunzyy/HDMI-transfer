@@ -1,103 +1,123 @@
-# Setup materiel
+# Hardware setup
 
-## Transfert entre deux PC
+## Transfer between two PCs
 
-Pour utiliser HDMI Transfer, commencer avec deux machines :
+Start with two computers:
 
 ```text
-PC émetteur (sortie HDMI) → câble HDMI → capture HDMI (entrée) → USB → PC récepteur
+Sender PC (HDMI output) → HDMI cable → capture card (HDMI input) → USB → receiver PC
 ```
 
-Une carte de capture est nécessaire : le port HDMI d’un ordinateur est généralement une sortie. Préparer le sender HTML local et installer le récepteur en suivant le [guide de démarrage](getting-started.md). Commencer en Fountain + Balanced + 2 bpc des deux côtés.
+A capture card is required because a computer's HDMI port is usually an output. Prepare the local HTML sender and install the receiver using the [getting-started guide](getting-started.md). Start with Fountain + Balanced + 2 bpc on both sides.
 
-## Développement sur un seul PC
+## Development with one PC
 
-Pour développer et valider localement la chaîne, on peut utiliser un loopback sur un seul PC :
+You can develop and validate the path using a single-PC loopback:
 
 ```text
-GPU ─── HDMI ──► ecran secondaire (sender)
+GPU ─── HDMI ──► secondary display (sender)
  │
- └───── HDMI ──► Elgato 4K X ──► meme PC via USB
+ └───── HDMI ──► Elgato 4K X ──► same PC over USB
 ```
 
-L'ecran secondaire et l'Elgato doivent recevoir le meme signal.
+The secondary display and capture card must receive the same signal.
 
-## Configuration Windows
+## Windows configuration
 
-1. Ouvrir `Parametres > Systeme > Affichage`
-2. Reperer l'Elgato comme ecran supplementaire
-3. Choisir `Dupliquer avec l'ecran secondaire`
-4. Verifier que le sender s'affiche sur l'ecran duplique et que la capture le lit
+1. Open **Settings > System > Display**.
+2. Identify the Elgato as an additional display.
+3. Choose to duplicate the secondary display onto it.
+4. Verify that the sender appears on the duplicated display and the card captures it.
 
-## Trouver l'index de capture
+## Find the capture index
 
-```bash
+With FFmpeg installed:
+
+```powershell
 ffmpeg -list_devices true -f dshow -i dummy 2>&1 | findstr "video"
 ```
 
-Ou en Python :
+Or run this Python snippet in the project's environment:
 
-```bash
-python -c "
+```python
 import cv2
+
 for i in range(10):
     cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
     if cap.isOpened():
-        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        print(f'Index {i}: {w}x{h}')
-        cap.release()
-"
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        print(f"Index {i}: {width}x{height}")
+    cap.release()
 ```
 
-## Trouver l'index du moniteur sender
+## Find the sender monitor index
 
-```bash
-python -c "
+Run this Python snippet in the project's environment:
+
+```python
 from hdmi_transfer.sender.display.monitors import get_monitors
-for i, m in enumerate(get_monitors()):
-    print(f'Monitor {i}: {m[\"width\"]}x{m[\"height\"]} at ({m[\"left\"]}, {m[\"top\"]})')
-"
+
+for i, monitor in enumerate(get_monitors()):
+    print(
+        f"Monitor {i}: {monitor['width']}x{monitor['height']} "
+        f"at ({monitor['left']}, {monitor['top']})"
+    )
 ```
 
 ## Calibration
 
-Toujours calibrer avant un transfert reel :
+Calibrate before an actual transfer:
 
 ```bash
 uv run --no-sync hdmi-calibrate --profile balanced loopback 1
 ```
 
-Regle importante : `--profile` doit etre place avant le subcommand.
+Place `--profile` before the subcommand. Replace `1` with your capture index.
 
-Interpretation du SNR :
+| SNR | Quality | Action |
+| --- | --- | --- |
+| > 30 dB | EXCELLENT | Ready for testing |
+| 20–30 dB | GOOD | Usable as configured |
+| 10–20 dB | FAIR | Reduce FPS and check the signal path |
+| < 10 dB | POOR | Check display duplication, wiring and capture source |
 
-| SNR | Qualite | Action |
-|-----|---------|--------|
-| > 30 dB | EXCELLENT | setup pret |
-| 20-30 dB | GOOD | utilisable tel quel |
-| 10-20 dB | FAIR | baisser le FPS ou passer en `quality` |
-| < 10 dB | POOR | verifier duplication, cablage et source capture |
+## Profiles
 
-## Profils recommandes
+| Profile | Resolution | Target FPS | Use |
+| --- | --- | --- | --- |
+| `balanced` | 1080p | 60 | Default starting point |
+| `quality` | 4K | 30 | Experiments on a 4K-compatible path |
+| `speed` | 1080p | 240 | Only when the display, card and receiver support the cadence |
 
-| Profil | Resolution | FPS | Quand l'utiliser |
-|--------|------------|-----|------------------|
-| `balanced` | 1080p | 60 | point de depart par defaut |
-| `quality` | 4K | 30 | si le signal est marginal |
-| `speed` | 1080p | 240 | uniquement quand la machine tient la charge |
+Changing profiles does not guarantee better signal quality. Match both ends and verify the negotiated resolution and frame rate.
 
-## Validation manuelle minimale
+## Docker on native Linux
+
+Confirm the card works on the Linux host, then select its video capture node:
+
+```bash
+ls -l /dev/video*
+export HDMI_VIDEO_DEVICE=/dev/video0
+export HDMI_VIDEO_GID=$(stat -c '%g' "$HDMI_VIDEO_DEVICE")
+docker compose -f compose.yaml -f compose.capture.yaml up --build -d --wait
+```
+
+The selected host device appears as `/dev/video0` in the container. Its numeric group is added to the non-root container user. Some cards expose multiple nodes; choose the video node that actually carries the signal. Keep both `-f` arguments when recreating the capture service.
+
+Docker Desktop does not automatically expose host USB capture cards. For native Windows capture, use `start.bat`. Driver/device compatibility still requires a physical test.
+
+## Minimum manual validation
 
 1. `hdmi-calibrate --profile balanced loopback <capture-index>`
 2. `uv run hdmi-recv <capture-index> --profile balanced`
 3. `uv run hdmi-send test.bin --mode sequential --profile balanced --screen <screen-index>`
 4. `uv run hdmi-send test.bin --mode fountain --profile balanced --screen <screen-index>`
-5. `uv run hdmi-web` puis verification de l'UI receiver et de `/sender`
+5. `uv run hdmi-web`, then verify the receiver UI and `/sender`.
 
-## Symptomes frequents
+## Common symptoms
 
-- Le receiver ne voit rien : mauvais index de capture ou duplication d'ecran absente
-- SNR bas : l'Elgato ne capture pas le bon affichage ou le mauvais cable est utilise
-- Chute de FPS en loopback : sender et receiver se battent pour les memes ressources, revenir a `balanced`
-- Decodage instable : verifier d'abord la calibration, ensuite la taille des blocs et le profil
+- No receiver signal: check the capture index and display duplication.
+- Low SNR: check the selected display, cable and capture source.
+- Falling FPS during loopback: the sender and receiver share resources; return to `balanced`.
+- Unstable decoding: check calibration first, then block size and profile.
