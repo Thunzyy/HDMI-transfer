@@ -3,7 +3,7 @@
   <desc id="description">A sender PC encodes a file into video frames. An HDMI cable carries those frames to a capture card, which sends the captured video over USB to a receiver PC. The receiver decodes the frames and reconstructs the file. No shared network is required for the file payload.</desc>
   <style>
     /* One illustrative transfer every six seconds; no scripts or external assets. */
-    .scan { opacity: 0; animation: scan 6s linear infinite; }
+    .pixel { animation: pixels 3.2s steps(1, end) infinite; }
     .packet { opacity: 0; }
     .hdmi { animation: hdmi 6s linear infinite; }
     .usb { animation: usb 6s linear infinite; }
@@ -12,11 +12,15 @@
     .capture { animation: capture 6s ease-in-out infinite; }
     .progress { stroke-dasharray: 164; animation: rebuild 6s ease-in-out infinite; }
     .complete { animation: complete 6s ease-in-out infinite; }
-    @keyframes scan {
-      0% { opacity: 0; transform: translateX(0); }
-      5% { opacity: .55; }
-      30% { opacity: .55; transform: translateX(202px); }
-      35%, 100% { opacity: 0; transform: translateX(202px); }
+    @keyframes pixels {
+      0%, 100% { fill: #69c3d5; }
+      12.5% { fill: #687cc6; }
+      25% { fill: #4da9ba; }
+      37.5% { fill: #8198d0; }
+      50% { fill: #5a799c; }
+      62.5% { fill: #77b6c4; }
+      75% { fill: #737cb6; }
+      87.5% { fill: #519bb9; }
     }
     @keyframes hdmi {
       0%, 8% { opacity: 0; transform: translateX(0); }
@@ -45,16 +49,11 @@
       100% { opacity: .15; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .scan, .packet, .capture, .progress, .complete { animation: none; }
+      .pixel, .packet, .capture, .progress, .complete { animation: none; }
     }
   </style>
   <defs>
     <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="none" stroke="#69d5e8" stroke-width="1.5"/></marker>
-    <pattern id="pixels" width="28" height="28" patternUnits="userSpaceOnUse">
-      <rect width="28" height="28" fill="#182a3d"/>
-      <path d="M0 0h13v13H0zM15 15h13v13H15z" fill="#69d5e8"/>
-      <path d="M15 0h13v13H15z" fill="#7484ee"/>
-    </pattern>
   </defs>
   <rect width="1200" height="440" rx="18" fill="#0f1117"/>
   <g font-family="Segoe UI, Arial, sans-serif">
@@ -64,8 +63,17 @@
     <g stroke="#637087" stroke-width="2" fill="#191d27">
       <rect x="65" y="123" width="260" height="156" rx="9"/>
       <path d="M175 279v20h-45m85-20v20h45M130 300h130" fill="none"/>
-      <rect x="82" y="139" width="226" height="122" rx="3" fill="url(#pixels)" stroke="none"/>
-      <rect class="scan" x="82" y="139" width="24" height="122" fill="#fff" stroke="none"/>
+      <g id="sender-pixels" stroke="none" aria-hidden="true">
+        <rect x="82" y="139" width="226" height="122" rx="3" fill="#182a3d"/>
+        <path class="pixel" style="animation-delay: -0.0s" fill="#69c3d5" d="M238 144h13v13h-13zM280 144h13v13h-13zM126 158h13v13h-13zM238 158h13v13h-13zM126 172h13v13h-13zM154 172h13v13h-13zM196 186h13v13h-13zM84 200h13v13h-13zM98 200h13v13h-13zM154 200h13v13h-13zM224 200h13v13h-13zM294 200h13v13h-13zM182 214h13v13h-13zM224 214h13v13h-13zM98 228h13v13h-13zM266 228h13v13h-13zM98 242h13v13h-13zM112 242h13v13h-13zM154 242h13v13h-13zM280 242h13v13h-13z"/>
+        <path class="pixel" style="animation-delay: -0.4s" fill="#687cc6" d="M224 158h13v13h-13zM252 158h13v13h-13zM280 158h13v13h-13zM252 172h13v13h-13zM84 186h13v13h-13zM224 186h13v13h-13zM196 200h13v13h-13zM266 200h13v13h-13zM280 200h13v13h-13zM154 214h13v13h-13zM252 214h13v13h-13zM126 228h13v13h-13zM294 228h13v13h-13zM266 242h13v13h-13z"/>
+        <path class="pixel" style="animation-delay: -0.8s" fill="#4da9ba" d="M168 144h13v13h-13zM98 158h13v13h-13zM154 158h13v13h-13zM294 158h13v13h-13zM112 172h13v13h-13zM210 172h13v13h-13zM294 172h13v13h-13zM84 214h13v13h-13zM168 214h13v13h-13zM294 214h13v13h-13zM112 228h13v13h-13zM196 228h13v13h-13zM280 228h13v13h-13zM182 242h13v13h-13zM238 242h13v13h-13zM252 242h13v13h-13z"/>
+        <path class="pixel" style="animation-delay: -1.2s" fill="#8198d0" d="M112 144h13v13h-13zM84 158h13v13h-13zM168 158h13v13h-13zM266 158h13v13h-13zM140 172h13v13h-13zM98 186h13v13h-13zM112 186h13v13h-13zM168 200h13v13h-13zM252 200h13v13h-13zM196 214h13v13h-13zM280 214h13v13h-13zM84 228h13v13h-13zM140 228h13v13h-13zM238 228h13v13h-13z"/>
+        <path class="pixel" style="animation-delay: -1.6s" fill="#5a799c" d="M84 144h13v13h-13zM98 172h13v13h-13zM210 186h13v13h-13zM280 186h13v13h-13zM294 186h13v13h-13zM210 200h13v13h-13zM238 200h13v13h-13zM126 214h13v13h-13zM210 214h13v13h-13zM154 228h13v13h-13zM182 228h13v13h-13zM224 228h13v13h-13z"/>
+        <path class="pixel" style="animation-delay: -2.0s" fill="#77b6c4" d="M98 144h13v13h-13zM126 144h13v13h-13zM140 144h13v13h-13zM154 144h13v13h-13zM182 144h13v13h-13zM196 144h13v13h-13zM252 144h13v13h-13zM294 144h13v13h-13zM196 158h13v13h-13zM210 158h13v13h-13zM168 172h13v13h-13zM182 186h13v13h-13zM238 186h13v13h-13zM252 186h13v13h-13zM112 200h13v13h-13zM98 214h13v13h-13zM112 214h13v13h-13zM196 242h13v13h-13zM210 242h13v13h-13z"/>
+        <path class="pixel" style="animation-delay: -2.4s" fill="#737cb6" d="M182 158h13v13h-13zM182 172h13v13h-13zM224 172h13v13h-13zM238 172h13v13h-13zM280 172h13v13h-13zM126 186h13v13h-13zM140 186h13v13h-13zM154 186h13v13h-13zM168 186h13v13h-13zM182 200h13v13h-13zM140 214h13v13h-13zM238 214h13v13h-13zM168 228h13v13h-13zM210 228h13v13h-13zM252 228h13v13h-13zM84 242h13v13h-13zM126 242h13v13h-13zM168 242h13v13h-13zM224 242h13v13h-13z"/>
+        <path class="pixel" style="animation-delay: -2.8s" fill="#519bb9" d="M210 144h13v13h-13zM224 144h13v13h-13zM266 144h13v13h-13zM112 158h13v13h-13zM140 158h13v13h-13zM84 172h13v13h-13zM196 172h13v13h-13zM266 172h13v13h-13zM266 186h13v13h-13zM126 200h13v13h-13zM140 200h13v13h-13zM266 214h13v13h-13zM140 242h13v13h-13zM294 242h13v13h-13z"/>
+      </g>
       <rect class="capture" x="495" y="171" width="210" height="83" rx="14"/>
       <path d="M495 196h-10v33h10m210-27h12v22h-12"/>
       <rect x="875" y="123" width="260" height="156" rx="9"/>
