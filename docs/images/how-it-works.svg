@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="440" viewBox="0 0 1200 440" role="img" aria-labelledby="title description">
+  <title id="title">How HDMI Transfer works</title>
+  <desc id="description">A sender PC encodes a file into video frames. An HDMI cable carries those frames to a capture card, which sends the captured video over USB to a receiver PC. The receiver decodes the frames and reconstructs the file. No shared network is required for the file payload.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="none" stroke="#69d5e8" stroke-width="1.5"/></marker>
+    <pattern id="pixels" width="28" height="28" patternUnits="userSpaceOnUse">
+      <rect width="28" height="28" fill="#182a3d"/>
+      <path d="M0 0h13v13H0zM15 15h13v13H15z" fill="#69d5e8"/>
+      <path d="M15 0h13v13H15z" fill="#7484ee"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="440" rx="18" fill="#0f1117"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <text x="40" y="48" fill="#f4f5f7" font-size="26" font-weight="700">One file. A video signal. Another computer.</text>
+    <text x="40" y="78" fill="#a9b1c0" font-size="17">Follow the data from the sender to the receiver.</text>
+
+    <g stroke="#637087" stroke-width="2" fill="#191d27">
+      <rect x="65" y="123" width="260" height="156" rx="9"/>
+      <path d="M175 279v20h-45m85-20v20h45M130 300h130" fill="none"/>
+      <rect x="82" y="139" width="226" height="122" rx="3" fill="url(#pixels)" stroke="none"/>
+      <rect x="495" y="171" width="210" height="83" rx="14"/>
+      <path d="M495 196h-10v33h10m210-27h12v22h-12"/>
+      <rect x="875" y="123" width="260" height="156" rx="9"/>
+      <path d="M985 279v20h-45m85-20v20h45M940 300h130" fill="none"/>
+    </g>
+
+    <g fill="none" stroke="#69d5e8" stroke-width="3" marker-end="url(#arrow)">
+      <path d="M341 213h127"/>
+      <path d="M733 213h125"/>
+    </g>
+    <g text-anchor="middle" font-size="17" font-weight="600" fill="#69d5e8">
+      <text x="403" y="175">HDMI cable</text>
+      <text x="796" y="175">USB</text>
+    </g>
+    <g text-anchor="middle" fill="#a9b1c0" font-size="14">
+      <text x="403" y="254">Video output</text>
+      <text x="796" y="254">Captured video</text>
+    </g>
+    <text x="600" y="206" fill="#f4f5f7" text-anchor="middle" font-size="18" font-weight="600">CAPTURE CARD</text>
+    <text x="600" y="232" fill="#a9b1c0" text-anchor="middle" font-size="16">HDMI in → USB out</text>
+
+    <path d="M981 149h34l22 22v72h-56z" fill="#252c40" stroke="#8b9bf4" stroke-width="2"/>
+    <path d="M1015 149v23h22M993 190h30M993 201h30M993 212h20" fill="none" stroke="#8b9bf4" stroke-width="2"/>
+    <circle cx="1042" cy="235" r="16" fill="#69d5e8"/>
+    <path d="m1035 235 5 5 9-10" fill="none" stroke="#0f1117" stroke-width="3"/>
+
+    <g text-anchor="middle">
+      <g fill="#f4f5f7" font-size="22" font-weight="700">
+        <text x="195" y="337">1. Sender PC</text>
+        <text x="600" y="337">2. Capture card</text>
+        <text x="1005" y="337">3. Receiver PC</text>
+      </g>
+      <g fill="#a9b1c0" font-size="18">
+        <text x="195" y="367">Encode file → video frames</text>
+        <text x="600" y="367">Capture the HDMI signal</text>
+        <text x="1005" y="367">Decode frames → original file</text>
+      </g>
+    </g>
+    <path d="M40 391h1120" stroke="#2b3140"/>
+    <text x="600" y="420" text-anchor="middle" fill="#a9b1c0" font-size="16">File payload travels over HDMI and USB. No shared network required.</text>
+  </g>
+</svg>
