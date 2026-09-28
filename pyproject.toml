@@ -5,13 +5,19 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hdmi-transfer"
 version = "0.1.0"
-description = "Maximum throughput data transfer over HDMI signal encoding"
+description = "Transfer files over HDMI video with a browser sender and USB capture-card receiver"
+keywords = ["hdmi", "file-transfer", "video-signal", "capture-card", "fountain-codes", "offline"]
 requires-python = ">= 3.11"
 readme = "README.md"
 dependencies = [
     "numpy >= 1.24",
     "numba >= 0.60.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/Thunzyy/HDMI-transfer"
+Documentation = "https://github.com/Thunzyy/HDMI-transfer/blob/main/docs/getting-started.md"
+Issues = "https://github.com/Thunzyy/HDMI-transfer/issues"
 
 [project.optional-dependencies]
 sender = [

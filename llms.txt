@@ -1,0 +1,28 @@
+# HDMI Transfer
+
+> File transfer over HDMI video, with a standalone browser sender and a local Python/Flask receiver connected to a USB HDMI capture card.
+
+The sender turns a file into video frames. The capture-card receiver decodes those frames and reconstructs the file. The payload travels over HDMI, not over a network file-sharing protocol. Fountain and sequential protocols are available. Start with Fountain, Balanced (1080p / 60 target FPS), and 2 bits per channel on both sides.
+
+## Documentation
+
+- [Overview and screenshots](README.md)
+- [Installation, offline setup, LAN setup and CLI](docs/getting-started.md)
+- [Hardware and calibration](docs/hardware-setup.md)
+- [Architecture](docs/architecture.md)
+- [Testing](docs/testing.md)
+- [Screenshot provenance](docs/images/README.md)
+
+## Entry points
+
+- Windows: `start.bat`; POSIX: `sh start.sh` (requires uv).
+- Manual: `uv sync --locked --extra web`, then `uv run --no-sync hdmi-web`.
+- Receiver UI: `http://localhost:5000/`.
+- Offline sender: open the generated `sender.html` locally in a browser.
+- Hosted sender: `/sender`; explicit one-PC test mode: `/sender/test`.
+- Install the `all` extra for CLI tools; the `dev` extra for testing.
+- Browser sender sources: `src/interfaces/browser_sender/`; build: `tools/build_sender_html.py`.
+
+## Boundaries
+
+Python 3.11+ is required; the repository pins its development version in `.python-version`. Windows is the CI platform. Native hardware compatibility on Linux/macOS requires separate validation. Profile frame rates are targets, not measured throughput guarantees. Screenshots show an idle receiver and a prepared sample file, not a completed hardware transfer. Video encoding is not encryption. The local web server defaults to loopback; LAN hosting exposes receiver and file-management endpoints and is intended for trusted networks. The repository is currently private and has no LICENSE file; do not describe it as publicly available or MIT licensed.
