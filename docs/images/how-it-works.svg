@@ -1,6 +1,53 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="440" viewBox="0 0 1200 440" role="img" aria-labelledby="title description">
   <title id="title">How HDMI Transfer works</title>
   <desc id="description">A sender PC encodes a file into video frames. An HDMI cable carries those frames to a capture card, which sends the captured video over USB to a receiver PC. The receiver decodes the frames and reconstructs the file. No shared network is required for the file payload.</desc>
+  <style>
+    /* One illustrative transfer every six seconds; no scripts or external assets. */
+    .scan { opacity: 0; animation: scan 6s linear infinite; }
+    .packet { opacity: 0; }
+    .hdmi { animation: hdmi 6s linear infinite; }
+    .usb { animation: usb 6s linear infinite; }
+    .second { animation-delay: .24s; }
+    .third { animation-delay: .48s; }
+    .capture { animation: capture 6s ease-in-out infinite; }
+    .progress { stroke-dasharray: 164; animation: rebuild 6s ease-in-out infinite; }
+    .complete { animation: complete 6s ease-in-out infinite; }
+    @keyframes scan {
+      0% { opacity: 0; transform: translateX(0); }
+      5% { opacity: .55; }
+      30% { opacity: .55; transform: translateX(202px); }
+      35%, 100% { opacity: 0; transform: translateX(202px); }
+    }
+    @keyframes hdmi {
+      0%, 8% { opacity: 0; transform: translateX(0); }
+      10% { opacity: 1; transform: translateX(0); }
+      35% { opacity: 1; transform: translateX(110px); }
+      37%, 100% { opacity: 0; transform: translateX(110px); }
+    }
+    @keyframes capture {
+      0%, 25%, 65%, 100% { stroke: #637087; }
+      35%, 50% { stroke: #69d5e8; }
+    }
+    @keyframes usb {
+      0%, 44% { opacity: 0; transform: translateX(0); }
+      46% { opacity: 1; transform: translateX(0); }
+      71% { opacity: 1; transform: translateX(108px); }
+      73%, 100% { opacity: 0; transform: translateX(108px); }
+    }
+    @keyframes rebuild {
+      0%, 48% { stroke-dashoffset: 164; }
+      80%, 95% { stroke-dashoffset: 0; opacity: 1; }
+      100% { stroke-dashoffset: 0; opacity: 0; }
+    }
+    @keyframes complete {
+      0%, 73% { opacity: .15; }
+      83%, 95% { opacity: 1; }
+      100% { opacity: .15; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .scan, .packet, .capture, .progress, .complete { animation: none; }
+    }
+  </style>
   <defs>
     <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="none" stroke="#69d5e8" stroke-width="1.5"/></marker>
     <pattern id="pixels" width="28" height="28" patternUnits="userSpaceOnUse">
@@ -18,7 +65,8 @@
       <rect x="65" y="123" width="260" height="156" rx="9"/>
       <path d="M175 279v20h-45m85-20v20h45M130 300h130" fill="none"/>
       <rect x="82" y="139" width="226" height="122" rx="3" fill="url(#pixels)" stroke="none"/>
-      <rect x="495" y="171" width="210" height="83" rx="14"/>
+      <rect class="scan" x="82" y="139" width="24" height="122" fill="#fff" stroke="none"/>
+      <rect class="capture" x="495" y="171" width="210" height="83" rx="14"/>
       <path d="M495 196h-10v33h10m210-27h12v22h-12"/>
       <rect x="875" y="123" width="260" height="156" rx="9"/>
       <path d="M985 279v20h-45m85-20v20h45M940 300h130" fill="none"/>
@@ -27,6 +75,14 @@
     <g fill="none" stroke="#69d5e8" stroke-width="3" marker-end="url(#arrow)">
       <path d="M341 213h127"/>
       <path d="M733 213h125"/>
+    </g>
+    <g fill="#f4f5f7" stroke="#0f1117" stroke-width="2" aria-hidden="true">
+      <circle class="packet hdmi" cx="346" cy="213" r="5"/>
+      <circle class="packet hdmi second" cx="346" cy="213" r="5"/>
+      <circle class="packet hdmi third" cx="346" cy="213" r="5"/>
+      <circle class="packet usb" cx="738" cy="213" r="5"/>
+      <circle class="packet usb second" cx="738" cy="213" r="5"/>
+      <circle class="packet usb third" cx="738" cy="213" r="5"/>
     </g>
     <g text-anchor="middle" font-size="17" font-weight="600" fill="#69d5e8">
       <text x="403" y="175">HDMI cable</text>
@@ -41,8 +97,12 @@
 
     <path d="M981 149h34l22 22v72h-56z" fill="#252c40" stroke="#8b9bf4" stroke-width="2"/>
     <path d="M1015 149v23h22M993 190h30M993 201h30M993 212h20" fill="none" stroke="#8b9bf4" stroke-width="2"/>
-    <circle cx="1042" cy="235" r="16" fill="#69d5e8"/>
-    <path d="m1035 235 5 5 9-10" fill="none" stroke="#0f1117" stroke-width="3"/>
+    <path d="M923 261h164" stroke="#30394c" stroke-width="4" stroke-linecap="round"/>
+    <path class="progress" d="M923 261h164" stroke="#69d5e8" stroke-width="4" stroke-linecap="round"/>
+    <g class="complete">
+      <circle cx="1042" cy="235" r="16" fill="#69d5e8"/>
+      <path d="m1035 235 5 5 9-10" fill="none" stroke="#0f1117" stroke-width="3"/>
+    </g>
 
     <g text-anchor="middle">
       <g fill="#f4f5f7" font-size="22" font-weight="700">
