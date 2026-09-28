@@ -8,11 +8,17 @@ build/
 __pycache__/
 *.pyc
 *.pyo
+*.nbc
+*.nbi
 
 # Testing
 .pytest_cache/
 .hypothesis/
 .benchmarks/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
 
 # Runtime output
 received_files/

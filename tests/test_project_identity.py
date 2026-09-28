@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tomllib
+import re
 from pathlib import Path
 
 
@@ -16,7 +17,7 @@ def test_branding_uses_hdmi_transfer_in_readme_and_sender() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     sender = (REPO_ROOT / "sender.html").read_text(encoding="utf-8")
 
-    assert "# HDMI Transfer" in readme
+    assert re.search(r"(?m)^# HDMI Transfer\b|<h1\b[^>]*>\s*HDMI Transfer\b[^<]*</h1>", readme)
     assert "<title>HDMI Transfer" in sender
 
 
