@@ -1,8 +1,10 @@
 # HDMI Transfer
 
-> File transfer over HDMI video, with a standalone browser sender and a local Python/Flask receiver connected to a USB HDMI capture card.
+> Experimental proof of concept (POC) for file transfer over HDMI video, with a standalone browser sender and a local Python/Flask receiver connected to a USB HDMI capture card.
 
 The sender turns a file into video frames. The capture-card receiver decodes those frames and reconstructs the file. The payload travels over HDMI, not over a network file-sharing protocol. Fountain and sequential protocols are available. Start with Fountain, Balanced (1080p / 60 target FPS), and 2 bits per channel on both sides.
+
+This is not a production-ready transfer solution. Theoretical Fountain payload ceilings at 2 bits/channel and 8x8 blocks: Balanced 1080p60 = 1.46 MB/s (11.66 Mbps), Speed 1080p240 = 5.83 MB/s (46.63 Mbps), Quality 4K30 = 2.92 MB/s (23.32 Mbps). These are encoding-capacity estimates, not measured hardware goodput; see the README for assumptions.
 
 ## Documentation
 

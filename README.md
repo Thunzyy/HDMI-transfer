@@ -2,7 +2,7 @@
   <img src="docs/logo_hdmi_animated.svg" alt="HDMI Transfer — file transfer over HDMI video" width="160" />
 </p>
 
-# HDMI Transfer — File Transfer over HDMI
+# HDMI Transfer — File Transfer over HDMI (POC)
 
 <p align="center"><strong>Turn a file into a video signal. Rebuild it on another computer with a capture card.</strong></p>
 
@@ -16,6 +16,7 @@
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
   <a href="#screenshots">Screenshots</a> ·
+  <a href="#transfer-speeds">Transfer speeds</a> ·
   <a href="docs/getting-started.md">Installation guide</a> ·
   <a href="docs/hardware-setup.md">Hardware setup</a> ·
   <a href="#frequently-asked-questions">FAQ</a>
@@ -24,6 +25,8 @@
 **HDMI Transfer** encodes files into video frames displayed through an HDMI output. On the receiving computer, an **HDMI-to-USB capture card** captures those frames so the software can reconstruct the original file. The file payload travels through video; no network file share is required.
 
 A browser-based sender, a USB capture-card receiver, fountain codes and a local Python/Flask web interface work together to move files between two computers.
+
+> **Proof of concept (POC):** this is an experimental project for demonstrating file transfer over HDMI video. It is not a production-ready transfer solution; reliability and performance must be validated on your hardware.
 
 <p align="center">
   <img src="docs/images/receiver.png" alt="HDMI Transfer receiver: capture device selection, Balanced profile, video preview and file progress" width="1100" />
@@ -155,6 +158,24 @@ LAN mode uses the network to serve the interface. To avoid any network dependenc
 
 Selecting Speed does not turn a 60 Hz capture card into a 240 Hz device. See [calibration and signal checks](docs/hardware-setup.md).
 
+## Transfer speeds
+
+The following are **theoretical encoded-payload ceilings**, not measured file-transfer speeds. They use **Fountain, 2 bits per RGB channel, 8 × 8 pixel blocks**, and assume every frame reaches the receiver at the stated cadence.
+
+| Profile | Resolution / effective FPS assumed | Payload per frame | Theoretical MB/s | Theoretical Mbps |
+| --- | --- | ---: | ---: | ---: |
+| **Balanced** | 1920 × 1080 / 60 | 24,284 bytes | **1.46** | **11.66** |
+| Speed | 1920 × 1080 / 240 | 24,284 bytes | 5.83 | 46.63 |
+| Quality | 3840 × 2160 / 30 | 97,184 bytes | 2.92 | 23.32 |
+
+**MB/s = million bytes per second; Mbps = million bits per second (8 bits = 1 byte).**
+
+Calculation: `payload bytes/frame = (width / 8) × (height / 8) × 3 × 2 / 8 − 16`; multiply by effective FPS for bytes/second. The 16-byte Fountain header is deducted. These values follow the [profile definitions](src/interfaces/browser_sender/protocol.generated.js) and [sender calculation](src/interfaces/browser_sender/app.js).
+
+Actual useful-file throughput is lower because of Fountain redundancy, frame loss, calibration, decoding and file reconstruction. The browser caps sending to the detected display refresh rate: **Speed on a 60 Hz path has the same theoretical ceiling as Balanced at 60 FPS**. The capture card and receiver must also keep up. HDMI link bandwidth is not the file-transfer speed.
+
+For a hardware measurement, transfer a known file, verify its SHA-256 result, and divide its size by the receiver's reported transfer duration. Include setup/calibration time separately when measuring total user wait time. Software benchmarks and Docker smoke tests do not measure HDMI throughput; the table above is not a hardware benchmark.
+
 ## Frequently asked questions
 
 ### Can I transfer files with just an HDMI cable between two computers?
@@ -171,7 +192,7 @@ Video encoding and fountain codes are not encryption. Encrypt the file before se
 
 ### What throughput should I expect?
 
-There is no universal transfer-speed claim: the GPU, browser, effective frame rate, video format, capture card and CPU all matter. Measure your own hardware; a software-only benchmark does not validate the physical chain.
+See [Transfer speeds](#transfer-speeds): the recommended Balanced configuration has a theoretical ceiling of **1.46 MB/s (11.66 Mbps)** at 60 FPS. Actual file throughput depends on your hardware and protocol overhead; this POC does not guarantee that speed.
 
 ### Why is the preview black, or why does decoding fail?
 
