@@ -2,6 +2,10 @@
 
 [Retour à la présentation](../README.md)
 
+## Variante Docker
+
+Avec Docker démarré, lancer `docker compose up --build -d --wait`, puis ouvrir `http://localhost:5000`. Aucun Python local nécessaire. Les fichiers sont conservés dans un volume Docker. Voir le [guide Docker](docker.md) pour la capture sous Linux et les limites USB de Docker Desktop.
+
 ## Prérequis
 
 - PC récepteur : Git, [uv](https://docs.astral.sh/uv/getting-started/installation/), pilote de la carte de capture et port USB adapté à cette carte.

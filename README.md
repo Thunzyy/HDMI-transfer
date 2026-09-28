@@ -63,6 +63,27 @@ Built for demonstrations, video-channel experiments and authorized transfers in 
 
 ## Quick start
 
+### Docker — one command
+
+With Docker Engine or Docker Desktop running, from the cloned repository:
+
+```bash
+docker compose up --build -d --wait
+```
+
+Open **[http://localhost:5000](http://localhost:5000)**. No local Python or uv installation is needed. The first build downloads dependencies; later starts reuse the image. Received files are kept in a Docker volume.
+
+```bash
+docker compose stop    # Stop; keep received files
+docker compose start  # Start again
+```
+
+This starts the web interface on Windows, macOS or Linux. **Physical HDMI reception also requires a capture device inside the container.** Use the [Linux capture-card setup](docs/docker.md#linux-capture-card) on native Linux; Docker Desktop does not automatically expose the host's USB capture card. For capture on Windows, the native launcher below is the simplest path.
+
+See the [Docker guide](docs/docker.md) for device mapping, ports, LAN access, updates and the reproducible smoke test.
+
+### Native installation
+
 ### 1. Prepare the receiving computer
 
 Install [Git](https://git-scm.com/downloads) and [uv](https://docs.astral.sh/uv/getting-started/installation/), then open a terminal:
@@ -158,10 +179,11 @@ Check the capture source, close other applications using the card, verify the co
 
 ## Documentation and development
 
-The detailed guides below are currently written in French; `llms.txt` provides an English overview.
+The Docker guide and `llms.txt` are in English; the other detailed guides are currently in French.
 
 | Document | Contents |
 | --- | --- |
+| [Docker](docs/docker.md) | One-command startup, persistent storage, Linux capture devices and smoke tests |
 | [Installation and quick start](docs/getting-started.md) | Prerequisites, two-PC setup, offline mode, LAN, CLI and troubleshooting |
 | [Hardware and calibration](docs/hardware-setup.md) | Wiring, displays, capture devices and loopback testing |
 | [Architecture](docs/architecture.md) | Code organization and responsibilities |

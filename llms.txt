@@ -6,6 +6,7 @@ The sender turns a file into video frames. The capture-card receiver decodes tho
 
 ## Documentation
 
+- [Docker startup, persistence and capture devices](docs/docker.md)
 - [Overview and screenshots](README.md)
 - [Installation, offline setup, LAN setup and CLI](docs/getting-started.md)
 - [Hardware and calibration](docs/hardware-setup.md)
@@ -15,6 +16,7 @@ The sender turns a file into video frames. The capture-card receiver decodes tho
 
 ## Entry points
 
+- Docker: `docker compose up --build -d --wait`; receiver on localhost:5000, received files in a named volume. Physical capture requires explicit Linux video-device mapping; Docker Desktop does not automatically expose host USB capture devices.
 - Windows: `start.bat`; POSIX: `sh start.sh` (requires uv).
 - Manual: `uv sync --locked --extra web`, then `uv run --no-sync hdmi-web`.
 - Receiver UI: `http://localhost:5000/`.

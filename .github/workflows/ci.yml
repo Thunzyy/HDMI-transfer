@@ -8,6 +8,14 @@ on:
   pull_request:
 
 jobs:
+  docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build, start and verify Docker persistence
+        run: python3 tools/docker_smoke.py
+
   quality-gate:
     runs-on: windows-latest
     timeout-minutes: 30

@@ -20,6 +20,9 @@ Documentation = "https://github.com/Thunzyy/HDMI-transfer/blob/main/docs/getting
 Issues = "https://github.com/Thunzyy/HDMI-transfer/issues"
 
 [project.optional-dependencies]
+docker = [
+    "waitress >= 3.0.2, < 4",
+]
 sender = [
     "pygame-ce >= 2.5.0",
     "screeninfo >= 0.8",

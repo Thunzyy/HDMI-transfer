@@ -1,0 +1,7 @@
+# Linux Docker Engine only: the device must exist on the Docker host.
+services:
+  hdmi-transfer:
+    devices:
+      - "${HDMI_VIDEO_DEVICE:-/dev/video0}:/dev/video0"
+    group_add:
+      - "${HDMI_VIDEO_GID:?Set HDMI_VIDEO_GID to the group ID owning the video device}"

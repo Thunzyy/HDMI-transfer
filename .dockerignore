@@ -1,0 +1,13 @@
+# Only copy application inputs; exclude local files, credentials and captures.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!src/
+!src/**
+!sender.html
+!docker/
+!docker/**
+**/__pycache__/
+**/*.pyc
+**/.device_cache.json
