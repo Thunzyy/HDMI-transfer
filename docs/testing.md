@@ -28,7 +28,6 @@ uv run pytest tests/contracts -v
 uv run pytest tests/test_send_session.py tests/test_receive_session.py -v
 uv run pytest tests/test_capture_manager.py tests/test_threaded_capture.py -v
 uv run pytest tests/test_web_app_factory.py tests/test_server_receive_file_api.py -v
-uv run pytest tests/test_compat_imports.py -v
 uv run pytest tests/test_sender_build.py tests/test_sender_html_magic.py -v
 uv run pytest tests/test_fountain_overhead.py tests/perf/test_fountain_budget.py -v
 ```
@@ -60,7 +59,6 @@ Hardware tests are excluded from standard CI. Run them manually on a prepared ma
 - Capture management and backoff after failed reads.
 - Flask interfaces and CLI wrappers.
 - Fountain performance budgets.
-- Legacy import compatibility.
 - Deterministic PRNG/RSD properties.
 
 ## Completion criteria

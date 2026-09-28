@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import cv2
 
-import hdmi_transfer.web.server as server
+import hdmi_transfer.interfaces.web.app_factory as server
 
 
 class _FakeRegistry:

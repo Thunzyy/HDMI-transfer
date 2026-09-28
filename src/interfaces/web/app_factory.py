@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import threading
 from pathlib import Path
@@ -13,18 +12,6 @@ _SOURCE_ROOT = Path(__file__).resolve().parents[2]
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 STATIC_DIR = _SOURCE_ROOT / "web" / "static"
 CACHE_FILE = _SOURCE_ROOT / "web" / ".device_cache.json"
-
-
-def _load_disk_cache() -> list[dict] | None:
-    """Compatibility helper kept for tests and legacy callers."""
-    try:
-        if CACHE_FILE.exists():
-            data = json.loads(CACHE_FILE.read_text())
-            if isinstance(data, list) and data:
-                return data
-    except Exception:
-        pass
-    return None
 
 
 def _find_sender_html() -> Path:
@@ -103,7 +90,7 @@ def _register_page_routes(app: Flask, static_dir: Path) -> None:
     @app.route("/favicon.ico")
     def favicon():
         return send_from_directory(
-            str(static_dir), "logo_hdmi_static.svg", mimetype="image/svg+xml"
+            str(static_dir), "images/logo.svg", mimetype="image/svg+xml"
         )
 
 
@@ -137,10 +124,6 @@ def create_app(
 
         app._device_registry = DeviceRegistry(CACHE_FILE)
 
-        preloaded_devices = _load_disk_cache()
-        if preloaded_devices is not None:
-            app._device_registry.replace(preloaded_devices)
-
         app._capture_manager = CaptureManager(
             opener=open_capture,
             width=1920,
@@ -150,9 +133,9 @@ def create_app(
         )
 
         def detect_and_cache() -> list[dict]:
-            from hdmi_transfer.receiver.cli.console import _detect_devices
+            from hdmi_transfer.adapters.capture.device_registry import detect_devices
 
-            return app._device_registry.detect(_detect_devices)
+            return app._device_registry.detect(detect_devices)
 
         app._detect_and_cache = detect_and_cache
 

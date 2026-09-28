@@ -47,7 +47,7 @@ def main() -> None:
             ("/sender/test", b"sender-frame"),
             ("/settings", b"Settings"),
             ("/history", b"History"),
-            ("/static/logo_hdmi_static.svg", b"<svg"),
+            ("/static/images/logo.svg", b"<svg"),
         ]:
             assert marker in read(base, path), path
         assert json.loads(read(base, "/api/receive/status"))["active"] is False

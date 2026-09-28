@@ -16,7 +16,7 @@ import dataclasses
 import numpy as np
 import pytest
 
-from hdmi_transfer.config import (
+from hdmi_transfer.core.config import (
     BLOCKS_PER_FRAME,
     BYTES_PER_FRAME,
     COLS,
@@ -27,8 +27,8 @@ from hdmi_transfer.config import (
     ResolutionProfile,
     WIDTH,
 )
-from hdmi_transfer.protocols.fountain import FountainProtocol
-from hdmi_transfer.protocols.sequential import SequentialProtocol
+from hdmi_transfer.core.protocols.fountain import FountainProtocol
+from hdmi_transfer.core.protocols.sequential import SequentialProtocol
 
 
 # ---------------------------------------------------------------------------

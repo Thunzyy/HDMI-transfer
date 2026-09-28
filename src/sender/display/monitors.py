@@ -8,7 +8,7 @@ not installed or when detection fails at runtime (e.g. headless CI).
 
 Usage::
 
-    from hdmi_transfer.display.monitors import get_monitors
+    from hdmi_transfer.sender.display.monitors import get_monitors
     monitors = get_monitors()
     # [{"left": 0, "top": 0, "right": 1920, "bottom": 1080, ...}, ...]
 """

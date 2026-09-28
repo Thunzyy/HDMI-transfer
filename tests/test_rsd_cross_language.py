@@ -15,8 +15,8 @@ import textwrap
 
 import pytest
 
-from hdmi_transfer.prng import PRNG, choose_indices
-from hdmi_transfer.protocols.degree import robust_soliton_cdf, sample_degree
+from hdmi_transfer.core.prng import PRNG, choose_indices
+from hdmi_transfer.core.protocols.degree import robust_soliton_cdf, sample_degree
 
 
 # ---------------------------------------------------------------------------

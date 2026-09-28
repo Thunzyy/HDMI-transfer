@@ -14,17 +14,17 @@ import numpy as np
 import hashlib
 import math
 
-from hdmi_transfer.protocols.sequential import SequentialProtocol, TransferState
-from hdmi_transfer.capture.sampler import sample_frame
-from hdmi_transfer.file_handling.metadata import build_start_metadata, parse_start_metadata
-from hdmi_transfer.config import (
+from hdmi_transfer.core.protocols.sequential import SequentialProtocol, TransferState
+from hdmi_transfer.core.capture.sampler import sample_frame
+from hdmi_transfer.core.file_handling.metadata import build_start_metadata, parse_start_metadata
+from hdmi_transfer.core.config import (
     BYTES_PER_FRAME, BLOCKS_PER_FRAME, ROWS, COLS, BLOCK_SIZE,
     SEQ_MAGIC, SEQ_HEADER_FMT, SEQ_HEADER_PRE_CRC,
     HEADER_SIZE, FRAME_TYPE_DATA, FRAME_TYPE_START,
     FRAME_TYPE_END, FOUNTAIN_MAGIC,
 )
-from hdmi_transfer.protocols.fountain import (
-    FOUNT_HEADER_FMT, FOUNT_HEADER_PRE_CRC, FOUNT_HEADER_SIZE,
+from hdmi_transfer.core.protocols.fountain import (
+    FOUNT_HEADER_V1_FMT, FOUNT_HEADER_V1_PRE_CRC, FOUNT_HEADER_V1_SIZE,
 )
 from hdmi_transfer.core.protocols.encoding import pixels_to_bytes
 
@@ -451,20 +451,20 @@ def _route_frame(frame_bytes):
         return 'sequential', (frame_type, frame_index, total_frames, payload, data_len)
 
     elif magic == FOUNTAIN_MAGIC:
-        if len(frame_bytes) < FOUNT_HEADER_SIZE:
+        if len(frame_bytes) < FOUNT_HEADER_V1_SIZE:
             return None, None
         try:
-            _, seed, K = struct.unpack(FOUNT_HEADER_FMT,
-                frame_bytes[:FOUNT_HEADER_PRE_CRC])
+            _, seed, K = struct.unpack(FOUNT_HEADER_V1_FMT,
+                frame_bytes[:FOUNT_HEADER_V1_PRE_CRC])
         except struct.error:
             return None, None
 
         stored_crc = struct.unpack('>I',
-            frame_bytes[FOUNT_HEADER_PRE_CRC:FOUNT_HEADER_SIZE])[0]
+            frame_bytes[FOUNT_HEADER_V1_PRE_CRC:FOUNT_HEADER_V1_SIZE])[0]
 
-        payload = frame_bytes[FOUNT_HEADER_SIZE:]
+        payload = frame_bytes[FOUNT_HEADER_V1_SIZE:]
         computed_crc = zlib.crc32(
-            frame_bytes[:FOUNT_HEADER_PRE_CRC] + payload) & 0xFFFFFFFF
+            frame_bytes[:FOUNT_HEADER_V1_PRE_CRC] + payload) & 0xFFFFFFFF
         if computed_crc != stored_crc:
             return None, None
 
@@ -496,7 +496,7 @@ class TestProtocolRouting:
     def test_fountain_frame_routes_to_fountain(self):
         """A frame with fountain magic routes to the fountain decoder."""
         # Build fountain frame raw bytes
-        header = struct.pack(FOUNT_HEADER_FMT, FOUNTAIN_MAGIC, 1, 5)
+        header = struct.pack(FOUNT_HEADER_V1_FMT, FOUNTAIN_MAGIC, 1, 5)
         payload = b'\xBB' * 100
         crc_val = zlib.crc32(header + payload) & 0xFFFFFFFF
         raw_bytes = header + struct.pack('>I', crc_val) + payload

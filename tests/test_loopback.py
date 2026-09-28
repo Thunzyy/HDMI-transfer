@@ -19,9 +19,9 @@ import cv2
 import numpy as np
 import pytest
 
-from hdmi_transfer.protocols.sequential import SequentialProtocol
-from hdmi_transfer.capture.sampler import sample_frame
-from hdmi_transfer.config import BYTES_PER_FRAME, ROWS, COLS, BLOCK_SIZE
+from hdmi_transfer.core.protocols.sequential import SequentialProtocol
+from hdmi_transfer.core.capture.sampler import sample_frame
+from hdmi_transfer.core.config import BYTES_PER_FRAME, ROWS, COLS, BLOCK_SIZE
 
 # Module-level protocol instance
 _proto = SequentialProtocol()

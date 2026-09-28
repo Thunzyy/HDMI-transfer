@@ -1,4 +1,3 @@
-# Contract Fixtures
+# Contract fixtures
 
-These fixtures capture the currently expected protocol behavior so future
-refactors can keep the same wire contracts while internals move around.
+These fixtures define the expected wire-protocol behavior shared by the sender and receiver.

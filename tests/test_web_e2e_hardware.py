@@ -168,7 +168,7 @@ def _launch_server(output_dir: Path, log_path: Path) -> tuple[subprocess.Popen[s
     runner = (
         "import sys\n"
         f"sys.path.insert(0, {str(SRC_ROOT)!r})\n"
-        "from hdmi_transfer.web.server import create_app\n"
+        "from hdmi_transfer.interfaces.web.app_factory import create_app\n"
         f"app = create_app(output_dir={str(output_dir)!r})\n"
         f"app.run(host='127.0.0.1', port={port}, debug=False, threaded=True)\n"
     )

@@ -2,9 +2,8 @@ import shutil
 from pathlib import Path
 import uuid
 
-import hdmi_transfer.interfaces.web.app_factory as app_factory
 import hdmi_transfer.interfaces.web.routes_files as routes_files
-import hdmi_transfer.web.server as server
+import hdmi_transfer.interfaces.web.app_factory as server
 import pytest
 
 
@@ -21,7 +20,6 @@ def output_dir():
 
 
 def test_receive_file_api_reports_and_deletes_output_file(output_dir, monkeypatch):
-    monkeypatch.setattr(app_factory, "_load_disk_cache", lambda: [])
     app = server.create_app(output_dir=str(output_dir), runtime=False)
     client = app.test_client()
 
@@ -65,7 +63,6 @@ def test_receive_file_api_reports_and_deletes_output_file(output_dir, monkeypatc
 
 
 def test_receive_files_lists_output_directory_contents(output_dir, monkeypatch):
-    monkeypatch.setattr(app_factory, "_load_disk_cache", lambda: [])
     app = server.create_app(output_dir=str(output_dir), runtime=False)
     client = app.test_client()
 
@@ -94,7 +91,6 @@ def test_receive_files_lists_output_directory_contents(output_dir, monkeypatch):
 
 
 def test_receive_file_delete_missing_returns_404(output_dir, monkeypatch):
-    monkeypatch.setattr(app_factory, "_load_disk_cache", lambda: [])
     app = server.create_app(output_dir=str(output_dir), runtime=False)
     client = app.test_client()
 
@@ -111,7 +107,6 @@ def test_receive_file_delete_missing_returns_404(output_dir, monkeypatch):
 
 
 def test_receive_file_reveal_existing_uses_file_manager_helper(output_dir, monkeypatch):
-    monkeypatch.setattr(app_factory, "_load_disk_cache", lambda: [])
     app = server.create_app(output_dir=str(output_dir), runtime=False)
     client = app.test_client()
 
@@ -141,7 +136,6 @@ def test_receive_file_reveal_existing_uses_file_manager_helper(output_dir, monke
 
 
 def test_receive_file_reveal_missing_returns_404_when_no_location_exists(output_dir, monkeypatch):
-    monkeypatch.setattr(app_factory, "_load_disk_cache", lambda: [])
     app = server.create_app(output_dir=str(output_dir), runtime=False)
     client = app.test_client()
 

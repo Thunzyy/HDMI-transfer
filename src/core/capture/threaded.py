@@ -1,7 +1,7 @@
 """Background-threaded video capture with ring buffer and FPS reporting.
 
 Wraps any object with a ``.read()`` method (typically
-:class:`~hdmi_transfer.capture.source.CaptureSource`) in a daemon thread that
+:class:`~hdmi_transfer.receiver.capture.source.CaptureSource`) in a daemon thread that
 continuously captures frames into a bounded :class:`collections.deque`.
 
 Usage::
@@ -68,7 +68,7 @@ class ThreadedCapture:
     ----------
     source:
         Object with ``.read() -> (bool, ndarray)`` method (typically
-        :class:`~hdmi_transfer.capture.source.CaptureSource`).
+        :class:`~hdmi_transfer.receiver.capture.source.CaptureSource`).
     buffer_size:
         Maximum frames in the ring buffer (default 16).
     """

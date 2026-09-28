@@ -5,7 +5,7 @@ Handles both the simple case (no offset, no scaling -- as in receiver.py)
 and the calibrated case (offset + scale -- as in receiver_fountain.py).
 
 The function is *pure*: grid dimensions are explicit parameters so that the
-module has no dependency on ``hdmi_transfer.config``.
+module has no dependency on ``hdmi_transfer.core.config``.
 """
 
 from __future__ import annotations

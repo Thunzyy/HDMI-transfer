@@ -1,3 +1,17 @@
+def test_web_logo_and_favicon_are_served_from_images():
+    from hdmi_transfer.interfaces.web.app_factory import create_app
+
+    client = create_app(runtime=False).test_client()
+    with client.get("/static/images/logo.svg") as logo:
+        assert logo.status_code == 200
+        assert logo.mimetype == "image/svg+xml"
+        assert b"<svg" in logo.data
+        logo_data = logo.data
+    with client.get("/favicon.ico") as favicon:
+        assert favicon.status_code == 200
+        assert favicon.data == logo_data
+
+
 def test_create_app_registers_receive_and_file_routes():
     from hdmi_transfer.interfaces.web.app_factory import create_app
 
@@ -75,7 +89,7 @@ def test_create_app_runtime_primes_persistent_capture_for_raw_dshow_source(monke
 
     class FakeRegistry:
         def __init__(self, cache_file) -> None:
-            self._devices = []
+            self._devices = [cached_device]
             self.open_lock = None
 
         def replace(self, devices):
@@ -95,10 +109,6 @@ def test_create_app_runtime_primes_persistent_capture_for_raw_dshow_source(monke
         def prime_async(self, **kwargs) -> None:
             self.prime_calls.append(dict(kwargs))
 
-    monkeypatch.setattr(
-        "hdmi_transfer.interfaces.web.app_factory._load_disk_cache",
-        lambda: [cached_device],
-    )
     monkeypatch.setattr(
         "hdmi_transfer.adapters.capture.device_registry.DeviceRegistry",
         FakeRegistry,

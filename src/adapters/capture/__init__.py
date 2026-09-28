@@ -11,7 +11,7 @@ from hdmi_transfer.adapters.capture.resolver import (
     resolve_capture_target,
     resolve_saved_capture_target,
 )
-from hdmi_transfer.adapters.capture.threaded_capture import FPSReporter, ThreadedCapture
+from hdmi_transfer.core.capture.threaded import FPSReporter, ThreadedCapture
 
 __all__ = [
     "CaptureManager",

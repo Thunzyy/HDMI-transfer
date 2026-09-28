@@ -12,13 +12,12 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 import webbrowser
 
 from InquirerPy import inquirer
 from InquirerPy.separator import Separator
 
-from hdmi_transfer.core.config import PROFILES, ResolutionProfile
+from hdmi_transfer.core.config import PROFILES
 from hdmi_transfer.core import settings
 from hdmi_transfer.interfaces.cli.send import run_send
 from hdmi_transfer.sender.display.monitors import get_monitors

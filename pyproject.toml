@@ -60,7 +60,7 @@ dev = [
 hdmi-send = "hdmi_transfer.interfaces.cli.send:main"
 hdmi-recv = "hdmi_transfer.interfaces.cli.receive:main"
 hdmi-calibrate = "hdmi_transfer.interfaces.cli.calibrate:main"
-hdmi-bench = "hdmi_transfer.cli.benchmark:main"
+hdmi-bench = "hdmi_transfer.core.cli.benchmark:main"
 hdmi-sender = "hdmi_transfer.interfaces.cli.sender_console:main"
 hdmi-receiver = "hdmi_transfer.interfaces.cli.receiver_console:main"
 hdmi-web = "hdmi_transfer.web.__main__:main"
@@ -71,27 +71,19 @@ packages = [
     "hdmi_transfer.adapters",
     "hdmi_transfer.adapters.capture",
     "hdmi_transfer.application",
-    "hdmi_transfer.capture",
-    "hdmi_transfer.cli",
-    "hdmi_transfer.compat",
     "hdmi_transfer.core",
     "hdmi_transfer.core.capture",
     "hdmi_transfer.core.cli",
     "hdmi_transfer.core.file_handling",
     "hdmi_transfer.core.protocols",
-    "hdmi_transfer.display",
     "hdmi_transfer.domain",
-    "hdmi_transfer.file_handling",
     "hdmi_transfer.interfaces",
     "hdmi_transfer.interfaces.browser_sender",
     "hdmi_transfer.interfaces.cli",
     "hdmi_transfer.interfaces.web",
-    "hdmi_transfer.protocols",
     "hdmi_transfer.receiver",
     "hdmi_transfer.receiver.capture",
-    "hdmi_transfer.receiver.cli",
     "hdmi_transfer.sender",
-    "hdmi_transfer.sender.cli",
     "hdmi_transfer.sender.display",
     "hdmi_transfer.web",
 ]
@@ -102,7 +94,7 @@ packages = [
 [tool.setuptools.package-data]
 "hdmi_transfer.core" = ["constants.json"]
 "hdmi_transfer.interfaces.browser_sender" = ["*.html", "*.js"]
-"hdmi_transfer.web" = ["static/*.html", "static/*.js"]
+"hdmi_transfer.web" = ["static/*.html", "static/*.js", "static/images/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

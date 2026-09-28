@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import cv2
 
-import hdmi_transfer.web.server as server
+import hdmi_transfer.interfaces.web.app_factory as server
 from hdmi_transfer.core.config import PROFILES
 
 

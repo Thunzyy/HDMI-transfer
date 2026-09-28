@@ -5,7 +5,7 @@ ready for protocol encoding.
 
 Usage::
 
-    from hdmi_transfer.file_handling.reader import read_input
+    from hdmi_transfer.core.file_handling.reader import read_input
 
     name, data = read_input("/path/to/file_or_dir")
 """

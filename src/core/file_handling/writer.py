@@ -6,7 +6,7 @@ integrity checking.
 
 Usage::
 
-    from hdmi_transfer.file_handling.writer import write_output, verify_integrity
+    from hdmi_transfer.core.file_handling.writer import write_output, verify_integrity
 
     path = write_output(data, "received.bin")
     ok = verify_integrity(data, expected_sha256)

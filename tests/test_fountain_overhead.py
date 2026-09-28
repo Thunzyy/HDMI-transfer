@@ -22,9 +22,9 @@ import numpy as np
 import pytest
 
 from hdmi_transfer.core.protocols.fountain_tuning import DEFAULT_FOUNTAIN_TUNING
-from hdmi_transfer.prng import PRNG, choose_indices
-from hdmi_transfer.protocols.degree import robust_soliton_cdf, sample_degree
-from hdmi_transfer.protocols.fountain import FountainDecoder
+from hdmi_transfer.core.prng import PRNG, choose_indices
+from hdmi_transfer.core.protocols.degree import robust_soliton_cdf, sample_degree
+from hdmi_transfer.core.protocols.fountain import FountainDecoder
 
 
 # ---------------------------------------------------------------------------

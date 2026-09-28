@@ -15,7 +15,7 @@ import pytest
 
 def test_pygame_renderer_import():
     """PygameRenderer can be imported without errors."""
-    from hdmi_transfer.display.renderer import PygameRenderer
+    from hdmi_transfer.sender.display.renderer import PygameRenderer
 
     assert PygameRenderer is not None
 
@@ -25,7 +25,7 @@ def test_pygame_renderer_interface():
 
     Both renderers must have: show(), destroy(), __enter__, __exit__.
     """
-    from hdmi_transfer.display.renderer import PygameRenderer
+    from hdmi_transfer.sender.display.renderer import PygameRenderer
 
     assert callable(getattr(PygameRenderer, "show", None))
     assert callable(getattr(PygameRenderer, "destroy", None))
@@ -35,7 +35,7 @@ def test_pygame_renderer_interface():
 
 def test_frame_renderer_interface_parity():
     """PygameRenderer and FrameRenderer share the same public method names."""
-    from hdmi_transfer.display.renderer import FrameRenderer, PygameRenderer
+    from hdmi_transfer.sender.display.renderer import FrameRenderer, PygameRenderer
 
     fr_public = {m for m in dir(FrameRenderer) if not m.startswith("_")}
     pr_public = {m for m in dir(PygameRenderer) if not m.startswith("_")}
@@ -114,7 +114,7 @@ def test_show_signature_matches():
     """PygameRenderer.show() accepts same (frame, delay_ms) signature."""
     import inspect
 
-    from hdmi_transfer.display.renderer import FrameRenderer, PygameRenderer
+    from hdmi_transfer.sender.display.renderer import FrameRenderer, PygameRenderer
 
     fr_sig = inspect.signature(FrameRenderer.show)
     pr_sig = inspect.signature(PygameRenderer.show)

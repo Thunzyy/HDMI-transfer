@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import queue
-import sys
 from dataclasses import replace
 
 from flask import Flask, Response, jsonify, request

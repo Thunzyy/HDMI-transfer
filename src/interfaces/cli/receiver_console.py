@@ -23,7 +23,7 @@ from InquirerPy.separator import Separator
 
 from hdmi_transfer.adapters.capture.device_registry import detect_devices
 from hdmi_transfer.adapters.capture.resolver import resolve_saved_capture_target
-from hdmi_transfer.core.config import PROFILES, ResolutionProfile
+from hdmi_transfer.core.config import PROFILES
 from hdmi_transfer.core import settings
 from hdmi_transfer.interfaces.cli.receive import run_receive
 

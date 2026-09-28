@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo_hdmi_animated.svg" alt="HDMI Transfer — file transfer over HDMI video" width="160" />
+  <img src="docs/images/logo.svg" alt="HDMI Transfer — file transfer over HDMI video" width="160" />
 </p>
 
 <h1 align="center"> HDMI Transfer</h1>
@@ -216,7 +216,6 @@ All project documentation is available in English.
 | [Hardware and calibration](docs/hardware-setup.md) | Wiring, displays, capture devices and loopback testing |
 | [Architecture](docs/architecture.md) | Code organization and responsibilities |
 | [Testing](docs/testing.md) | Quality gate and hardware-testing boundaries |
-| [Migration](docs/migration.md) | Source layout and compatibility |
 | [Screenshots](docs/images/README.md) | Provenance and reproducible capture |
 | [Assistant overview](llms.txt) | Project summary and source links |
 

@@ -1,4 +1,4 @@
-"""Compatibility config module backed by the canonical protocol manifest."""
+"""Protocol configuration derived from the shared manifest."""
 
 from __future__ import annotations
 
@@ -28,7 +28,6 @@ SEQ_HEADER_FMT: str = _manifest.sequential.header_format
 SEQ_HEADER_PRE_CRC: int = _manifest.sequential.header_pre_crc
 SEQ_CRC_SIZE: int = _manifest.sequential.crc_size
 HEADER_SIZE: int = _manifest.sequential.header_size
-_FOUNT_HEADER_SIZE: int = _manifest.fountain.header_size
 
 PROFILES: dict[str, ResolutionProfile] = _manifest.profiles
 

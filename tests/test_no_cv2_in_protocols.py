@@ -1,7 +1,7 @@
 """Tests verifying cv2 is NOT imported in protocol/sampler modules.
 
 These modules must use pure numpy for upscale/downscale so they can
-live in core/ without an OpenCV dependency (STRUCT-06).
+live in core/ without an OpenCV dependency.
 """
 
 from __future__ import annotations
@@ -12,11 +12,11 @@ import sys
 
 import numpy as np
 
-from hdmi_transfer.config import DEFAULT_PROFILE, ResolutionProfile
+from hdmi_transfer.core.config import DEFAULT_PROFILE, ResolutionProfile
 
 
 # ---------------------------------------------------------------------------
-# Task 1: cv2-free protocol encoding
+# OpenCV-free protocol encoding
 # ---------------------------------------------------------------------------
 
 
@@ -25,7 +25,7 @@ class TestNoCv2InSequential:
 
     def test_no_cv2_import_in_source(self):
         """AST parse sequential.py to confirm no cv2 import statement."""
-        import hdmi_transfer.protocols.sequential as mod
+        import hdmi_transfer.core.protocols.sequential as mod
 
         src = ast.parse(open(mod.__file__).read())
         cv2_imports = [
@@ -38,7 +38,7 @@ class TestNoCv2InSequential:
 
     def test_encode_frame_shape(self):
         """encode_frame output has correct profile dimensions."""
-        from hdmi_transfer.protocols.sequential import SequentialProtocol
+        from hdmi_transfer.core.protocols.sequential import SequentialProtocol
 
         proto = SequentialProtocol()
         profile = DEFAULT_PROFILE
@@ -49,7 +49,7 @@ class TestNoCv2InSequential:
 
     def test_encode_frame_uses_np_repeat(self):
         """Verify the np.repeat pattern produces same output as cv2.resize."""
-        from hdmi_transfer.protocols.sequential import SequentialProtocol
+        from hdmi_transfer.core.protocols.sequential import SequentialProtocol
 
         proto = SequentialProtocol()
         profile = DEFAULT_PROFILE
@@ -71,7 +71,7 @@ class TestNoCv2InFountain:
 
     def test_no_cv2_import_in_source(self):
         """AST parse fountain.py to confirm no cv2 import statement."""
-        import hdmi_transfer.protocols.fountain as mod
+        import hdmi_transfer.core.protocols.fountain as mod
 
         src = ast.parse(open(mod.__file__).read())
         cv2_imports = [
@@ -84,7 +84,7 @@ class TestNoCv2InFountain:
 
     def test_encode_frame_shape(self):
         """encode_frame output has correct profile dimensions."""
-        from hdmi_transfer.protocols.fountain import FountainProtocol
+        from hdmi_transfer.core.protocols.fountain import FountainProtocol
 
         proto = FountainProtocol()
         profile = DEFAULT_PROFILE
@@ -95,7 +95,7 @@ class TestNoCv2InFountain:
 
     def test_encode_frame_block_uniformity(self):
         """Verify blocks are uniform after np.repeat upscale."""
-        from hdmi_transfer.protocols.fountain import FountainProtocol
+        from hdmi_transfer.core.protocols.fountain import FountainProtocol
 
         proto = FountainProtocol()
         profile = DEFAULT_PROFILE
@@ -120,7 +120,7 @@ class TestNoCv2InSampler:
 
     def test_no_cv2_import_in_source(self):
         """AST parse sampler.py to confirm no cv2 import statement."""
-        import hdmi_transfer.capture.sampler as mod
+        import hdmi_transfer.core.capture.sampler as mod
 
         src = ast.parse(open(mod.__file__).read())
         cv2_imports = [
@@ -133,7 +133,7 @@ class TestNoCv2InSampler:
 
     def test_sample_frame_matching_dimensions(self):
         """sample_frame works when frame dimensions match expected."""
-        from hdmi_transfer.capture.sampler import sample_frame
+        from hdmi_transfer.core.capture.sampler import sample_frame
 
         profile = DEFAULT_PROFILE
         frame = np.random.randint(0, 256, (profile.height, profile.width, 3), dtype=np.uint8)
@@ -142,7 +142,7 @@ class TestNoCv2InSampler:
 
     def test_sample_frame_mismatched_dimensions(self):
         """sample_frame handles frame dimension mismatch via numpy resize."""
-        from hdmi_transfer.capture.sampler import sample_frame
+        from hdmi_transfer.core.capture.sampler import sample_frame
 
         profile = DEFAULT_PROFILE
         # Create frame with different dimensions (e.g. 720p instead of 1080p)
