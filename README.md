@@ -176,6 +176,26 @@ Actual useful-file throughput is lower because of Fountain redundancy, frame los
 
 For a hardware measurement, transfer a known file, verify its SHA-256 result, and divide its size by the receiver's reported transfer duration. Include setup/calibration time separately when measuring total user wait time. Software benchmarks and Docker smoke tests do not measure HDMI throughput; the table above is not a hardware benchmark.
 
+### Compared with Wi-Fi, Bluetooth, Ethernet and USB
+
+**Scale comparison only, not a head-to-head benchmark.** HDMI Transfer values are encoded-payload ceilings after the Fountain header; the other rows are nominal link/signaling rates **before** protocol overhead. The MB/s column is simply Mbps divided by eight, not an achievable file-copy speed. Wi-Fi rows are specific adapter examples, not the maximum of each generation.
+
+| Connection / example configuration | Rate (Mbps) | Equivalent MB/s | What the number represents |
+| --- | ---: | ---: | --- |
+| Bluetooth LE, LE 2M PHY | 2 | 0.25 | Radio PHY rate; application support is required for file transfer ([Bluetooth SIG](https://www.bluetooth.com/learn-about-bluetooth/tech-overview/)) |
+| Bluetooth Classic, EDR 3 Mb/s mode | 3 | 0.375 | Radio PHY rate, before packet overhead ([Bluetooth SIG](https://www.bluetooth.com/learn-about-bluetooth/tech-overview/)) |
+| **HDMI Transfer — Balanced** | **11.66** | **1.46** | POC payload ceiling, 1080p60 / 2 bpc |
+| HDMI Transfer — Quality | 23.32 | 2.92 | POC payload ceiling, 4K30 / 2 bpc |
+| HDMI Transfer — Speed | 46.63 | 5.83 | POC payload ceiling, 1080p240 / 2 bpc |
+| Wi-Fi 5 — Intel Wireless-AC 9462, 1×1 | 433 | 54.125 | Adapter maximum link rate ([Intel](https://www.intel.com/content/www/us/en/ark/products/series/211325/intel-wireless-ac-products.html)) |
+| Gigabit Ethernet — 1000BASE-T | 1,000 | 125 | Wired link rate ([Intel I210](https://www.intel.com/content/www/us/en/products/details/ethernet/gigabit-network-adapters/i210-server-adapters.html?grouping=rdc+Content+Types)) |
+| Wi-Fi 6 — Intel AX203, 2×2 | 1,200 | 150 | Adapter maximum link rate ([Intel](https://www.intel.com/content/www/us/en/products/details/wireless/wi-fi-6-series/downloads.html)) |
+| USB 3.2 Gen 1 — USB 5Gbps | 5,000 | 625 | Bus signaling rate, before encoding/transfer overhead ([USB-IF](https://www.usb.org/usb-32-0)) |
+
+The POC's calculated capacity sits above the Bluetooth modes shown and well below these Wi-Fi, Gigabit Ethernet and USB link rates. That does **not** establish real-world speed ratios: radio conditions, protocol overhead, storage and implementation affect actual transfers. A USB drive also needs a write and a read to move a file between PCs; its bus rate is not its flash-storage speed.
+
+HDMI Transfer demonstrates a video-based file channel when a shared network is unavailable. For routine large-file transfers, a working Wi-Fi/Ethernet connection or suitable USB storage is generally a more practical choice. To compare actual performance, use the same file, verify its hash, and measure complete transfer time on each setup. Reference specifications checked on 2026-09-28.
+
 ## Frequently asked questions
 
 ### Can I transfer files with just an HDMI cable between two computers?
