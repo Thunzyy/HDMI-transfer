@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>HDMI Transfer — Send</title>
+<link rel="icon" type="image/svg+xml" href="/static/images/logo.svg"/>
+<style>
+:root {
+  --bg:#16181e; --bg2:#0f1117;
+  --accent:#7c8aff; --accent-dim:rgba(124,138,255,0.1);
+  --accent-border:rgba(255,255,255,0.1);
+  --text:#e4e4e7; --bright:#ffffff; --muted:#a1a1aa;
+  --font-ui:'Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  width:100%;height:100vh;overflow:hidden;
+  background:var(--bg2);color:var(--text);
+  font-family:var(--font-ui);
+  font-size:14px;display:flex;flex-direction:column;
+}
+
+#header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;height:44px;
+  background:var(--bg);border-bottom:1px solid var(--accent-border);
+  flex-shrink:0;
+}
+.h-left{display:flex;align-items:center;gap:10px}
+.h-logo{width:26px;height:26px;display:block;flex-shrink:0}
+.h-title{color:var(--bright);font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+
+#layout{flex:1;display:flex;overflow:hidden}
+#banner{
+  padding:10px 16px;
+  background:rgba(251,191,36,0.08);
+  border-bottom:1px solid rgba(251,191,36,0.18);
+  color:var(--text);
+  font-size:12px;
+  line-height:1.6;
+}
+#banner strong{color:var(--bright)}
+
+#sidebar{
+  width:220px;border-right:1px solid var(--accent-border);
+  background:var(--bg);display:flex;flex-direction:column;
+  flex-shrink:0;
+}
+.nav{padding:16px 12px;display:flex;flex-direction:column;gap:2px}
+.nav a{
+  display:block;padding:10px 14px;border-radius:6px;
+  color:var(--muted);text-decoration:none;
+  font-size:13px;font-weight:500;text-transform:uppercase;
+  letter-spacing:1px;transition:all .15s;
+}
+.nav a:hover{color:var(--text);background:rgba(255,255,255,0.04)}
+.nav a.active{color:var(--bright);background:rgba(255,255,255,0.07);font-weight:700}
+#center{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#sender-frame{
+  width:100%;flex:1;border:none;display:block;
+  background:var(--bg2);
+}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="h-left">
+    <img class="h-logo" src="/static/images/logo.svg" alt="" />
+    <span class="h-title">HDMI Transfer</span>
+  </div>
+</div>
+
+<div id="banner">
+  <strong>Default 2-PC sender wrapper.</strong> Open this page from the receiver host on the sender PC. It keeps the sender offline by default and does not enable the local receiver API.
+</div>
+
+<div id="layout">
+  <aside id="sidebar">
+    <nav class="nav">
+      <a href="/">Receive</a>
+      <a class="active" href="/sender">Send</a>
+      <a href="/history">History</a>
+      <a href="/settings">Settings</a>
+    </nav>
+  </aside>
+
+  <main id="center">
+    <iframe id="sender-frame" src="/sender/app" allow="fullscreen"></iframe>
+  </main>
+</div>
+
+</body>
+</html>

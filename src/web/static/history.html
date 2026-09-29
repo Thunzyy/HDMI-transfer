@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>HDMI Transfer — History</title>
+<link rel="icon" type="image/svg+xml" href="/static/images/logo.svg"/>
+<style>
+:root {
+  --bg:#16181e; --bg2:#0f1117;
+  --accent:#7c8aff; --accent-dim:rgba(124,138,255,0.1);
+  --accent-border:rgba(255,255,255,0.1);
+  --green:#4ade80; --yellow:#fbbf24; --red:#f87171;
+  --text:#e4e4e7; --bright:#ffffff; --muted:#a1a1aa;
+  --font-ui:'Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'SF Mono','Cascadia Code','Fira Code','Consolas',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  width:100%;height:100vh;overflow:hidden;
+  background:var(--bg2);color:var(--text);
+  font-family:var(--font-ui);
+  font-size:14px;display:flex;flex-direction:column;
+}
+::selection{background:var(--accent);color:var(--bg2)}
+
+#header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;height:44px;
+  background:var(--bg);border-bottom:1px solid var(--accent-border);
+  flex-shrink:0;
+}
+.h-left{display:flex;align-items:center;gap:10px}
+.h-logo{width:26px;height:26px;display:block;flex-shrink:0}
+.h-title{color:var(--bright);font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+
+#layout{flex:1;display:flex;overflow:hidden}
+
+#sidebar{
+  width:220px;border-right:1px solid var(--accent-border);
+  background:var(--bg);display:flex;flex-direction:column;
+  flex-shrink:0;
+}
+.nav{padding:16px 12px;display:flex;flex-direction:column;gap:2px}
+.nav a{
+  display:block;padding:10px 14px;border-radius:6px;
+  color:var(--muted);text-decoration:none;
+  font-size:13px;font-weight:500;text-transform:uppercase;
+  letter-spacing:1px;transition:all .15s;
+}
+.nav a:hover{color:var(--text);background:rgba(255,255,255,0.04)}
+.nav a.active{color:var(--bright);background:rgba(255,255,255,0.07);font-weight:700}
+#center{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+.center-top{
+  padding:14px 20px 10px;
+  display:flex;justify-content:space-between;align-items:center;
+  gap:16px;
+}
+.center-top h2{
+  font-size:16px;font-weight:700;color:var(--bright);
+  text-transform:uppercase;letter-spacing:.5px;
+}
+.title-copy{min-width:0}
+.center-top .sub{font-size:12px;color:var(--muted);margin-top:3px}
+.center-top .sub.error{color:var(--red)}
+.top-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-clear{
+  padding:8px 16px;border-radius:5px;
+  font-family:inherit;font-size:12px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.8px;
+  cursor:pointer;transition:all .15s;
+  background:transparent;border:1px solid rgba(255,255,255,0.15);
+  color:var(--text);
+}
+.btn-clear:hover{border-color:var(--red);color:var(--red)}
+
+.table-wrap{
+  flex:1;overflow-y:auto;padding:0 20px 20px;
+}
+table{
+  width:100%;border-collapse:collapse;
+}
+thead th{
+  position:sticky;top:0;
+  background:var(--bg2);
+  padding:10px 12px;text-align:left;
+  font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:1.5px;color:var(--muted);
+  border-bottom:1px solid var(--accent-border);
+}
+tbody td{
+  padding:10px 12px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  font-size:13px;color:var(--text);
+  white-space:nowrap;font-family:var(--font-mono);
+}
+tbody tr:hover{background:rgba(255,255,255,0.02)}
+.tag{
+  display:inline-block;padding:3px 10px;border-radius:4px;
+  font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.5px;font-family:var(--font-ui);
+}
+.tag-sent{background:rgba(124,138,255,0.15);color:var(--accent)}
+.tag-received{background:rgba(74,222,128,0.15);color:var(--green)}
+.status-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:76px;padding:4px 10px;border-radius:999px;
+  font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.8px;font-family:var(--font-ui);
+}
+.status-disk{background:rgba(124,138,255,0.14);color:var(--accent)}
+.status-ok{background:rgba(74,222,128,0.14);color:var(--green)}
+.status-fail{background:rgba(248,113,113,0.14);color:var(--red)}
+.status-missing{background:rgba(251,191,36,0.14);color:var(--yellow)}
+.cell-primary{
+  color:var(--bright);font-family:var(--font-ui);
+  font-size:13px;font-weight:600;word-break:break-word;
+}
+.cell-sub{
+  margin-top:4px;color:var(--muted);
+  font-size:11px;font-family:var(--font-ui);
+  letter-spacing:.2px;
+}
+.path-cell{
+  white-space:normal;min-width:320px;max-width:560px;
+}
+.path-text{
+  word-break:break-all;line-height:1.45;
+}
+.path-text.dim{color:var(--muted);font-family:var(--font-ui)}
+.row-actions{
+  display:grid;gap:8px;justify-content:center;margin:0 auto;
+}
+.row-actions.actions-3{
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  max-width:380px;
+}
+.row-actions.actions-2{
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  max-width:260px;
+}
+.row-actions.actions-1{
+  grid-template-columns:minmax(0, 1fr);
+  max-width:140px;
+}
+.row-btn{
+  padding:6px 10px;border-radius:5px;
+  border:1px solid rgba(255,255,255,0.12);
+  background:transparent;color:var(--text);
+  font-family:inherit;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.7px;
+  cursor:pointer;transition:all .15s;
+}
+.row-btn:hover{border-color:rgba(255,255,255,0.26);color:var(--bright)}
+.row-btn-open:hover{border-color:var(--accent);color:var(--accent)}
+.row-btn-danger:hover{border-color:var(--red);color:var(--red)}
+.row-btn:disabled{opacity:.35;cursor:not-allowed}
+
+.modal-backdrop{
+  position:fixed;inset:0;z-index:50;
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;background:rgba(4,8,16,0.72);
+  backdrop-filter:blur(8px);
+}
+.modal-backdrop.hidden{display:none}
+.modal-dialog{
+  width:min(460px, calc(100vw - 40px));
+  padding:20px;border-radius:10px;
+  background:linear-gradient(180deg, rgba(28,31,40,0.98), rgba(17,19,26,0.98));
+  border:1px solid rgba(255,255,255,0.12);
+  box-shadow:0 24px 70px rgba(0,0,0,0.42);
+}
+.modal-title{
+  color:var(--bright);font-size:16px;font-weight:700;
+  letter-spacing:.3px;text-transform:uppercase;
+}
+.modal-body{
+  margin-top:10px;color:var(--text);font-size:13px;
+  line-height:1.65;word-break:break-word;
+}
+.modal-actions{
+  margin-top:18px;display:flex;justify-content:flex-end;gap:8px;
+}
+.modal-btn{
+  min-width:108px;padding:9px 14px;border-radius:6px;
+  border:1px solid rgba(255,255,255,0.12);
+  background:transparent;color:var(--text);
+  font-family:inherit;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.8px;
+  cursor:pointer;transition:all .15s;
+}
+.modal-btn:hover{border-color:rgba(255,255,255,0.26);color:var(--bright)}
+.modal-btn-confirm{
+  background:rgba(248,113,113,0.12);border-color:rgba(248,113,113,0.4);color:var(--red);
+}
+.modal-btn-confirm:hover{background:rgba(248,113,113,0.18);border-color:var(--red);color:#ffb3b3}
+
+.empty-state{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  color:var(--muted);gap:8px;
+}
+.empty-state p{font-size:14px;text-transform:uppercase;letter-spacing:2px}
+.empty-state .sub{font-size:12px;letter-spacing:1px;opacity:.7}
+
+.topbar{
+  padding:20px 24px 16px;border-bottom:1px solid rgba(255,255,255,0.06);
+  background:linear-gradient(180deg, rgba(20,23,31,0.92), rgba(15,17,23,0.92));
+}
+.title-row{
+  display:flex;align-items:center;justify-content:space-between;gap:18px;
+}
+.title-copy h2{
+  font-size:19px;font-weight:700;color:var(--bright);letter-spacing:.3px;
+  text-transform:none;
+}
+.title-copy .sub{line-height:1.5;margin-top:2px}
+.btn{
+  height:36px;padding:0 16px;border-radius:7px;
+  border:1px solid rgba(255,255,255,0.12);background:transparent;color:var(--text);
+  font-family:inherit;font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.8px;cursor:pointer;transition:all .15s;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn:hover{border-color:rgba(255,255,255,0.28);color:var(--bright)}
+.btn-accent{background:var(--accent-dim);border-color:rgba(124,138,255,0.32);color:var(--bright)}
+.btn-accent:hover{border-color:var(--accent);color:#fff}
+
+.stats-inline{
+  margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;
+}
+.stat-chip{
+  flex:1 1 200px;min-width:180px;
+  display:flex;align-items:baseline;gap:10px;
+  padding:12px 16px;border-radius:10px;
+  background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);
+  transition:border-color .15s;
+}
+.stat-chip:hover{border-color:rgba(255,255,255,0.14)}
+.stat-chip-val{
+  font-size:20px;font-weight:700;color:var(--bright);
+  font-family:var(--font-mono);line-height:1;
+}
+.stat-chip-lbl{
+  font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;
+  font-weight:700;
+}
+.stat-chip-sub{
+  margin-left:auto;font-size:11px;color:var(--muted);text-align:right;line-height:1.4;
+}
+/* legacy stat IDs kept hidden for JS compatibility */
+.stats-grid-legacy{display:none}
+
+.search-row{
+  margin-top:14px;display:flex;gap:10px;align-items:center;
+}
+.search-wrap{
+  flex:1;position:relative;
+}
+.search-wrap::before{
+  content:"";position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  width:16px;height:16px;pointer-events:none;opacity:.55;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+.search-big{
+  width:100%;height:44px;padding:0 14px 0 40px;border-radius:9px;
+  border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.3);
+  color:var(--bright);font-family:inherit;font-size:14px;outline:none;
+  transition:border-color .15s,background .15s;
+}
+.search-big::placeholder{color:var(--muted)}
+.search-big:focus{border-color:var(--accent);background:rgba(0,0,0,0.42)}
+.sort-inline{
+  height:44px;min-width:180px;padding:0 36px 0 14px;border-radius:9px;
+  border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.3);
+  color:var(--text);font-family:inherit;font-size:13px;outline:none;
+  appearance:none;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center;
+}
+.sort-inline:focus{border-color:var(--accent)}
+
+.advanced-filters{
+  margin-top:12px;border:1px solid rgba(255,255,255,0.07);border-radius:10px;
+  background:rgba(255,255,255,0.02);
+}
+.advanced-filters[open]{background:rgba(255,255,255,0.028)}
+.advanced-filters summary{
+  list-style:none;cursor:pointer;user-select:none;
+  padding:11px 16px;display:flex;align-items:center;gap:10px;
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;
+  color:var(--muted);transition:color .15s;
+}
+.advanced-filters summary::-webkit-details-marker{display:none}
+.advanced-filters summary:hover{color:var(--text)}
+.advanced-filters summary::before{
+  content:"";width:8px;height:8px;
+  border-right:2px solid currentColor;border-bottom:2px solid currentColor;
+  transform:rotate(-45deg);transition:transform .2s;
+}
+.advanced-filters[open] summary::before{transform:rotate(45deg)}
+.filters{
+  padding:4px 16px 16px;border-top:1px solid rgba(255,255,255,0.06);
+}
+.filters-grid{
+  padding-top:14px;display:grid;gap:12px;
+  grid-template-columns:repeat(5, minmax(140px, 1fr));
+}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field label{
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);
+}
+.text-input,.select{
+  width:100%;height:38px;padding:0 12px;border-radius:7px;
+  border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.22);
+  color:var(--text);font-family:inherit;font-size:13px;outline:none;
+}
+.select{
+  padding-right:34px;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+}
+.text-input:focus,.select:focus{border-color:rgba(124,138,255,0.55)}
+.results-bar{
+  margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+}
+.results-copy{
+  font-size:12px;color:var(--muted);line-height:1.5;flex:1 1 280px;
+}
+.results-copy strong{color:var(--bright)}
+.filter-tags{
+  display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex:1 1 auto;
+}
+.filter-tag{
+  display:none;align-items:center;gap:8px;padding:5px 6px 5px 11px;border-radius:999px;
+  background:rgba(124,138,255,0.1);border:1px solid rgba(124,138,255,0.25);
+  font-size:11px;color:var(--bright);text-transform:uppercase;letter-spacing:.6px;
+  font-weight:600;
+}
+.filter-tag.visible{display:inline-flex}
+.filter-tag button{
+  width:18px;height:18px;border:none;border-radius:999px;cursor:pointer;
+  background:rgba(255,255,255,0.1);color:var(--muted);font-size:11px;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+.filter-tag button:hover{background:var(--red);color:#fff}
+.origin-tag{
+  display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
+}
+.origin-history{background:rgba(124,138,255,0.15);color:var(--accent)}
+.origin-disk{background:rgba(251,191,36,0.14);color:var(--yellow)}
+.table-wrap{padding:0 20px 20px}
+table{min-width:1180px}
+.actions-col{width:380px;min-width:380px;text-align:center}
+.row-btn{
+  width:100%;min-width:0;height:32px;padding:0 10px;border-radius:6px;text-decoration:none;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+.empty-state{
+  text-align:center;padding:36px 20px;
+}
+.empty-title{
+  color:var(--bright);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;
+}
+.empty-sub{font-size:12px;max-width:520px;line-height:1.7}
+@media (max-width: 1200px) {
+  .filters-grid{grid-template-columns:repeat(3, minmax(0, 1fr))}
+}
+@media (max-width: 900px) {
+  .filters-grid{grid-template-columns:repeat(2, minmax(0, 1fr))}
+  .search-row{flex-wrap:wrap}
+  .sort-inline{width:100%}
+}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="h-left">
+    <img class="h-logo" src="/static/images/logo.svg" alt="" />
+    <span class="h-title">HDMI Transfer</span>
+  </div>
+</div>
+
+<div id="layout">
+  <aside id="sidebar">
+    <nav class="nav">
+      <a href="/">Receive</a>
+      <a href="/sender">Send</a>
+      <a class="active" href="/history">History</a>
+      <a href="/settings">Settings</a>
+    </nav>
+  </aside>
+
+  <main id="center">
+    <section class="topbar">
+      <div class="title-row">
+        <div class="title-copy">
+          <h2>Transfer history</h2>
+          <div class="sub" id="countLabel">Loading history...</div>
+          <div class="sub" id="noticeLabel"></div>
+        </div>
+        <div class="top-actions">
+          <button class="btn btn-accent" id="refreshBtn" type="button">Refresh</button>
+          <button class="btn" id="clearBtn" type="button">Clear local log</button>
+        </div>
+      </div>
+
+      <div class="stats-inline">
+        <div class="stat-chip">
+          <span class="stat-chip-val" id="statVisible">0</span>
+          <span class="stat-chip-lbl">visible</span>
+          <span class="stat-chip-sub" id="statVisibleSub">0 matching items</span>
+        </div>
+        <div class="stat-chip">
+          <span class="stat-chip-val" id="statReceived">0</span>
+          <span class="stat-chip-lbl">received</span>
+          <span class="stat-chip-sub" id="statReceivedSub">0 files available</span>
+        </div>
+        <div class="stat-chip">
+          <span class="stat-chip-val" id="statSent">0</span>
+          <span class="stat-chip-lbl">sent</span>
+          <span class="stat-chip-sub" id="statSentSub">0 locally recorded</span>
+        </div>
+      </div>
+
+      <div class="search-row">
+        <div class="search-wrap">
+          <input class="search-big" id="searchInput" type="search" placeholder="Search files, paths or protocols..." aria-label="Search history"/>
+        </div>
+        <select class="sort-inline" id="sortSelect" aria-label="Sort">
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="name_asc">Filename A-Z</option>
+          <option value="name_desc">Filename Z-A</option>
+          <option value="size_desc">Largest first</option>
+          <option value="speed_desc">Fastest first</option>
+          <option value="duration_desc">Longest first</option>
+          <option value="status">Status</option>
+        </select>
+      </div>
+
+      <details class="advanced-filters">
+        <summary>Advanced filters</summary>
+        <div class="filters">
+          <div class="filters-grid">
+            <div class="field">
+              <label for="typeFilter">Type</label>
+              <select class="select" id="typeFilter">
+                <option value="all">All types</option>
+                <option value="received">Received</option>
+                <option value="sent">Sent</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="statusFilter">Status</label>
+              <select class="select" id="statusFilter">
+                <option value="all">All statuses</option>
+                <option value="ok">Successful</option>
+                <option value="failed">Failed</option>
+                <option value="missing">Missing on disk</option>
+                <option value="on_disk">Imported from disk</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="protocolFilter">Protocol</label>
+              <select class="select" id="protocolFilter">
+                <option value="all">All protocols</option>
+                <option value="fountain">Fountain</option>
+                <option value="sequential">Sequential</option>
+                <option value="disk">Disk import</option>
+                <option value="other">Other / unknown</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="originFilter">Source</label>
+              <select class="select" id="originFilter">
+                <option value="all">All sources</option>
+                <option value="history">Recorded locally</option>
+                <option value="disk">Discovered on receiver disk</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="rangeFilter">Period</label>
+              <select class="select" id="rangeFilter">
+                <option value="all">All time</option>
+                <option value="24h">Last 24 hours</option>
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="results-bar">
+        <div class="filter-tags" id="filterTags">
+          <span class="filter-tag" id="tagSearch"><span id="tagSearchText"></span><button data-clear="search" type="button" aria-label="Clear search">×</button></span>
+          <span class="filter-tag" id="tagType"><span id="tagTypeText"></span><button data-clear="type" type="button" aria-label="Clear type">×</button></span>
+          <span class="filter-tag" id="tagStatus"><span id="tagStatusText"></span><button data-clear="status" type="button" aria-label="Clear status">×</button></span>
+          <span class="filter-tag" id="tagProtocol"><span id="tagProtocolText"></span><button data-clear="protocol" type="button" aria-label="Clear protocol">×</button></span>
+          <span class="filter-tag" id="tagOrigin"><span id="tagOriginText"></span><button data-clear="origin" type="button" aria-label="Clear origin">×</button></span>
+          <span class="filter-tag" id="tagRange"><span id="tagRangeText"></span><button data-clear="range" type="button" aria-label="Clear range">×</button></span>
+        </div>
+        <div class="results-copy" id="resultsCopy">Showing <strong>0</strong> items.</div>
+        <button class="btn" id="clearFiltersBtn" type="button">Clear filters</button>
+      </div>
+    </section>
+
+    <div class="table-wrap" id="tableWrap">
+      <table id="historyTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>File</th>
+            <th>Location</th>
+            <th>Size</th>
+            <th>Duration</th>
+            <th>Speed</th>
+            <th>Status</th>
+            <th class="actions-col">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+
+      <div class="empty-state" id="emptyState">
+        <div class="empty-title" id="emptyTitle">No history yet</div>
+        <div class="empty-sub" id="emptySub">Completed transfers and receiver output files will appear here.</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop hidden" id="confirmModal" aria-hidden="true">
+  <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+    <div class="modal-title" id="confirmModalTitle">Confirm action</div>
+    <div class="modal-body" id="confirmModalMessage"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" id="confirmModalCancel" type="button">Cancel</button>
+      <button class="modal-btn modal-btn-confirm" id="confirmModalConfirm" type="button">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/history.js"></script>
+</body>
+</html>

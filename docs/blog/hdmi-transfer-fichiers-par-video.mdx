@@ -1,0 +1,191 @@
+<p align="center">
+  <img src="../images/logo.svg" alt="HDMI Transfer" width="180" />
+</p>
+
+<h1 align="center">HDMI Transfer</h1>
+
+<p align="center">Transformer un fichier en images, puis le reconstruire grâce à une carte de capture HDMI</p>
+
+<p align="center">
+  <a href="https://github.com/Thunzyy/HDMI-transfer">GitHub</a>
+  {" · "}
+  <a href="https://github.com/Thunzyy/HDMI-transfer/blob/main/docs/getting-started.md">Installation</a>
+
+</p>
+
+> **L'idée :** transporter les données d'un fichier dans un signal vidéo HDMI. Un navigateur affiche des blocs de couleur qui changent ; une carte de capture récupère les images ; un récepteur Python reconstitue le fichier. HDMI Transfer est un prototype expérimental, avec un émetteur HTML autonome, une interface web locale et un démarrage Docker. Les débits présentés ici sont des plafonds calculés, pas des mesures sur du matériel.
+
+On utilise habituellement HDMI pour afficher des informations à destination d'une personne. Mais une image est aussi une grille de valeurs qu'un autre ordinateur peut lire. Si l'émetteur maîtrise cette grille et que le récepteur peut la décoder, le chemin vidéo devient un canal de données.
+
+
+---
+
+## Sommaire
+
+- [Le montage](#le-montage)
+- [Des octets aux blocs de couleur](#octets-et-couleurs)
+- [Pourquoi utiliser des codes fontaine ?](#codes-fontaine)
+- [Utiliser l'application](#utiliser-application)
+- [Démarrer avec Docker ou Python](#demarrage)
+- [À quelle vitesse ?](#debits)
+- [Dans le code](#architecture)
+- [Ce que propose le POC et ce qu'il reste à tester](#limites)
+
+---
+
+<a id="le-montage"></a>
+
+## Le montage
+
+Le trajet physique tient en une ligne :
+
+```text
+PC émetteur → câble HDMI → carte de capture HDMI vers USB → PC récepteur
+```
+
+<figure>
+  <img src="../images/how-it-works.svg" alt="Schéma animé : les pixels changent sur l'émetteur, traversent la carte de capture HDMI et permettent au récepteur de reconstruire le fichier" width="1200" />
+  <figcaption>Les données voyagent dans les images vidéo. L'animation illustre le principe ; ce n'est pas l'enregistrement d'un transfert.</figcaption>
+</figure>
+
+L'émetteur ouvre `sender.html` dans un navigateur et affiche les images encodées sur la sortie HDMI reliée à la carte. Le récepteur lit la vidéo capturée et la décode localement.
+
+La carte de capture est indispensable : sur deux PC ordinaires, les ports HDMI sont généralement des sorties. Un câble entre ces deux sorties ne crée pas une entrée vidéo. La carte apporte cette entrée et la rend accessible au récepteur par USB.
+
+Les deux ordinateurs n'ont pas besoin d'un réseau commun pour transporter le fichier. Il faut préparer l'émetteur autonome et installer le récepteur à l'avance. L'interface web du récepteur fonctionne en local. On peut aussi servir la page d'émission sur un réseau local de confiance : ce réseau distribue alors l'interface, tandis que le contenu du fichier passe toujours par HDMI.
+
+<a id="octets-et-couleurs"></a>
+
+## Des octets aux blocs de couleur
+
+HDMI Transfer n'affiche pas de QR codes. Il dessine une grille de blocs colorés dans un canvas du navigateur. Chaque bloc transporte des valeurs dans ses canaux rouge, vert et bleu.
+
+Avec le réglage recommandé de **2 bits par canal**, chaque canal utilise quatre niveaux : `0`, `85`, `170` et `255`. Les trois canaux donnent **6 bits par bloc**. Un bloc de 8 × 8 pixels répète sa couleur sur une surface plus large au lieu de dépendre d'un pixel isolé.
+
+En 1920 × 1080, cela donne une grille de 240 × 135 blocs :
+
+```text
+240 × 135 blocs × 3 canaux × 2 bits = 194 400 bits
+194 400 / 8 = 24 300 octets par image
+24 300 − en-tête Fountain de 16 octets = 24 284 octets de charge utile
+```
+
+À la réception, le logiciel échantillonne les blocs, convertit les couleurs en symboles et analyse la trame. Un CRC aide à détecter les données corrompues. Une fois le fichier reconstruit, ses métadonnées SHA-256 permettent d'en vérifier l'intégrité.
+
+Le calcul est simple ; la capture fiable l'est moins. Redimensionnement, format vidéo négocié, conversion des couleurs, images perdues et charge CPU peuvent affecter le décodage. Choisir un profil plus rapide ne suffit donc pas à obtenir un meilleur transfert.
+
+<a id="codes-fontaine"></a>
+
+## Pourquoi utiliser des codes fontaine ?
+
+Imaginons un fichier découpé en morceaux numérotés, avec un morceau par image. Si le récepteur manque une image, il doit attendre que ce morceau précis repasse.
+
+Les codes fontaine lui donnent davantage de possibilités de récupération. HDMI Transfer implémente des **codes fontaine de type LT**, avec une distribution des degrés dite « soliton robuste ». Il ne s'agit pas de l'implémentation RaptorQ utilisée par AirQR.
+
+L'encodeur découpe les données en blocs sources. Pour chaque paquet encodé, une graine déterministe sélectionne un sous-ensemble de blocs à combiner avec XOR. Le récepteur utilise cette même graine pour retrouver la relation entre le paquet et les blocs sources.
+
+Exemple simplifié :
+
+```text
+Paquet reçu 1 : A
+Paquet reçu 2 : A XOR B
+
+A connu XOR (A XOR B) = B
+```
+
+Le décodeur commence par résoudre les relations simples et propage les blocs retrouvés. Une élimination de Gauss, avec une taille bornée, peut prendre le relais lorsque cette progression se bloque.
+
+Cela ne garantit pas que n'importe quel ensemble de paquets suffise. Il faut recevoir assez d'informations utiles et valides, et la redondance consomme de la bande passante. En revanche, le transfert peut tolérer des images manquantes sans exiger que tous les morceaux originaux arrivent dans l'ordre.
+
+Un mode séquentiel reste disponible pour les expériences et les comparaisons. **Fountain + Balanced + 2 bpc** constitue le point de départ recommandé dans l'interface web.
+
+<a id="utiliser-application"></a>
+
+## Utiliser l'application
+
+<figure>
+  <img src="../images/receiver.png" alt="Interface de réception HDMI Transfer : choix du périphérique, aperçu vidéo et progression" width="1100" />
+  <figcaption>Le récepteur au repos, sans périphérique de capture exposé dans cette session.</figcaption>
+</figure>
+
+1. Relier la sortie HDMI de l'émetteur à la carte, puis la carte au récepteur en USB.
+2. Démarrer le récepteur et ouvrir son interface web locale.
+3. Sur l'émetteur, ouvrir `sender.html`, choisir un petit fichier de test et déplacer le navigateur sur l'écran HDMI relié à la carte.
+4. Sélectionner le périphérique de capture et régler les deux côtés sur le même protocole, profil et encodage.
+5. Lancer la réception, puis l'émission en plein écran.
+6. Télécharger le fichier reconstruit et comparer son empreinte SHA-256 à celle de l'original.
+
+<figure>
+  <img src="../images/sender.png" alt="Émetteur autonome dans le navigateur, avec un fichier chargé et les paramètres de transmission" width="1100" />
+  <figcaption>Un fichier prêt à partir. Cette capture ne montre pas un transfert terminé ; le débit affiché est une estimation.</figcaption>
+</figure>
+
+L'interface propose aussi un historique des transferts et des réglages communs. L'émetteur hors ligne ne reçoit pas d'accusé de réception : il faut l'arrêter quand la réception est terminée. La page distincte `/sender/test` active explicitement une coordination locale pour les essais sur un seul PC, toujours avec du matériel de capture.
+
+<figure>
+  <img src="../images/settings.png" alt="Page des réglages communs de HDMI Transfer" width="1100" />
+  <figcaption>Faire correspondre les paramètres avant d'augmenter la résolution, la cadence ou la densité d'encodage.</figcaption>
+</figure>
+
+<a id="demarrage"></a>
+
+## Démarrer avec Docker ou Python
+
+Depuis un clone du dépôt, avec Docker démarré :
+
+```bash
+docker compose up --build -d --wait
+```
+
+Ouvrir ensuite [http://localhost:5000](http://localhost:5000). Compose attend le contrôle de santé du service. Un volume conserve les fichiers reçus lorsque le conteneur est recréé.
+
+**Démarrer l'interface ne connecte pas automatiquement une carte de capture.** Sous Linux natif, `compose.capture.yaml` permet de transmettre un périphérique vidéo au conteneur. Docker Desktop n'expose pas automatiquement les cartes USB de Windows ou macOS. Pour recevoir directement sous Windows, le lanceur fourni est un point de départ plus simple :
+
+```powershell
+.\start.bat
+```
+
+Sous Linux ou macOS, utiliser `sh start.sh`. Les lanceurs natifs demandent [uv](https://docs.astral.sh/uv/getting-started/installation/) et installent les dépendances web. La première installation nécessite l'accès aux téléchargements des dépendances. Python 3.11 ou ultérieur est requis.
+
+L'émetteur peut rester un simple fichier HTML local sur l'autre PC. Le [guide d'installation](https://github.com/Thunzyy/HDMI-transfer/blob/main/docs/getting-started.md) et le [guide matériel](https://github.com/Thunzyy/HDMI-transfer/blob/main/docs/hardware-setup.md) détaillent le câblage, la sélection du périphérique et la calibration.
+
+<a id="debits"></a>
+
+## À quelle vitesse ?
+
+Avec Fountain, des blocs de 8 × 8 pixels et 2 bits par canal, les plafonds calculés de charge utile encodée sont :
+
+| Profil | Résolution / cadence effective supposée | Mo/s | Mbit/s |
+| --- | --- | ---: | ---: |
+| Balanced | 1920 × 1080 / 60 images/s | 1,46 | 11,66 |
+| Speed | 1920 × 1080 / 240 images/s | 5,83 | 46,63 |
+| Quality | 3840 × 2160 / 30 images/s | 2,92 | 23,32 |
+
+Ici, un Mo représente un million d'octets et un Mbit un million de bits. L'en-tête de 16 octets est déjà déduit. La redondance Fountain, les pertes d'images, le démarrage et la reconstruction ne le sont pas.
+
+Ces valeurs décrivent une capacité dans des conditions données. Ce ne sont **pas des vitesses de copie mesurées**. Le navigateur limite l'émission à la fréquence de rafraîchissement détectée. Une chaîne à 60 Hz ne transporte pas 240 images différentes par seconde parce que le profil Speed est sélectionné : à 60 images/s, son plafond calculé rejoint celui de Balanced.
+
+Un benchmark matériel utile doit transférer un fichier connu, vérifier le résultat et mesurer la durée complète, en précisant la carte, la résolution, la cadence et l'encodage. C'est cette mesure qui permettra d'annoncer un débit soutenu.
+
+<a id="architecture"></a>
+
+## Dans le code
+
+L'émetteur utilise HTML et JavaScript, avec un canvas pour le rendu. Le récepteur s'appuie sur Python, OpenCV pour la capture vidéo, NumPy et Numba pour le traitement, ainsi que Flask pour l'interface locale. L'image Docker sert l'application avec Waitress.
+
+Un manifeste de protocole maintient la cohérence des profils et des définitions d'en-têtes. Les fichiers du navigateur sont générés depuis les sources du projet afin que l'émetteur autonome respecte le même contrat que le récepteur.
+
+Le dépôt sépare les protocoles, les sessions de transfert, les adaptateurs de capture et les interfaces. Les tests couvrent l'encodage et le décodage, l'accord entre JavaScript et Python, le comportement du récepteur et les budgets de performance. Un test Docker vérifie le démarrage, les points d'accès web, les téléchargements et la persistance. Ces contrôles logiciels apportent des informations utiles sur l'application ; le transfert HDMI physique reste une validation distincte.
+
+<a id="limites"></a>
+
+## Ce que propose le POC et ce qu'il reste à tester
+
+HDMI Transfer donne une forme concrète au trajet octets → vidéo → octets : un émetteur autonome, un récepteur relié à une capture, un encodage tolérant aux pertes et une interface locale utilisable.
+
+Cela reste un **POC**, sans garantie de compatibilité entre tous les GPU, adaptateurs, ports USB et formats de capture. Les captures de cet article proviennent réellement de l'application, mais montrent un récepteur au repos et un émetteur préparé, pas un benchmark matériel réussi.
+
+L'encodage n'est pas non plus du chiffrement. CRC et SHA-256 servent à vérifier l'intégrité ; ils ne rendent pas le signal vidéo confidentiel. Chiffrer le fichier avant son envoi lorsque sa confidentialité est nécessaire.
+
+
+Le code est disponible sur [GitHub](https://github.com/Thunzyy/HDMI-transfer).

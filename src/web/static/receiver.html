@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>HDMI Transfer — Receiver</title>
+<link rel="icon" type="image/svg+xml" href="/static/images/logo.svg"/>
+<style>
+:root {
+  --bg:#16181e; --bg2:#0f1117; --panel:rgba(22,24,30,0.92);
+  --accent:#7c8aff; --accent-dim:rgba(124,138,255,0.1);
+  --accent-border:rgba(255,255,255,0.1);
+  --green:#4ade80; --yellow:#fbbf24; --red:#f87171;
+  --text:#e4e4e7; --dim:rgba(228,228,231,0.5);
+  --bright:#ffffff; --muted:#a1a1aa;
+  --font-ui:'Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'SF Mono','Cascadia Code','Fira Code','Consolas',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  width:100%;height:100vh;overflow:hidden;
+  background:var(--bg2);color:var(--text);
+  font-family:var(--font-ui);
+  font-size:14px;display:flex;flex-direction:column;
+}
+::selection{background:var(--accent);color:var(--bg2)}
+
+/* ── Header ──────────────────────────────── */
+#header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;height:44px;
+  background:var(--bg);border-bottom:1px solid var(--accent-border);
+  flex-shrink:0;
+}
+.h-left{display:flex;align-items:center;gap:10px}
+.h-logo{width:26px;height:26px;display:block;flex-shrink:0}
+.h-title{color:var(--bright);font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+.h-pill{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 14px;border-radius:999px;
+  background:var(--accent-dim);border:1px solid var(--accent-border);
+  font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
+  color:var(--accent);
+}
+.h-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+.h-dot.idle{background:var(--yellow);box-shadow:0 0 6px var(--yellow)}
+.h-dot.error{background:var(--red);box-shadow:0 0 6px var(--red)}
+
+/* ── Layout ──────────────────────────────── */
+#layout{flex:1;display:flex;overflow:hidden}
+
+/* ── Left Sidebar ────────────────────────── */
+#sidebar{
+  width:220px;border-right:1px solid var(--accent-border);
+  background:var(--bg);display:flex;flex-direction:column;
+  flex-shrink:0;
+}
+.nav{padding:16px 12px;display:flex;flex-direction:column;gap:2px}
+.nav a{
+  display:block;padding:10px 14px;border-radius:6px;
+  color:var(--muted);text-decoration:none;
+  font-size:13px;font-weight:500;text-transform:uppercase;
+  letter-spacing:1px;transition:all .15s;
+}
+.nav a:hover{color:var(--text);background:rgba(255,255,255,0.04)}
+.nav a.active{color:var(--bright);background:rgba(255,255,255,0.07);font-weight:700}
+
+/* Config */
+.config{
+  padding:14px 16px 16px;margin-top:auto;
+  border-top:1px solid var(--accent-border);
+  display:flex;flex-direction:column;gap:10px;
+}
+.config-section-title{
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.6px;
+  color:var(--accent);margin-bottom:2px;
+  display:flex;align-items:center;gap:8px;
+}
+.config-section-title::after{
+  content:"";flex:1;height:1px;background:rgba(124,138,255,0.18);
+}
+.config-field{display:flex;flex-direction:column;gap:5px}
+.config-label{
+  display:block;font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:1.2px;
+  color:var(--muted);
+}
+.config-head{
+  display:flex;align-items:center;justify-content:flex-start;gap:6px;
+  width:fit-content;max-width:100%;
+}
+.config-head .config-label{margin-bottom:0}
+.help-tip{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;border-radius:999px;flex-shrink:0;
+  border:1px solid rgba(255,255,255,0.16);background:rgba(255,255,255,0.04);
+  color:var(--muted);font-size:11px;font-weight:700;line-height:1;cursor:help;
+}
+.help-tip:hover,.help-tip:focus-visible{
+  color:var(--bright);border-color:rgba(255,255,255,0.28);outline:none;
+}
+.help-bubble{
+  position:absolute;left:calc(100% + 8px);top:50%;transform:translateY(-50%);
+  width:220px;padding:10px 12px;border-radius:6px;z-index:30;
+  background:rgba(8,10,15,0.96);border:1px solid rgba(255,255,255,0.12);
+  color:var(--text);font-size:11px;font-weight:500;letter-spacing:0;text-transform:none;
+  line-height:1.5;box-shadow:0 14px 30px rgba(0,0,0,0.35);
+  opacity:0;pointer-events:none;transition:opacity .12s ease;
+}
+.help-tip:hover .help-bubble,
+.help-tip:focus-visible .help-bubble{opacity:1}
+.config-select{
+  width:100%;height:32px;padding:0 28px 0 10px;
+  background:rgba(0,0,0,0.32);border:1px solid rgba(255,255,255,0.1);
+  border-radius:6px;color:var(--text);font-family:inherit;font-size:12px;
+  outline:none;cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center;
+  transition:border-color .15s,background .15s;
+}
+.config-select:hover{border-color:rgba(255,255,255,0.2)}
+.config-select:focus{border-color:var(--accent)}
+.config-select:disabled{opacity:.4;cursor:not-allowed}
+.btn-detect{
+  width:100%;height:30px;border:1px dashed rgba(255,255,255,0.14);
+  border-radius:6px;background:transparent;color:var(--muted);
+  font-family:inherit;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.8px;cursor:pointer;
+  transition:all .15s;
+}
+.btn-detect:hover{border-style:solid;border-color:var(--accent);color:var(--accent)}
+.btn-detect:disabled{opacity:.3;cursor:not-allowed}
+/* ── Center ──────────────────────────────── */
+#center{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.center-top{
+  padding:16px 22px 12px;
+  display:flex;justify-content:space-between;align-items:center;gap:18px;
+  border-bottom:1px solid rgba(255,255,255,0.04);
+}
+.center-top h2{
+  font-size:17px;font-weight:700;color:var(--bright);
+  text-transform:uppercase;letter-spacing:.5px;
+}
+.center-top .sub{font-size:12px;color:var(--muted);margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cfg-chip{
+  display:inline-flex;align-items:center;
+  padding:3px 9px;border-radius:999px;
+  background:rgba(124,138,255,0.1);border:1px solid rgba(124,138,255,0.2);
+  font-size:10px;font-weight:700;color:var(--accent);
+  text-transform:uppercase;letter-spacing:.6px;font-family:var(--font-ui);
+}
+.cfg-chip-sep{color:rgba(255,255,255,0.15);font-size:10px;margin:0 -2px}
+.top-btns{display:flex;gap:8px;align-items:center;flex-shrink:0}
+.cbtn{
+  padding:10px 20px;border-radius:7px;
+  font-family:inherit;font-size:12px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.9px;
+  cursor:pointer;transition:all .15s;
+}
+.cbtn-start{
+  padding:11px 28px;font-size:13px;letter-spacing:1.1px;
+  background:var(--accent);border:1px solid var(--accent);
+  color:#fff;
+  box-shadow:0 4px 14px rgba(124,138,255,0.28);
+}
+.cbtn-start:hover:not(:disabled){background:#6b7bff;border-color:#6b7bff;transform:translateY(-1px);box-shadow:0 6px 18px rgba(124,138,255,0.4)}
+.cbtn-start:active:not(:disabled){transform:translateY(0)}
+.cbtn-start:disabled{opacity:.3;cursor:not-allowed;box-shadow:none}
+.cbtn-stop{
+  background:transparent;border:1px solid rgba(255,255,255,0.15);
+  color:var(--text);
+}
+.cbtn-stop:hover:not(:disabled){color:var(--red);border-color:var(--red)}
+.cbtn-stop:disabled{opacity:.25;cursor:not-allowed}
+.cbtn-reset{
+  background:transparent;border:1px solid rgba(124,138,255,0.4);
+  color:var(--accent);
+}
+.cbtn-reset:hover:not(:disabled){border-color:var(--accent);color:#a9b4ff;background:rgba(124,138,255,0.08)}
+.cbtn-reset:disabled{opacity:.25;cursor:not-allowed}
+#statusMsg{
+  font-size:12px;color:var(--muted);padding:8px 22px 0;min-height:0;
+  transition:all .15s;
+}
+#statusMsg:empty{padding:0}
+
+.center-body{flex:1;display:flex;flex-direction:column;gap:14px;padding:14px 22px 16px;overflow:hidden}
+
+/* Preview area */
+#preview{
+  flex:1;border:1px solid var(--accent-border);border-radius:10px;
+  overflow:hidden;position:relative;background:var(--bg2);
+  display:flex;flex-direction:column;min-height:180px;min-width:0;
+  box-shadow:0 6px 24px rgba(0,0,0,0.18);
+}
+.preview-badges{position:absolute;top:10px;left:10px;z-index:2;display:flex;gap:5px}
+.badge{
+  padding:3px 10px;background:rgba(0,0,0,0.6);
+  border:1px solid rgba(255,255,255,0.15);border-radius:4px;
+  font-size:11px;font-weight:600;color:var(--accent);font-family:var(--font-mono);
+  display:flex;align-items:center;gap:4px;
+}
+.rec-dot{width:5px;height:5px;border-radius:50%;background:var(--red);animation:blink 1.2s ease infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.badge-frm{
+  position:absolute;bottom:10px;right:10px;z-index:2;
+  padding:3px 10px;background:rgba(0,0,0,0.6);
+  border:1px solid rgba(255,255,255,0.15);border-radius:4px;
+  font-size:11px;font-weight:500;color:var(--accent);font-family:var(--font-mono);
+}
+#previewStream,
+#previewCanvas{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+}
+#previewStream{
+  object-fit:contain;object-position:center;
+  background:var(--bg2);
+}
+#previewCanvas{
+  background:var(--bg2);image-rendering:pixelated;
+}
+.preview-idle{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  z-index:1;color:var(--muted);font-size:13px;font-weight:600;
+  text-transform:uppercase;letter-spacing:2px;
+  background:radial-gradient(ellipse at center, rgba(124,138,255,0.05), transparent 65%);
+}
+.preview-idle::before{
+  content:"";width:48px;height:48px;border-radius:50%;
+  border:2px solid rgba(124,138,255,0.25);
+  background:radial-gradient(circle, rgba(124,138,255,0.18), transparent 70%);
+  animation:idlePulse 2.4s ease-in-out infinite;
+}
+@keyframes idlePulse{
+  0%,100%{transform:scale(1);opacity:.6}
+  50%{transform:scale(1.15);opacity:1}
+}
+.preview-idle.hidden{display:none}
+
+/* Log */
+#log{
+  height:140px;border:1px solid var(--accent-border);border-radius:10px;
+  background:var(--bg);display:flex;flex-direction:column;
+  overflow:hidden;flex-shrink:0;
+}
+.log-bar{
+  padding:6px 12px;border-bottom:1px solid var(--accent-border);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.log-bar span{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted)}
+#logBody{flex:1;overflow-y:auto;padding:8px 12px;display:flex;flex-direction:column;gap:2px}
+.log-entry{display:flex;gap:10px;font-size:12px;line-height:1.5;color:var(--dim);font-family:var(--font-mono)}
+.log-ts{color:var(--muted);flex-shrink:0;min-width:80px}
+.log-lv{flex-shrink:0;min-width:56px;font-weight:600}
+.log-lv.info{color:var(--accent)} .log-lv.success{color:var(--green)}
+.log-lv.warn{color:var(--yellow)} .log-lv.error{color:var(--red)}
+.log-msg{flex:1;color:var(--text)}
+
+/* ── Right Sidebar ───────────────────────── */
+#panel{
+  width:280px;border-left:1px solid var(--accent-border);
+  background:var(--bg);display:flex;flex-direction:column;
+  flex-shrink:0;overflow-y:auto;
+}
+.panel-section{padding:16px 18px;border-bottom:1px solid var(--accent-border)}
+.panel-section:last-child{border-bottom:none}
+.panel-title{
+  font-size:11px;font-weight:600;text-transform:uppercase;
+  letter-spacing:1.5px;color:var(--muted);margin-bottom:12px;
+}
+/* Progress */
+.pct-row{display:flex;align-items:baseline;gap:5px;margin-bottom:8px}
+.pct-big{font-size:32px;font-weight:700;color:var(--bright);letter-spacing:-1px;font-family:var(--font-mono)}
+.pct-unit{font-size:13px;font-weight:600;color:var(--muted)}
+.pct-speed{margin-left:auto;font-size:12px;font-weight:600;color:var(--accent);font-family:var(--font-mono)}
+.speed-graph{
+  height:64px;position:relative;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  border-left:1px solid rgba(255,255,255,0.06);
+  margin-bottom:4px;
+}
+.speed-graph svg{width:100%;height:100%}
+.speed-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);opacity:.7}
+
+/* Fountain grid */
+#fountainGrid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;margin-top:8px}
+.fblock{
+  aspect-ratio:1;border-radius:2px;
+  background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+  transition:background .12s;
+}
+.fblock.decoded{background:var(--accent);border-color:var(--accent)}
+.fblock.active{background:rgba(124,138,255,0.35);border-color:rgba(124,138,255,0.5)}
+.fountain-counts{
+  display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:5px;
+  font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:var(--font-mono);
+}
+
+/* File metrics */
+.metric-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.metric-row:last-child{margin-bottom:0}
+.m-label{font-size:12px;color:var(--muted)}
+.m-value{font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-mono)}
+.m-value.ok{color:var(--green)} .m-value.fail{color:var(--red)}
+
+/* Download */
+#downloadArea{display:none;margin-top:10px}
+#downloadArea.visible{display:block}
+.btn-dl{
+  display:flex;align-items:center;justify-content:center;
+  width:100%;height:38px;border:none;border-radius:5px;
+  background:var(--accent);color:#fff;
+  font-family:inherit;font-size:13px;font-weight:700;
+  text-transform:uppercase;letter-spacing:1px;
+  cursor:pointer;text-decoration:none;transition:all .15s;
+}
+.btn-dl:hover{background:#6b7bff}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.15)}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="h-left">
+    <img class="h-logo" src="/static/images/logo.svg" alt="" />
+    <span class="h-title">HDMI Transfer</span>
+  </div>
+  <div class="h-pill">
+    <span class="h-dot idle" id="linkDot"></span>
+    <span id="linkLabel">Idle</span>
+  </div>
+</div>
+
+<div id="layout">
+
+  <aside id="sidebar">
+    <nav class="nav">
+      <a class="active" href="/">Receive</a>
+      <a href="/sender">Send</a>
+      <a href="/history">History</a>
+      <a href="/settings">Settings</a>
+    </nav>
+    <div class="config">
+      <div class="config-section-title">Capture</div>
+      <div class="config-field">
+        <div class="config-head">
+          <label class="config-label" for="deviceSelect">Device</label>
+          <span class="help-tip" tabindex="0">?
+            <span class="help-bubble">Capture source to read on the receiver PC. In a 2-PC setup, choose the HDMI capture card that receives the sender PC output.</span>
+          </span>
+        </div>
+        <select class="config-select" id="deviceSelect" disabled>
+          <option value="">Scanning...</option>
+        </select>
+        <button class="btn-detect" id="refreshBtn">Detect devices</button>
+      </div>
+      <div class="config-field">
+        <div class="config-head">
+          <label class="config-label" for="profileSelect">Profile</label>
+          <span class="help-tip" tabindex="0">?
+            <span class="help-bubble">Signal geometry preset. Balanced is the safest default for mixed hardware. Use Speed only on a dedicated high-refresh HDMI path. Use Quality when you need 4K and can accept lower throughput.</span>
+          </span>
+        </div>
+        <select class="config-select" id="profileSelect">
+          <option value="speed">Speed - 120/144/240Hz HDMI</option>
+          <option value="balanced" selected>Balanced - recommended</option>
+          <option value="quality">Quality - 4K cleaner</option>
+        </select>
+      </div>
+      <div class="config-field">
+        <div class="config-head">
+          <label class="config-label" for="modeSelect">Mode</label>
+          <span class="help-tip" tabindex="0">?
+            <span class="help-bubble">Protocol decoder to expect. Fountain is the best default. Auto can help during bring-up when you do not yet know what the sender will use. Sequential is mainly for debugging.</span>
+          </span>
+        </div>
+        <select class="config-select" id="modeSelect">
+          <option value="auto">Auto-detect</option>
+          <option value="fountain" selected>Fountain - recommended</option>
+          <option value="sequential">Sequential - debug</option>
+        </select>
+      </div>
+      <div class="config-field">
+        <div class="config-head">
+          <label class="config-label" for="bpcSelect">Encoding</label>
+          <span class="help-tip" tabindex="0">?
+            <span class="help-bubble">Bits per color channel carried in each frame. 2 bpc is the best default. During preflight, the sender can automatically fall back if the HDMI path cannot hold it cleanly.</span>
+          </span>
+        </div>
+        <select class="config-select" id="bpcSelect">
+          <option value="1">1 bpc - safest fallback</option>
+          <option value="2" selected>2 bpc - recommended</option>
+          <option value="3">3 bpc - very clean only</option>
+        </select>
+      </div>
+      <div class="config-field">
+        <div class="config-head">
+          <label class="config-label" for="previewQualitySelect">Preview quality</label>
+          <span class="help-tip" tabindex="0">?
+            <span class="help-bubble">Only affects the live preview UI, not the transfer itself. Lower preview quality reduces receiver load and is usually better during long transfers.</span>
+          </span>
+        </div>
+        <select class="config-select" id="previewQualitySelect">
+          <option value="45" selected>Low - recommended</option>
+          <option value="60">Balanced</option>
+          <option value="75">High</option>
+          <option value="90">Max</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+
+  <main id="center">
+    <div class="center-top">
+      <div>
+        <h2>Receive</h2>
+        <div class="sub" id="deviceSubtitle">
+          <span class="cfg-chip" id="cfgChipProfile">Balanced</span>
+          <span class="cfg-chip-sep">/</span>
+          <span class="cfg-chip" id="cfgChipMode">Fountain</span>
+          <span class="cfg-chip-sep">/</span>
+          <span class="cfg-chip" id="cfgChipBpc">2 bpc</span>
+        </div>
+      </div>
+      <div class="top-btns">
+        <button class="cbtn cbtn-start" id="startBtn" disabled>Start</button>
+        <button class="cbtn cbtn-reset" id="resetBtn" disabled>Reset</button>
+        <button class="cbtn cbtn-stop" id="stopBtn" disabled>Stop</button>
+      </div>
+    </div>
+    <div id="statusMsg"></div>
+    <div class="center-body">
+      <div id="preview">
+        <div class="preview-badges">
+          <span class="badge" id="badgeRec" style="display:none">
+            <span class="rec-dot"></span> REC
+          </span>
+          <span class="badge" id="badgeRes">--</span>
+        </div>
+        <span class="badge-frm" id="badgeFrm">FRM: 0</span>
+        <img id="previewStream" style="display:none" />
+        <canvas id="previewCanvas" style="display:none"></canvas>
+        <div class="preview-idle" id="previewIdle">Waiting for signal</div>
+      </div>
+      <div id="log">
+        <div class="log-bar">
+          <span>Log</span>
+          <span>auto-scroll</span>
+        </div>
+        <div id="logBody"></div>
+      </div>
+    </div>
+  </main>
+
+  <aside id="panel">
+    <div class="panel-section">
+      <div class="panel-title">Progress</div>
+      <div class="pct-row">
+        <span class="pct-big" id="pctBig">0.0</span>
+        <span class="pct-unit">%</span>
+        <span class="pct-speed" id="speedBadge">--</span>
+      </div>
+      <div class="speed-graph">
+        <svg preserveAspectRatio="none" viewBox="0 0 100 100" id="speedGraph">
+          <path d="M0 100 L100 100" fill="rgba(156,163,175,0.06)" id="speedArea"/>
+          <path d="M0 100 L100 100" fill="none" stroke="#9ca3af" stroke-width="1.5" stroke-linejoin="round" id="speedLine"/>
+        </svg>
+      </div>
+      <div class="speed-labels"><span>-30s</span><span>now</span></div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-title">Blocks <span id="fountainPct" style="float:right;color:var(--accent)">0%</span></div>
+      <div id="fountainGrid"></div>
+      <div class="fountain-counts">
+        <span id="fountainRcvd">Solved: 0</span>
+        <span id="fountainTarget">Needed(min): 0</span>
+        <span id="fountainSenderTarget">Target(sender): --</span>
+        <span id="fountainRxValid">Rx(valid): 0 (0%)</span>
+        <span id="fountainRxUnique">Rx(unique): 0 (0%)</span>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-title">File</div>
+      <div class="metric-row"><span class="m-label">Name</span><span class="m-value" id="metricName">--</span></div>
+      <div class="metric-row"><span class="m-label">Size</span><span class="m-value" id="metricSize">--</span></div>
+      <div class="metric-row"><span class="m-label">SHA-256</span><span class="m-value" id="metricSha">--</span></div>
+      <div class="metric-row"><span class="m-label">Duration</span><span class="m-value" id="metricDuration">--</span></div>
+      <div class="metric-row"><span class="m-label">Speed</span><span class="m-value" id="metricSpeed">--</span></div>
+      <div class="metric-row"><span class="m-label">ETA</span><span class="m-value" id="metricEta">--</span></div>
+      <div id="downloadArea">
+        <a class="btn-dl" id="downloadBtn" href="#">Download</a>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+(() => {
+  const deviceSelect  = document.getElementById("deviceSelect");
+  const profileSelect = document.getElementById("profileSelect");
+  const modeSelect    = document.getElementById("modeSelect");
+  const bpcSelect     = document.getElementById("bpcSelect");
+  const previewQualitySelect = document.getElementById("previewQualitySelect");
+  const startBtn      = document.getElementById("startBtn");
+  const resetBtn      = document.getElementById("resetBtn");
+  const stopBtn       = document.getElementById("stopBtn");
+  const refreshBtn    = document.getElementById("refreshBtn");
+  const statusMsg     = document.getElementById("statusMsg");
+  const linkDot       = document.getElementById("linkDot");
+  const linkLabel     = document.getElementById("linkLabel");
+
+  const badgeRec      = document.getElementById("badgeRec");
+  const badgeRes      = document.getElementById("badgeRes");
+  const badgeFrm      = document.getElementById("badgeFrm");
+  const canvas        = document.getElementById("previewCanvas");
+  const ctx           = canvas.getContext("2d");
+  const previewIdle   = document.getElementById("previewIdle");
+  const previewStream = document.getElementById("previewStream");
+  const logBody       = document.getElementById("logBody");
+
+  const pctBig         = document.getElementById("pctBig");
+  const speedBadge     = document.getElementById("speedBadge");
+  const speedArea      = document.getElementById("speedArea");
+  const speedLine      = document.getElementById("speedLine");
+  const fountainPct    = document.getElementById("fountainPct");
+  const fountainGrid   = document.getElementById("fountainGrid");
+  const fountainRcvd   = document.getElementById("fountainRcvd");
+  const fountainTarget = document.getElementById("fountainTarget");
+  const fountainSenderTarget = document.getElementById("fountainSenderTarget");
+  const fountainRxValid = document.getElementById("fountainRxValid");
+  const fountainRxUnique = document.getElementById("fountainRxUnique");
+
+  const metricName     = document.getElementById("metricName");
+  const metricSize     = document.getElementById("metricSize");
+  const metricSha      = document.getElementById("metricSha");
+  const metricDuration = document.getElementById("metricDuration");
+  const metricSpeed    = document.getElementById("metricSpeed");
+  const metricEta      = document.getElementById("metricEta");
+  const downloadArea   = document.getElementById("downloadArea");
+  const downloadBtn    = document.getElementById("downloadBtn");
+
+  let sse = null, totalChunks = 0, speedHistory = [];
+  let expectedDroplets = null;
+  let activeProtocol = null;
+  const MAX_PTS = 30, GRID_N = 40;
+  const SETTINGS_KEY = "hdmi_transfer_settings";
+  const LEGACY_PREVIEW_SETTINGS_KEY = "hdmi_transfer_preview_settings";
+  let autoScanEnabled = true;
+  let idlePreviewEnabled = true;
+  let previewLastFrameAt = 0;
+  let previewLastSeq = 0;
+  let previewWatchdogWarned = false;
+  let previewHealthPollInFlight = false;
+
+  function markPreviewHeartbeat(seq = null) {
+    previewLastFrameAt = Date.now();
+    previewWatchdogWarned = false;
+    const n = Number(seq);
+    if (Number.isFinite(n) && n > previewLastSeq) {
+      previewLastSeq = n;
+    }
+  }
+
+  async function pollPreviewHealth() {
+    if (previewHealthPollInFlight || stopBtn.disabled) return;
+    previewHealthPollInFlight = true;
+    try {
+      const r = await fetch("/api/receive/status", {cache: "no-store"});
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!d.active) return;
+
+      const seq = Number(d.preview_seq ?? 0);
+      const age = Number(d.preview_age_s);
+      if (Number.isFinite(seq) && seq > previewLastSeq) {
+        markPreviewHeartbeat(seq);
+        return;
+      }
+      if (Number.isFinite(age) && age >= 0 && age <= 1.5) {
+        markPreviewHeartbeat(seq);
+      }
+    } catch {}
+    finally {
+      previewHealthPollInFlight = false;
+    }
+  }
+
+  function startPreviewStream(force = false) {
+    const q = Number(previewQualitySelect.value || 75);
+    const src = "/api/receive/preview?ts=" + Date.now() + "&quality=" + q;
+    if (!force && previewStream.src) return;
+    previewStream.src = src;
+    previewStream.style.display = "block";
+    markPreviewHeartbeat();
+  }
+
+  function stopPreviewStream() {
+    previewStream.removeAttribute("src");
+    previewStream.src = "";
+    previewStream.style.display = "none";
+  }
+
+  function loadPreviewSettings() {
+    const allowed = new Set(["45", "60", "75", "90"]);
+    try {
+      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+      if (s && s.defaultPreviewQuality !== undefined) {
+        const q = String(Number(s.defaultPreviewQuality));
+        if (allowed.has(q)) previewQualitySelect.value = q;
+        return;
+      }
+    } catch {}
+
+    // Backward compatibility for existing local state from previous versions.
+    try {
+      const raw = localStorage.getItem(LEGACY_PREVIEW_SETTINGS_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s && s.quality !== undefined) {
+        const q = String(Number(s.quality));
+        if (allowed.has(q)) previewQualitySelect.value = q;
+      }
+    } catch {}
+  }
+
+  function savePreviewSettings() {
+    try {
+      const q = Number(previewQualitySelect.value);
+      const settings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+      settings.defaultPreviewQuality = q;
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      localStorage.removeItem(LEGACY_PREVIEW_SETTINGS_KEY);
+    } catch {}
+  }
+
+  async function applyPreviewSettings(showLog = false) {
+    const q = Number(previewQualitySelect.value);
+    try {
+      const r = await fetch("/api/receive/preview/settings", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({quality: q}),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        if (showLog) log("info", "Preview quality set to Q" + d.quality + ".");
+      }
+      if (!r.ok && r.status !== 409) {
+        log("warn", "Preview settings not applied.");
+      }
+    } catch {}
+  }
+
+  /* ── Canvas ────────────────────────────── */
+  function sizeCanvas() {
+    const r = canvas.parentElement.getBoundingClientRect();
+    canvas.width = Math.floor(r.width);
+    canvas.height = Math.floor(r.height) - 2;
+    ctx.fillStyle = "#111318";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  window.addEventListener("resize", sizeCanvas);
+  requestAnimationFrame(sizeCanvas);
+
+  /* ── Fountain grid ─────────────────────── */
+  function initGrid(n) {
+    fountainGrid.innerHTML = "";
+    for (let i = 0; i < (n || GRID_N); i++) {
+      const d = document.createElement("div");
+      d.className = "fblock";
+      fountainGrid.appendChild(d);
+    }
+  }
+  initGrid(GRID_N);
+
+  /* ── Log ────────────────────────────────── */
+  function log(level, msg) {
+    const t = new Date();
+    const ts = t.toLocaleTimeString("en-US", {hour12:false}) + "." + String(t.getMilliseconds()).padStart(3,"0");
+    const el = document.createElement("div");
+    el.className = "log-entry";
+    el.innerHTML = `<span class="log-ts">[${ts}]</span><span class="log-lv ${level}">${level.toUpperCase()}</span><span class="log-msg">${msg}</span>`;
+    logBody.appendChild(el);
+    logBody.scrollTop = logBody.scrollHeight;
+  }
+
+  /* ── Devices ───────────────────────────── */
+  const DEVICE_CACHE_KEY = "hdmi_transfer_devices";
+
+  function populateDevices(devs) {
+    deviceSelect.innerHTML = "";
+    if (!devs.length) {
+      deviceSelect.innerHTML = '<option value="">No devices</option>';
+      statusMsg.textContent = "No capture devices found.";
+      return;
+    }
+    devs.forEach(d => {
+      const o = document.createElement("option");
+      o.value = d.index;
+      o.textContent = d.name + " (" + d.width + "x" + d.height + " @ " + Math.round(d.fps) + " fps)";
+      deviceSelect.appendChild(o);
+    });
+    statusMsg.textContent = devs.length + " device(s) found.";
+    startBtn.disabled = false;
+    resetBtn.disabled = false;
+    updateBadge();
+  }
+
+  function loadCachedDevices() {
+    try {
+      const raw = sessionStorage.getItem(DEVICE_CACHE_KEY);
+      if (!raw) return false;
+      const devs = JSON.parse(raw);
+      if (!Array.isArray(devs) || !devs.length) return false;
+      if (!devs[0].backend) { sessionStorage.removeItem(DEVICE_CACHE_KEY); return false; }
+      populateDevices(devs);
+      log("info", devs.length + " cached device(s) loaded. Ready.");
+      deviceSelect.disabled = false;
+      refreshBtn.disabled = false;
+      resetBtn.disabled = false;
+      // Ensure server has cache + pre-warms device (awaited to avoid race)
+      const syncUrl = autoScanEnabled ? "/api/devices" : "/api/devices?cached_only=1";
+      fetch(syncUrl).then(r => r.json()).then(serverDevs => {
+        if (serverDevs && serverDevs.length) {
+          populateDevices(serverDevs);
+          try { sessionStorage.setItem(DEVICE_CACHE_KEY, JSON.stringify(serverDevs)); } catch {}
+        }
+      }).catch(() => {});
+      return true;
+    } catch { return false; }
+  }
+
+  function warmDevice(idx) {
+    fetch("/api/devices/warm", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({device: +idx}),
+    }).catch(() => {});
+  }
+
+  async function loadDevices(force, cachedOnly = false) {
+    deviceSelect.innerHTML = '<option value="">Scanning...</option>';
+    deviceSelect.disabled = true;
+    refreshBtn.disabled = true;
+    startBtn.disabled = true;
+    resetBtn.disabled = true;
+    statusMsg.textContent = cachedOnly ? "Loading cached devices..." : "Scanning devices...";
+    log("info", cachedOnly ? "Loading cached devices..." : "Scanning capture devices...");
+    try {
+      const url = cachedOnly ? "/api/devices?cached_only=1" : (force ? "/api/devices?force=1" : "/api/devices");
+      const r = await fetch(url);
+      const devs = await r.json();
+      populateDevices(devs);
+      if (devs.length) {
+        log("success", devs.length + " device(s) available. Ready.");
+        try { sessionStorage.setItem(DEVICE_CACHE_KEY, JSON.stringify(devs)); } catch {}
+      } else {
+        if (cachedOnly) {
+          statusMsg.textContent = "No cached device. Click Detect devices.";
+          log("warn", "No cached device available. Manual detect required.");
+        } else {
+          log("warn", "No capture devices detected.");
+        }
+      }
+    } catch (e) {
+      deviceSelect.innerHTML = '<option value="">Error</option>';
+      statusMsg.textContent = "Error: " + e.message;
+      log("error", "Detection failed: " + e.message);
+    }
+    deviceSelect.disabled = false;
+    refreshBtn.disabled = false;
+    resetBtn.disabled = !deviceSelect.value;
+    applySavedSettings();
+  }
+
+  function updateBadge() {
+    const m = {speed:"1920x1080 @ 240fps", balanced:"1920x1080 @ 60fps", quality:"3840x2160 @ 30fps"};
+    badgeRes.textContent = m[profileSelect.value] || profileSelect.value;
+  }
+  profileSelect.addEventListener("change", updateBadge);
+  deviceSelect.addEventListener("change", () => warmDevice(deviceSelect.value));
+
+  /* ── Start / Stop ──────────────────────── */
+  async function start() {
+    resetTransferStats();
+    activeProtocol = modeSelect.value === "auto" ? null : modeSelect.value;
+    downloadArea.classList.remove("visible");
+    speedHistory = [];
+    try {
+      const r = await fetch("/api/receive/start", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          device:+deviceSelect.value,
+          profile:profileSelect.value,
+          mode:modeSelect.value,
+          bpc:+bpcSelect.value,
+          preflight:true,
+        }),
+      });
+      if (!r.ok) { const e = await r.json(); statusMsg.textContent = "Error: " + (e.error||"Failed"); log("error", e.error||"Start failed"); return; }
+    } catch (e) { statusMsg.textContent = "Network error: " + e.message; log("error", "Network: " + e.message); return; }
+    startBtn.disabled = true; stopBtn.disabled = false; resetBtn.disabled = false;
+    deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = true;
+    badgeRec.style.display = "flex";
+    previewIdle.classList.add("hidden");
+    previewLastSeq = 0;
+    startPreviewStream(true);
+    applyPreviewSettings();
+    log("info", "Starting capture...");
+    connectSSE();
+  }
+
+  async function stop() {
+    stopBtn.disabled = true;
+    log("warn", "Stop requested.");
+    try { await fetch("/api/receive/stop", {method:"POST"}); } catch {}
+  }
+
+  async function resetConnection() {
+    resetBtn.disabled = true;
+    log("warn", "Resetting receiver connection...");
+    if (sse) { sse.close(); sse = null; }
+    try {
+      const payload = {device: deviceSelect.value ? +deviceSelect.value : null};
+      const r = await fetch("/api/receive/reset", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error || ("reset failed (" + r.status + ")"));
+      }
+      statusMsg.textContent = "Connection reset.";
+      log("success", "Receiver connection reset.");
+    } catch (e) {
+      statusMsg.textContent = "Reset error: " + e.message;
+      log("error", "Reset failed: " + e.message);
+    } finally {
+      resetTransferStats();
+      previewLastSeq = 0;
+      cleanup();
+      resetBtn.disabled = !deviceSelect.value;
+    }
+  }
+
+  function resetTransferStats() {
+    totalChunks = 0;
+    speedHistory = [];
+    expectedDroplets = null;
+    activeProtocol = modeSelect.value === "auto" ? null : modeSelect.value;
+
+    pctBig.textContent = "0.0";
+    fountainPct.textContent = "0%";
+    speedBadge.textContent = "--";
+    badgeFrm.textContent = "FRM: 0";
+    renderTransferCounts(activeProtocol || "fountain", {
+      chunks_decoded: 0,
+      total_chunks: 0,
+      droplets_received: 0,
+      unique_droplets_received: 0,
+      start_seen: false,
+      end_seen: false,
+      pass_count: 0,
+    });
+
+    speedLine.setAttribute("d", "M0 100 L100 100");
+    speedArea.setAttribute("d", "M0 100 L100 100 L100 100 L0 100 Z");
+    initGrid(GRID_N);
+    if (canvas.style.display !== "none") sizeCanvas();
+
+    metricName.textContent = "--";
+    metricSize.textContent = "--";
+    metricSha.textContent = "--";
+    metricSha.className = "m-value";
+    metricDuration.textContent = "--";
+    metricSpeed.textContent = "--";
+    metricEta.textContent = "--";
+    downloadArea.classList.remove("visible");
+  }
+
+  function formatRxLabel(label, rx, total) {
+    if (!total || total <= 0) {
+      return label + ": " + rx.toLocaleString() + " (0%)";
+    }
+    const pct = (rx / total) * 100;
+    return label + ": " + rx.toLocaleString() + " (" + pct.toFixed(1) + "% of K)";
+  }
+
+  function normalizeExpectedDroplets(raw) {
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.floor(n);
+  }
+
+  function formatSenderTargetLabel(total, expected) {
+    if (expected === 0) return "Target(sender): loop";
+    if (Number.isFinite(expected) && expected > 0) {
+      return "Target(sender): " + Math.max(total, expected).toLocaleString();
+    }
+    return "Target(sender): --";
+  }
+
+  function getDisplayProtocol(data = null) {
+    const protocol = data && data.protocol;
+    if (protocol === "sequential" || protocol === "fountain") {
+      activeProtocol = protocol;
+      return protocol;
+    }
+    if (activeProtocol === "sequential" || activeProtocol === "fountain") {
+      return activeProtocol;
+    }
+    if (modeSelect.value === "sequential" || modeSelect.value === "fountain") {
+      return modeSelect.value;
+    }
+    return "fountain";
+  }
+
+  function renderTransferCounts(protocol, data) {
+    const total = Number(data.total_chunks || 0);
+    const decoded = Number(data.chunks_decoded || 0);
+    if (protocol === "sequential") {
+      fountainRcvd.textContent = "Chunks: " + decoded.toLocaleString();
+      fountainTarget.textContent = "Total: " + total.toLocaleString();
+      fountainSenderTarget.textContent = "START: " + (data.start_seen ? "seen" : "waiting");
+      fountainRxValid.textContent = "END: " + (data.end_seen ? "seen" : "waiting");
+      fountainRxUnique.textContent = "Passes: " + Number(data.pass_count || 0).toLocaleString();
+      return;
+    }
+
+    const droplets = Number(data.droplets_received || 0);
+    const uniqueDroplets = Number(data.unique_droplets_received || 0);
+    const parsedExpected = normalizeExpectedDroplets(data.expected_droplets);
+    if (parsedExpected !== null) expectedDroplets = parsedExpected;
+    fountainRcvd.textContent = "Solved: " + decoded.toLocaleString();
+    fountainTarget.textContent = "Needed(min): " + total.toLocaleString();
+    fountainSenderTarget.textContent = formatSenderTargetLabel(total, expectedDroplets);
+    fountainRxValid.textContent = formatRxLabel("Rx(valid)", droplets, total);
+    fountainRxUnique.textContent = formatRxLabel("Rx(unique)", uniqueDroplets, total);
+  }
+  /* ── SSE ────────────────────────────────── */
+  function connectSSE() {
+    sse = new EventSource("/api/receive/events");
+
+    sse.addEventListener("status", e => {
+      const d = JSON.parse(e.data);
+      const protocol = getDisplayProtocol(d);
+      markPreviewHeartbeat();
+      setLink(d.state);
+      statusMsg.textContent = d.message || "";
+      if (
+        (d.state === "waiting" || d.state === "preflight_wait")
+        && Number.isFinite(Number(d.frames_captured))
+      ) {
+        badgeFrm.textContent = "FRM: " + Number(d.frames_captured).toLocaleString();
+      }
+      // Waiting heartbeats are frequent; keep only the initial waiting line.
+      if (
+        !(
+          (d.state === "waiting" || d.state === "preflight_wait")
+          && Number.isFinite(Number(d.frames_captured))
+        )
+      ) {
+        log(d.state === "error" ? "error" : "info", d.message);
+      }
+      if (d.total_chunks) {
+        totalChunks = d.total_chunks;
+        initGrid(Math.min(totalChunks, GRID_N));
+        renderTransferCounts(protocol, {
+          total_chunks: totalChunks,
+          chunks_decoded: 0,
+          droplets_received: 0,
+          unique_droplets_received: 0,
+          expected_droplets: d.expected_droplets,
+          start_seen: d.start_seen,
+          end_seen: d.end_seen,
+          pass_count: d.pass_count,
+        });
+      }
+    });
+
+    sse.addEventListener("progress", e => {
+      const d = JSON.parse(e.data);
+      const protocol = getDisplayProtocol(d);
+      markPreviewHeartbeat();
+      const decoded = Number(d.chunks_decoded || 0);
+      const total = Number(d.total_chunks || 0);
+      // Compute percent from the exact counters shown in UI.
+      // This guarantees consistency between %, Solved and Needed.
+      const pct = total > 0 ? Math.min(99.9, (decoded / total) * 100) : 0;
+      pctBig.textContent = pct.toFixed(1);
+      fountainPct.textContent = pct.toFixed(0) + "%";
+      badgeFrm.textContent = "FRM: " + d.frames_captured.toLocaleString();
+      renderTransferCounts(protocol, d);
+      totalChunks = total;
+      const spd = d.speed_kbps || 0;
+      if (spd > 0) {
+        speedBadge.textContent = spd.toFixed(1) + " KB/s";
+        speedHistory.push(spd);
+        if (speedHistory.length > MAX_PTS) speedHistory.shift();
+        drawSpeed();
+      }
+      metricSpeed.textContent = spd > 0 ? spd.toFixed(1) + " KB/s" : "--";
+      metricEta.textContent = d.eta_seconds >= 0 ? fmtEta(d.eta_seconds) : "--";
+      if (d.decoded_indices) {
+        updateGrid(d.decoded_indices, d.total_chunks);
+        if (canvas.style.display !== "none") drawCanvas(d.decoded_indices, d.total_chunks);
+      }
+    });
+
+    sse.addEventListener("complete", e => { showComplete(JSON.parse(e.data)); cleanup(); });
+    sse.addEventListener("error", e => { try { const d = JSON.parse(e.data); setLink("error"); statusMsg.textContent = "Error: " + d.message; log("error", d.message); } catch {} cleanup(); });
+    sse.addEventListener("stopped", () => { setLink("idle"); statusMsg.textContent = "Stopped."; log("info", "Receive stopped."); cleanup(); });
+    sse.onerror = () => { if (sse && sse.readyState === EventSource.CLOSED) cleanup(); };
+  }
+
+  function cleanup() {
+    if (sse) { sse.close(); sse = null; }
+    startBtn.disabled = !deviceSelect.value; stopBtn.disabled = true;
+    resetBtn.disabled = !deviceSelect.value;
+    deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = false;
+    badgeRec.style.display = "none";
+    if (idlePreviewEnabled) {
+      previewIdle.textContent = "Live preview (idle)";
+      previewIdle.classList.remove("hidden");
+      startPreviewStream(true);
+    } else {
+      stopPreviewStream();
+      previewIdle.textContent = "Waiting for signal";
+      previewIdle.classList.remove("hidden");
+    }
+  }
+
+  /* ── Helpers ────────────────────────────── */
+  function setLink(s) {
+    linkDot.className = "h-dot";
+    if (s === "idle" || s === "opening" || s === "probing" || s === "waiting" || s === "preflight_wait") { linkDot.classList.add("idle"); linkLabel.textContent = "Idle"; }
+    else if (s === "error") { linkDot.classList.add("error"); linkLabel.textContent = "Error"; }
+    else { linkLabel.textContent = "Receiving"; }
+  }
+
+  function fmtEta(s) {
+    if (s < 0) return "--";
+    const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.floor(s%60);
+    return h > 0 ? `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}` : `${m}:${String(sec).padStart(2,"0")}`;
+  }
+
+  function fmtBytes(b) {
+    if (b < 1024) return b + " B";
+    if (b < 1048576) return (b/1024).toFixed(1) + " KB";
+    if (b < 1073741824) return (b/1048576).toFixed(2) + " MB";
+    return (b/1073741824).toFixed(2) + " GB";
+  }
+
+  function showComplete(d) {
+    const protocol = getDisplayProtocol(d);
+    setLink("idle");
+    log("success", "Complete: " + d.filename + " (" + fmtBytes(d.size) + ")");
+    const shaSummary = d.sha256_available ? (d.sha256_ok ? "OK" : "MISMATCH") : "UNAVAILABLE";
+    log("success", "SHA-256: " + shaSummary + " | " + d.speed_mbps.toFixed(2) + " Mbps");
+    const total = Number(d.total_chunks || totalChunks || 0);
+    const solved = total > 0 ? total : Number(d.chunks_decoded || 0);
+    const finalKbps = Number((d.speed_mbps || 0) * 122.0703125);
+    pctBig.textContent = "100.0";
+    fountainPct.textContent = "100%";
+    if (Number.isFinite(finalKbps) && finalKbps > 0) {
+      speedBadge.textContent = finalKbps.toFixed(1) + " KB/s";
+      speedHistory.push(finalKbps);
+      if (speedHistory.length > MAX_PTS) speedHistory.shift();
+      drawSpeed();
+    }
+    if (total > 0) {
+      renderTransferCounts(protocol, {
+        ...d,
+        chunks_decoded: solved,
+        total_chunks: total,
+        droplets_received: Number(d.droplets_received || solved || 0),
+        unique_droplets_received: Number(d.unique_droplets_received || d.droplets_received || solved || 0),
+      });
+      const allDecoded = Array.from({length: total}, (_, i) => i);
+      updateGrid(allDecoded, total);
+      if (canvas.style.display !== "none") drawCanvas(allDecoded, total);
+    }
+    metricName.textContent = d.filename;
+    metricSize.textContent = fmtBytes(d.size);
+    metricSha.textContent = shaSummary;
+    metricSha.className = d.sha256_available
+      ? "m-value " + (d.sha256_ok ? "ok" : "fail")
+      : "m-value";
+    metricDuration.textContent = d.duration_s.toFixed(2) + "s";
+    metricSpeed.textContent = d.speed_mbps.toFixed(2) + " Mbps";
+    metricEta.textContent = "0:00";
+    downloadBtn.href = d.download_url; downloadBtn.download = d.filename;
+    downloadArea.classList.add("visible");
+    previewIdle.classList.remove("hidden");
+    previewIdle.textContent = "Transfer complete";
+    saveHistory({
+      type: "received", filename: d.filename, size: d.size,
+      duration: d.duration_s, speed: d.speed_mbps * 131072,
+      success: d.sha256_ok, timestamp: Date.now(),
+      protocol,
+      systemPath: d.save_path || "",
+      downloadUrl: d.download_url || "",
+      fileExists: true,
+    });
+  }
+
+  function saveHistory(entry) {
+    try {
+      const key = "hdmi_transfer_history";
+      const items = JSON.parse(localStorage.getItem(key) || "[]");
+      items.push(entry);
+      if (items.length > 200) items.splice(0, items.length - 200);
+      localStorage.setItem(key, JSON.stringify(items));
+    } catch {}
+  }
+
+  /* ── Speed graph ────────────────────────── */
+  function drawSpeed() {
+    if (speedHistory.length < 2) return;
+    const max = Math.max(...speedHistory) * 1.2 || 1;
+    const pts = speedHistory.map((v, i) => `${(i/(MAX_PTS-1))*100} ${100-(v/max)*90}`);
+    const line = "M" + pts.join(" L");
+    speedLine.setAttribute("d", line);
+    speedArea.setAttribute("d", line + ` L${pts[pts.length-1].split(" ")[0]} 100 L${pts[0].split(" ")[0]} 100 Z`);
+  }
+
+  /* ── Fountain grid ─────────────────────── */
+  function updateGrid(decoded, total) {
+    const cells = fountainGrid.children, n = cells.length;
+    if (!n || !total) return;
+    const set = new Set(decoded), bk = Math.ceil(total / n);
+    for (let i = 0; i < n; i++) {
+      let c = 0; const s = i*bk, e = Math.min(s+bk, total);
+      for (let j = s; j < e; j++) if (set.has(j)) c++;
+      const r = c / (e - s);
+      cells[i].className = "fblock" + (r >= .99 ? " decoded" : r > 0 ? " active" : "");
+    }
+  }
+
+  /* ── Decode canvas ─────────────────────── */
+  function drawCanvas(decoded, total) {
+    const W = canvas.width, H = canvas.height;
+    if (!W || !H || !total) return;
+    const cols = Math.ceil(Math.sqrt(total * W / H)), rows = Math.ceil(total / cols);
+    const cw = W / cols, ch = H / rows;
+    ctx.fillStyle = "#111318"; ctx.fillRect(0, 0, W, H);
+    const set = new Set(decoded);
+    for (let i = 0; i < total; i++) {
+      const col = i % cols, row = Math.floor(i / cols);
+      ctx.fillStyle = set.has(i) ? "#7c8aff" : "rgba(255,255,255,0.02)";
+      ctx.fillRect(Math.floor(col*cw)+.5, Math.floor(row*ch)+.5, Math.max(1,Math.ceil(cw)-1), Math.max(1,Math.ceil(ch)-1));
+    }
+  }
+
+  /* ── Saved settings ──────────────────────── */
+  function applySavedSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+      autoScanEnabled = s.autoDeviceScan !== false;
+      idlePreviewEnabled = s.idlePreviewEnabled !== false;
+      if (s.defaultDevice !== null && s.defaultDevice !== undefined) {
+        deviceSelect.value = String(s.defaultDevice);
+        warmDevice(s.defaultDevice);
+      }
+      if (s.defaultProfile) profileSelect.value = s.defaultProfile;
+      if (s.defaultMode) modeSelect.value = s.defaultMode;
+      if (s.defaultBpc) bpcSelect.value = String(s.defaultBpc);
+      if (s.defaultPreviewQuality !== undefined) {
+        previewQualitySelect.value = String(Number(s.defaultPreviewQuality));
+      }
+    } catch {}
+    updateBadge();
+  }
+
+  /* ── Check for active worker on page load ── */
+  async function checkActiveWorker() {
+    try {
+      const r = await fetch("/api/receive/status");
+      const d = await r.json();
+      if (d.active) {
+        log("warn", "Previous session still active — reconnecting...");
+        startBtn.disabled = true; stopBtn.disabled = false; resetBtn.disabled = false;
+        deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = true;
+        badgeRec.style.display = "flex";
+        previewIdle.classList.add("hidden");
+        previewLastSeq = Number(d.preview_seq || 0);
+        markPreviewHeartbeat(previewLastSeq);
+        startPreviewStream(true);
+        applyPreviewSettings();
+        connectSSE();
+      }
+    } catch {}
+  }
+
+  /* ── Init ───────────────────────────────── */
+  loadPreviewSettings();
+  applySavedSettings();
+  if (!loadCachedDevices()) {
+    if (autoScanEnabled) loadDevices(false);
+    else loadDevices(false, true);
+  }
+  if (idlePreviewEnabled) {
+    previewIdle.textContent = "Live preview (idle)";
+    previewIdle.classList.remove("hidden");
+    startPreviewStream(true);
+  }
+  previewStream.addEventListener("load", () => {
+    markPreviewHeartbeat();
+    previewIdle.classList.add("hidden");
+  });
+  previewStream.addEventListener("error", () => {
+    if (!stopBtn.disabled) return;
+    previewIdle.classList.remove("hidden");
+    previewIdle.textContent = "No preview signal";
+  });
+  setInterval(async () => {
+    // Watchdog only while actively receiving.
+    if (stopBtn.disabled) return;
+    await pollPreviewHealth();
+    const dt = Date.now() - previewLastFrameAt;
+    if (dt <= 6000) {
+      previewWatchdogWarned = false;
+      return;
+    }
+    if (!previewWatchdogWarned) {
+      log("warn", "Preview stalled — reconnecting stream...");
+      previewWatchdogWarned = true;
+    }
+    startPreviewStream(true);
+  }, 2000);
+  startBtn.addEventListener("click", start);
+  resetBtn.addEventListener("click", resetConnection);
+  stopBtn.addEventListener("click", stop);
+  previewQualitySelect.addEventListener("change", () => {
+    savePreviewSettings();
+    if (!stopBtn.disabled) applyPreviewSettings(true);
+    else if (idlePreviewEnabled) startPreviewStream(true);
+  });
+  refreshBtn.addEventListener("click", () => loadDevices(true));
+  checkActiveWorker();
+})();
+
+// Live capture-config chips next to the title
+(() => {
+  const profile = document.getElementById("profileSelect");
+  const mode    = document.getElementById("modeSelect");
+  const bpc     = document.getElementById("bpcSelect");
+  const cProf   = document.getElementById("cfgChipProfile");
+  const cMode   = document.getElementById("cfgChipMode");
+  const cBpc    = document.getElementById("cfgChipBpc");
+  const profLbl = {speed:"Speed", balanced:"Balanced", quality:"Quality"};
+  const modeLbl = {auto:"Auto", fountain:"Fountain", sequential:"Sequential"};
+  function sync(){
+    cProf.textContent = profLbl[profile.value] || profile.value;
+    cMode.textContent = modeLbl[mode.value] || mode.value;
+    cBpc.textContent  = bpc.value + " bpc";
+  }
+  profile.addEventListener("change", sync);
+  mode.addEventListener("change", sync);
+  bpc.addEventListener("change", sync);
+  sync();
+})();
+</script>
+</body>
+</html>

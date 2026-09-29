@@ -1,0 +1,48 @@
+name: Approved feature
+description: Approved feature ready for the backlog or implementation
+title: "[Feature] "
+labels: ["type:feature", "status:approved"]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What should be delivered.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Links, decisions, product notes and constraints.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      value: |
+        - [ ] 
+        - [ ] 
+        - [ ] 
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Expected evidence
+      value: |
+        - [ ] Tests/build passed
+        - [ ] Screenshot or browser/API evidence when relevant
+        - [ ] PR linked to this issue
+        - [ ] Independent review when required
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options: [P0, P1, P2, P3]
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      options: [XS, S, M, L, XL]

@@ -1,0 +1,58 @@
+name: Feature Idea
+description: Propose a feature for review before implementation
+title: "[Feature Idea] "
+labels: ["type:idea", "status:proposed", "priority:P3"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue is a **proposal**, not an approved development task.
+        Wait for maintainer approval before starting implementation.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the idea in one sentence.
+      placeholder: Add a custom transfer profile.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / opportunity
+      description: What problem does this solve? Why is it useful?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: How could the feature work?
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Estimated impact
+      options: [Critical, High, Medium, Low, Nice-to-have]
+    validations:
+      required: true
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Estimated complexity
+      options: [XS, S, M, L, XL]
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks / open questions
+      placeholder: Missing data, technical debt, UX questions...
+  - type: checkboxes
+    id: approval_rule
+    attributes:
+      label: Approval required
+      options:
+        - label: I confirm that implementation must wait for maintainer approval.
+          required: true

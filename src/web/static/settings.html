@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>HDMI Transfer — Settings</title>
+<link rel="icon" type="image/svg+xml" href="/static/images/logo.svg"/>
+<style>
+:root {
+  --bg:#16181e; --bg2:#0f1117;
+  --accent:#7c8aff; --accent-dim:rgba(124,138,255,0.1);
+  --accent-border:rgba(255,255,255,0.1);
+  --green:#4ade80; --yellow:#fbbf24; --red:#f87171;
+  --text:#e4e4e7; --bright:#ffffff; --muted:#a1a1aa;
+  --font-ui:'Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'SF Mono','Cascadia Code','Fira Code','Consolas',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  width:100%;height:100vh;overflow:hidden;
+  background:var(--bg2);color:var(--text);
+  font-family:var(--font-ui);
+  font-size:14px;display:flex;flex-direction:column;
+}
+::selection{background:var(--accent);color:var(--bg2)}
+
+#header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;height:44px;
+  background:var(--bg);border-bottom:1px solid var(--accent-border);
+  flex-shrink:0;
+}
+.h-left{display:flex;align-items:center;gap:10px}
+.h-logo{width:26px;height:26px;display:block;flex-shrink:0}
+.h-title{color:var(--bright);font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+
+#layout{flex:1;display:flex;overflow:hidden}
+
+#sidebar{
+  width:220px;border-right:1px solid var(--accent-border);
+  background:var(--bg);display:flex;flex-direction:column;
+  flex-shrink:0;
+}
+.nav{padding:16px 12px;display:flex;flex-direction:column;gap:2px}
+.nav a{
+  display:block;padding:10px 14px;border-radius:6px;
+  color:var(--muted);text-decoration:none;
+  font-size:13px;font-weight:500;text-transform:uppercase;
+  letter-spacing:1px;transition:all .15s;
+}
+.nav a:hover{color:var(--text);background:rgba(255,255,255,0.04)}
+.nav a.active{color:var(--bright);background:rgba(255,255,255,0.07);font-weight:700}
+#center{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+.center-top{
+  padding:16px 28px 14px;
+  display:flex;justify-content:space-between;align-items:center;
+  border-bottom:1px solid var(--accent-border);
+  flex-shrink:0;
+}
+.center-top h2{
+  font-size:16px;font-weight:700;color:var(--bright);
+  text-transform:uppercase;letter-spacing:.5px;
+}
+.center-top .sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+.settings-scroll{flex:1;overflow-y:auto;min-height:0}
+.settings-body{
+  padding:24px 28px 24px;
+  display:grid;gap:20px;
+  grid-template-columns:repeat(auto-fit,minmax(440px,1fr));
+  align-items:start;
+}
+.settings-body .callout,
+.settings-body .setting-group.full{grid-column:1/-1}
+
+.setting-group{
+  background:var(--bg);border:1px solid var(--accent-border);
+  border-radius:10px;padding:22px 24px;
+  display:flex;flex-direction:column;
+  transition:border-color .15s;
+}
+.setting-group:hover{border-color:rgba(255,255,255,0.16)}
+.setting-group-title{
+  font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:1.5px;color:var(--accent);
+  padding-bottom:14px;margin-bottom:16px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}
+.setting-row{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:24px;padding:12px 0;
+  border-bottom:1px solid rgba(255,255,255,0.04);
+}
+.setting-row:last-child{border-bottom:none;padding-bottom:0}
+.setting-row:first-of-type{padding-top:0}
+.setting-copy{flex:1;min-width:0}
+.setting-label{font-size:13px;color:var(--bright);font-weight:500}
+.setting-hint{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4}
+.setting-head{
+  display:flex;align-items:center;justify-content:flex-start;gap:6px;
+  width:fit-content;max-width:100%;
+}
+.help-tip{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;border-radius:999px;flex-shrink:0;
+  border:1px solid rgba(255,255,255,0.16);background:rgba(255,255,255,0.04);
+  color:var(--muted);font-size:11px;font-weight:700;line-height:1;cursor:help;
+}
+.help-tip:hover,.help-tip:focus-visible{
+  color:var(--bright);border-color:rgba(255,255,255,0.28);outline:none;
+}
+.help-bubble{
+  position:absolute;left:calc(100% + 8px);top:50%;transform:translateY(-50%);
+  width:240px;padding:10px 12px;border-radius:6px;z-index:30;
+  background:rgba(8,10,15,0.96);border:1px solid rgba(255,255,255,0.12);
+  color:var(--text);font-size:11px;font-weight:500;line-height:1.5;
+  box-shadow:0 14px 30px rgba(0,0,0,0.35);
+  opacity:0;pointer-events:none;transition:opacity .12s ease;
+}
+.help-tip:hover .help-bubble,
+.help-tip:focus-visible .help-bubble{opacity:1}
+.callout{
+  padding:12px 14px;border-radius:6px;
+  background:rgba(124,138,255,0.08);border:1px solid rgba(124,138,255,0.18);
+  color:var(--text);font-size:12px;line-height:1.6;
+}
+.setting-select{
+  height:36px;padding:0 32px 0 12px;min-width:240px;max-width:280px;
+  background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);
+  border-radius:6px;color:var(--text);font-family:inherit;font-size:13px;
+  outline:none;cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+  transition:border-color .15s,background-color .15s;
+}
+.setting-select:hover{border-color:rgba(255,255,255,0.22)}
+.setting-select:focus{border-color:var(--accent);background:rgba(0,0,0,0.5)}
+.setting-select:disabled{opacity:.35;cursor:not-allowed}
+
+.save-bar{
+  flex-shrink:0;
+  display:flex;align-items:center;justify-content:flex-end;gap:14px;
+  padding:14px 28px;
+  background:var(--bg);
+  border-top:1px solid var(--accent-border);
+}
+.save-hint{font-size:11px;color:var(--muted)}
+.btn-save{
+  padding:11px 28px;border-radius:6px;
+  background:var(--accent);border:none;
+  color:#fff;font-family:inherit;font-size:13px;font-weight:700;
+  text-transform:uppercase;letter-spacing:1px;
+  cursor:pointer;transition:all .15s;
+  box-shadow:0 4px 12px rgba(124,138,255,0.25);
+}
+.btn-save:hover{background:#6b7bff;transform:translateY(-1px);box-shadow:0 6px 16px rgba(124,138,255,0.35)}
+.btn-save:active{transform:translateY(0)}
+
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  padding:10px 20px;border-radius:6px;
+  background:var(--green);color:#000;font-size:13px;font-weight:600;
+  opacity:0;transition:opacity .3s;pointer-events:none;
+}
+.toast.show{opacity:1}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.15)}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="h-left">
+    <img class="h-logo" src="/static/images/logo.svg" alt="" />
+    <span class="h-title">HDMI Transfer</span>
+  </div>
+</div>
+
+<div id="layout">
+  <aside id="sidebar">
+    <nav class="nav">
+      <a href="/">Receive</a>
+      <a href="/sender">Send</a>
+      <a href="/history">History</a>
+      <a class="active" href="/settings">Settings</a>
+    </nav>
+  </aside>
+
+  <main id="center">
+    <div class="center-top">
+      <div>
+        <h2>Settings</h2>
+        <div class="sub">Shared defaults used by Send and Receive</div>
+      </div>
+    </div>
+
+    <div class="settings-scroll">
+      <div class="settings-body">
+        <div class="callout">
+          Recommended baseline for most 2-PC setups: Fountain + Balanced + 2 bpc, with low preview quality on the receiver. Switch to Speed only on a dedicated 120/144/240Hz HDMI path.
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-group-title">Transfer protocol</div>
+          <div class="setting-row">
+            <div class="setting-copy">
+              <div class="setting-head">
+                <div class="setting-label">Default profile</div>
+                <span class="help-tip" tabindex="0">?
+                  <span class="help-bubble">Geometry and target framerate preset. Balanced is the default for broad compatibility. Speed only helps when the sender HDMI path itself is running above 60 Hz.</span>
+                </span>
+              </div>
+              <div class="setting-hint">Shared by Send and Receive</div>
+            </div>
+            <select class="setting-select" id="defaultProfile">
+              <option value="speed">Speed - 120/144/240Hz</option>
+              <option value="balanced" selected>Balanced - recommended</option>
+              <option value="quality">Quality - 4K cleaner</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <div class="setting-copy">
+              <div class="setting-head">
+                <div class="setting-label">Default mode</div>
+                <span class="help-tip" tabindex="0">?
+                  <span class="help-bubble">Fountain is the best default for real transfers. Auto helps during bring-up on the receiver when you do not know the sender protocol yet. Sequential is mostly a debug path.</span>
+                </span>
+              </div>
+              <div class="setting-hint">Receiver uses Auto too; sender falls back to Fountain</div>
+            </div>
+            <select class="setting-select" id="defaultMode">
+              <option value="auto">Auto-detect</option>
+              <option value="fountain" selected>Fountain - recommended</option>
+              <option value="sequential">Sequential - debug</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <div class="setting-copy">
+              <div class="setting-head">
+                <div class="setting-label">Default encoding</div>
+                <span class="help-tip" tabindex="0">?
+                  <span class="help-bubble">Bits per color channel used to encode payload data. 2 bpc is the best default. The sender preflight can automatically step down if the HDMI path cannot keep the signal clean.</span>
+                </span>
+              </div>
+              <div class="setting-hint">Shared by Send and Receive</div>
+            </div>
+            <select class="setting-select" id="defaultBpc">
+              <option value="1">1 bpc - safest fallback</option>
+              <option value="2" selected>2 bpc - recommended</option>
+              <option value="3">3 bpc - very clean HDMI only</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-group-title">Capture source</div>
+          <div class="setting-row">
+            <div class="setting-copy">
+              <div class="setting-head">
+                <div class="setting-label">Default device</div>
+                <span class="help-tip" tabindex="0">?
+                  <span class="help-bubble">Receiver-side capture source. In a 2-PC setup, this should be the HDMI capture card connected to the sender PC.</span>
+                </span>
+              </div>
+              <div class="setting-hint">Applied when opening Receive</div>
+            </div>
+            <select class="setting-select" id="defaultDevice" disabled>
+              <option value="">Loading devices...</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <div class="setting-copy">
+              <div class="setting-head">
+                <div class="setting-label">Auto device scan</div>
+                <span class="help-tip" tabindex="0">?
+                  <span class="help-bubble">Refreshes the capture-device list automatically when opening Receive. Keep this enabled unless your receiver PC has unstable drivers and you want to rely on cached devices only.</span>
+                </span>
+              </div>
+              <div class="setting-hint">Receiver only</div>
+            </div>
+            <select class="setting-select" id="autoDeviceScan">
+              <option value="1">Enabled</option>
+              <option value="0">Disabled</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-group-title">Receiver preview</div>
+          <div class="setting-row">
+            <div class="setting-copy">
+              <div class="setting-head">
+                <div class="setting-label">Preview quality</div>
+                <span class="help-tip" tabindex="0">?
+                  <span class="help-bubble">Receiver preview JPEG quality. This does not change the transfer itself. Lower values are better for stability on weaker receiver PCs.</span>
+                </span>
+              </div>
+              <div class="setting-hint">Receiver only</div>
+            </div>
+            <select class="setting-select" id="defaultPreviewQuality">
+              <option value="45" selected>Low - recommended</option>
+              <option value="60">Balanced</option>
+              <option value="75">High</option>
+              <option value="90">Max</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <div class="setting-copy">
+              <div class="setting-head">
+                <div class="setting-label">Idle preview</div>
+                <span class="help-tip" tabindex="0">?
+                  <span class="help-bubble">Shows the live capture view before a transfer starts. Useful during setup. Turn it off if the receiver PC is weak and you want to minimize background load.</span>
+                </span>
+              </div>
+              <div class="setting-hint">Receiver only</div>
+            </div>
+            <select class="setting-select" id="idlePreviewEnabled">
+              <option value="1">Enabled</option>
+              <option value="0">Disabled</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="save-bar">
+      <span class="save-hint">Changes apply after saving</span>
+      <button class="btn-save" id="saveBtn">Save settings</button>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast">Settings saved</div>
+
+<script>
+(() => {
+  const SETTINGS_KEY = "hdmi_transfer_settings";
+  const DEVICE_CACHE_KEY = "hdmi_transfer_devices";
+
+  const defaultDevice = document.getElementById("defaultDevice");
+  const defaultProfile = document.getElementById("defaultProfile");
+  const defaultMode = document.getElementById("defaultMode");
+  const defaultBpc = document.getElementById("defaultBpc");
+  const defaultPreviewQuality = document.getElementById("defaultPreviewQuality");
+  const autoDeviceScan = document.getElementById("autoDeviceScan");
+  const idlePreviewEnabled = document.getElementById("idlePreviewEnabled");
+  const saveBtn = document.getElementById("saveBtn");
+  const toast = document.getElementById("toast");
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) return {};
+      return JSON.parse(raw);
+    } catch { return {}; }
+  }
+
+  function saveSettings(s) {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  }
+
+  function showToast() {
+    toast.classList.add("show");
+    setTimeout(() => toast.classList.remove("show"), 2000);
+  }
+
+  // Load devices into dropdown
+  async function loadDevices() {
+    const autoScan = autoDeviceScan.value !== "0";
+    try {
+      const url = autoScan ? "/api/devices" : "/api/devices?cached_only=1";
+      const r = await fetch(url);
+      const devs = await r.json();
+      defaultDevice.innerHTML = '<option value="">None (manual selection)</option>';
+      devs.forEach(d => {
+        const o = document.createElement("option");
+        o.value = d.index;
+        o.textContent = d.name + " (" + d.width + "x" + d.height + " @ " + Math.round(d.fps) + " fps)";
+        defaultDevice.appendChild(o);
+      });
+      defaultDevice.disabled = false;
+
+      // Apply saved setting
+      const s = loadSettings();
+      if (s.defaultDevice !== undefined) defaultDevice.value = String(s.defaultDevice);
+      if (s.defaultProfile) defaultProfile.value = s.defaultProfile;
+      if (s.defaultMode) defaultMode.value = s.defaultMode;
+      if (s.defaultBpc !== undefined) defaultBpc.value = String(Number(s.defaultBpc));
+      if (s.defaultPreviewQuality !== undefined) {
+        defaultPreviewQuality.value = String(Number(s.defaultPreviewQuality));
+      }
+      if (s.autoDeviceScan !== undefined) {
+        autoDeviceScan.value = s.autoDeviceScan ? "1" : "0";
+      }
+      if (s.idlePreviewEnabled !== undefined) {
+        idlePreviewEnabled.value = s.idlePreviewEnabled ? "1" : "0";
+      }
+    } catch {
+      defaultDevice.innerHTML = '<option value="">Error loading devices</option>';
+    }
+  }
+
+  saveBtn.addEventListener("click", () => {
+    const s = {
+      defaultDevice: defaultDevice.value ? Number(defaultDevice.value) : null,
+      defaultProfile: defaultProfile.value,
+      defaultMode: defaultMode.value,
+      defaultBpc: Number(defaultBpc.value),
+      defaultPreviewQuality: Number(defaultPreviewQuality.value),
+      autoDeviceScan: autoDeviceScan.value !== "0",
+      idlePreviewEnabled: idlePreviewEnabled.value !== "0",
+    };
+    saveSettings(s);
+    showToast();
+
+    // Pre-warm selected device
+    if (s.defaultDevice !== null) {
+      fetch("/api/devices/warm", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({device: s.defaultDevice}),
+      }).catch(() => {});
+    }
+
+    // Apply preview quality immediately if a receive session is active.
+    fetch("/api/receive/preview/settings", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({quality: s.defaultPreviewQuality}),
+    }).catch(() => {});
+  });
+
+  // Init
+  const s = loadSettings();
+  if (s.defaultProfile) defaultProfile.value = s.defaultProfile;
+  if (s.defaultMode) defaultMode.value = s.defaultMode;
+  if (s.defaultBpc !== undefined) defaultBpc.value = String(Number(s.defaultBpc));
+  if (s.defaultPreviewQuality !== undefined) {
+    defaultPreviewQuality.value = String(Number(s.defaultPreviewQuality));
+  }
+  if (s.autoDeviceScan !== undefined) {
+    autoDeviceScan.value = s.autoDeviceScan ? "1" : "0";
+  }
+  if (s.idlePreviewEnabled !== undefined) {
+    idlePreviewEnabled.value = s.idlePreviewEnabled ? "1" : "0";
+  }
+  autoDeviceScan.addEventListener("change", loadDevices);
+  loadDevices();
+})();
+</script>
+</body>
+</html>

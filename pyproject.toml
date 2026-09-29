@@ -1,0 +1,105 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hdmi-transfer"
+version = "0.1.0"
+description = "Transfer files over HDMI video with a browser sender and USB capture-card receiver"
+keywords = ["hdmi", "file-transfer", "video-signal", "capture-card", "fountain-codes", "offline"]
+requires-python = ">= 3.11"
+readme = "README.md"
+license = {file = "LICENSE"}
+dependencies = [
+    "numpy >= 1.24",
+    "numba >= 0.60.0",
+]
+
+[project.urls]
+Repository = "https://github.com/Thunzyy/HDMI-transfer"
+Documentation = "https://github.com/Thunzyy/HDMI-transfer/blob/main/docs/getting-started.md"
+Issues = "https://github.com/Thunzyy/HDMI-transfer/issues"
+
+[project.optional-dependencies]
+docker = [
+    "waitress >= 3.0.2, < 4",
+]
+sender = [
+    "pygame-ce >= 2.5.0",
+    "screeninfo >= 0.8",
+    "InquirerPy >= 0.3.4",
+]
+receiver = [
+    "opencv-python >= 4.0",
+    "InquirerPy >= 0.3.4",
+]
+web = [
+    "flask>=3.0",
+    "opencv-python>=4.0",
+]
+all = [
+    "pygame-ce >= 2.5.0",
+    "screeninfo >= 0.8",
+    "InquirerPy >= 0.3.4",
+    "opencv-python >= 4.0",
+    "flask>=3.0",
+]
+dev = [
+    "pygame-ce >= 2.5.0",
+    "screeninfo >= 0.8",
+    "InquirerPy >= 0.3.4",
+    "opencv-python >= 4.0",
+    "flask>=3.0",
+    "pytest >= 8.0",
+    "hypothesis >= 6.0",
+    "requests >= 2.32",
+    "selenium >= 4.0",
+]
+
+[project.scripts]
+hdmi-send = "hdmi_transfer.interfaces.cli.send:main"
+hdmi-recv = "hdmi_transfer.interfaces.cli.receive:main"
+hdmi-calibrate = "hdmi_transfer.interfaces.cli.calibrate:main"
+hdmi-bench = "hdmi_transfer.core.cli.benchmark:main"
+hdmi-sender = "hdmi_transfer.interfaces.cli.sender_console:main"
+hdmi-receiver = "hdmi_transfer.interfaces.cli.receiver_console:main"
+hdmi-web = "hdmi_transfer.web.__main__:main"
+
+[tool.setuptools]
+packages = [
+    "hdmi_transfer",
+    "hdmi_transfer.adapters",
+    "hdmi_transfer.adapters.capture",
+    "hdmi_transfer.application",
+    "hdmi_transfer.core",
+    "hdmi_transfer.core.capture",
+    "hdmi_transfer.core.cli",
+    "hdmi_transfer.core.file_handling",
+    "hdmi_transfer.core.protocols",
+    "hdmi_transfer.domain",
+    "hdmi_transfer.interfaces",
+    "hdmi_transfer.interfaces.browser_sender",
+    "hdmi_transfer.interfaces.cli",
+    "hdmi_transfer.interfaces.web",
+    "hdmi_transfer.receiver",
+    "hdmi_transfer.receiver.capture",
+    "hdmi_transfer.sender",
+    "hdmi_transfer.sender.display",
+    "hdmi_transfer.web",
+]
+
+[tool.setuptools.package-dir]
+"hdmi_transfer" = "src"
+
+[tool.setuptools.package-data]
+"hdmi_transfer.core" = ["constants.json"]
+"hdmi_transfer.interfaces.browser_sender" = ["*.html", "*.js"]
+"hdmi_transfer.web" = ["static/*.html", "static/*.js", "static/images/*.svg"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers", "-v", "--import-mode=importlib", "-p", "no:xonsh"]
+markers = [
+    "hardware: marks tests requiring Elgato capture card (deselect with '-m \"not hardware\"')",
+    "slow: marks tests that take >10s (deselect with '-k \"not slow\"')",
+]

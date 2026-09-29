@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>HDMI Transfer — Sender</title>
+<style>
+:root {
+  --bg:#16181e; --bg2:#0f1117;
+  --accent:#7c8aff; --accent-dim:rgba(124,138,255,0.1);
+  --accent-border:rgba(255,255,255,0.1);
+  --green:#4ade80; --yellow:#fbbf24; --red:#f87171;
+  --text:#e4e4e7; --dim:rgba(228,228,231,0.5);
+  --bright:#ffffff; --muted:#a1a1aa;
+  --font-ui:'Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'SF Mono','Cascadia Code','Fira Code','Consolas',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  width:100%;height:100vh;overflow:hidden;
+  background:var(--bg2);color:var(--text);
+  font-family:var(--font-ui);
+  font-size:14px;
+}
+body{display:flex}
+::selection{background:var(--accent);color:var(--bg2)}
+
+/* ── Two-panel layout ──────────────────── */
+#main{
+  flex:1;display:flex;flex-direction:column;
+  padding:28px 32px;gap:20px;overflow-y:auto;
+}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-logo{width:32px;height:32px;display:block;flex-shrink:0}
+.brand-title{color:#fff;font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+#side{
+  width:280px;flex-shrink:0;
+  border-left:1px solid var(--accent-border);
+  background:var(--bg);padding:20px;
+  display:flex;flex-direction:column;gap:16px;
+  overflow-y:auto;
+}
+
+/* ── Drop zone ─────────────────────────── */
+#dropZone{
+  flex:1;min-height:160px;
+  border:2px dashed rgba(255,255,255,0.2);border-radius:10px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .2s;position:relative;gap:8px;
+}
+#dropZone:hover{border-color:rgba(255,255,255,0.3);background:rgba(255,255,255,0.025)}
+#dropZone.dragover{border-color:var(--accent);background:rgba(192,197,206,0.06)}
+#dropZone.loaded{
+  border-style:solid;border-color:rgba(255,255,255,0.1);
+  cursor:default;justify-content:flex-start;
+  padding:24px;
+}
+#dropZone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer}
+#dropZone.loaded input[type="file"]{cursor:default}
+
+/* Empty state */
+.dz-empty{display:flex;flex-direction:column;align-items:center;gap:8px}
+.dz-icon{
+  width:48px;height:48px;border-radius:12px;
+  background:rgba(255,255,255,0.04);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:4px;
+}
+.dz-icon svg{width:24px;height:24px;stroke:var(--accent);fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.dz-title{color:var(--bright);font-size:16px;font-weight:600}
+.dz-hint{color:var(--muted);font-size:12px}
+
+/* Loaded state */
+.dz-loaded{display:none;width:100%;gap:16px}
+#dropZone.loaded .dz-empty{display:none}
+#dropZone.loaded .dz-loaded{display:flex;flex-direction:column}
+.file-card{
+  display:flex;align-items:center;gap:14px;
+  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);
+  border-radius:8px;padding:16px 18px;
+}
+.file-icon{
+  width:40px;height:40px;border-radius:8px;
+  background:var(--accent-dim);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.file-icon svg{width:18px;height:18px;stroke:var(--accent);fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.file-name{font-size:15px;font-weight:600;color:var(--bright);word-break:break-all}
+.file-meta{font-size:12px;color:var(--muted);margin-top:3px;display:flex;gap:12px;font-family:var(--font-mono)}
+.file-meta span{display:flex;align-items:center;gap:4px}
+.change-btn{
+  margin-left:auto;flex-shrink:0;
+  background:none;border:1px solid rgba(255,255,255,0.15);
+  border-radius:5px;padding:7px 14px;
+  color:var(--text);font-family:inherit;font-size:12px;
+  cursor:pointer;transition:all .15s;position:relative;
+}
+.change-btn:hover{border-color:rgba(255,255,255,0.3);color:var(--bright)}
+.change-btn input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer}
+
+/* Info chips row */
+.info-row{
+  display:flex;gap:8px;flex-wrap:wrap;
+}
+.chip{
+  display:flex;align-items:center;gap:6px;
+  padding:7px 14px;border-radius:5px;
+  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);
+  font-size:12px;color:var(--text);
+}
+.chip .cv{color:var(--bright);font-weight:600;font-family:var(--font-mono)}
+
+/* ── Start bar ─────────────────────────── */
+#startBar{display:flex;gap:10px;flex-shrink:0}
+#startBtn{
+  flex:1;height:48px;border-radius:8px;
+  background:var(--accent);border:1px solid var(--accent);
+  color:#fff;font-family:inherit;font-size:14px;font-weight:700;
+  text-transform:uppercase;letter-spacing:1.5px;
+  cursor:pointer;transition:all .15s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+#startBtn:hover{background:#6b7bff;border-color:#6b7bff}
+#startBtn:disabled{opacity:.3;cursor:not-allowed}
+#startBtn:disabled:hover{background:var(--accent);border-color:var(--accent)}
+#stopBtn{
+  width:48px;height:48px;border-radius:8px;flex-shrink:0;
+  background:transparent;border:1px solid rgba(248,113,113,0.4);
+  color:var(--red);cursor:pointer;transition:all .15s;
+  display:flex;align-items:center;justify-content:center;
+}
+#stopBtn:hover{background:rgba(184,84,84,0.08);border-color:var(--red)}
+#stopBtn:disabled{opacity:.2;cursor:not-allowed}
+#stopBtn svg{width:14px;height:14px;fill:currentColor}
+.shortcut-hint{
+  text-align:center;font-size:11px;color:var(--muted);
+  letter-spacing:.5px;margin-top:6px;
+}
+
+/* ── Sidebar sections ──────────────────── */
+.side-label{
+  font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:1.5px;color:var(--accent);margin-bottom:8px;
+}
+.side-head{
+  display:flex;align-items:center;justify-content:flex-start;gap:6px;
+  width:fit-content;max-width:100%;margin-bottom:8px;
+}
+.side-head .side-label{margin-bottom:0}
+.side-row{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:6px;
+}
+.side-row:last-child{margin-bottom:0}
+.side-key{font-size:12px;color:var(--text)}
+.side-select{
+  height:30px;padding:0 24px 0 10px;
+  background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.12);
+  border-radius:5px;color:var(--text);font-family:inherit;font-size:12px;
+  outline:none;cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 6px center;
+  transition:border-color .15s;
+}
+.side-select:focus{border-color:rgba(255,255,255,0.15)}
+.side-select:disabled{opacity:.3;cursor:not-allowed}
+.side-input{
+  height:30px;width:56px;padding:0 8px;
+  background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.12);
+  border-radius:5px;color:var(--text);font-family:var(--font-mono);font-size:12px;
+  outline:none;
+}
+.side-sep{height:1px;background:var(--accent-border);margin:4px 0}
+.side-note{font-size:11px;color:var(--muted);line-height:1.6}
+.side-note.ok{color:var(--green);opacity:1}
+.side-note.warn{color:var(--red);opacity:1}
+.help-tip{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;border-radius:999px;flex-shrink:0;
+  border:1px solid rgba(255,255,255,0.16);background:rgba(255,255,255,0.04);
+  color:var(--muted);font-size:11px;font-weight:700;line-height:1;cursor:help;
+}
+.help-tip:hover,.help-tip:focus-visible{
+  color:var(--bright);border-color:rgba(255,255,255,0.28);outline:none;
+}
+.help-bubble{
+  position:absolute;right:calc(100% + 8px);top:50%;transform:translateY(-50%);
+  width:240px;padding:10px 12px;border-radius:6px;z-index:30;
+  background:rgba(8,10,15,0.96);border:1px solid rgba(255,255,255,0.12);
+  color:var(--text);font-size:11px;font-weight:500;line-height:1.5;text-transform:none;
+  box-shadow:0 14px 30px rgba(0,0,0,0.35);
+  opacity:0;pointer-events:none;transition:opacity .12s ease;
+}
+.help-tip:hover .help-bubble,
+.help-tip:focus-visible .help-bubble{opacity:1}
+.callout{
+  padding:10px 12px;border-radius:6px;
+  background:rgba(124,138,255,0.08);border:1px solid rgba(124,138,255,0.18);
+  color:var(--text);font-size:12px;line-height:1.6;
+}
+.callout.mode-callout{
+  background:rgba(74,222,128,0.08);border-color:rgba(74,222,128,0.2);
+}
+.callout.mode-callout.warn{
+  background:rgba(251,191,36,0.08);border-color:rgba(251,191,36,0.24);
+}
+
+/* Side stats */
+.side-stats{display:flex;flex-direction:column;gap:8px}
+.ss{display:flex;justify-content:space-between;align-items:baseline}
+.ss-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.ss-val{font-size:15px;font-weight:700;color:var(--bright);font-variant-numeric:tabular-nums;font-family:var(--font-mono)}
+.ss-val.dim{color:var(--text);font-weight:400}
+
+/* Advanced toggle */
+.adv-toggle{
+  display:flex;align-items:center;gap:4px;
+  background:none;border:none;color:var(--text);font-family:inherit;
+  font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;
+  cursor:pointer;padding:4px 0;transition:color .15s;
+}
+.adv-toggle:hover{color:var(--text)}
+.adv-toggle .arr{display:inline-block;transition:transform .15s;font-size:8px}
+.adv-toggle.open .arr{transform:rotate(90deg)}
+.adv-body{display:none;margin-top:6px}
+.adv-body.open{display:block}
+
+/* ── Canvas (fullscreen only) ──────────── */
+#canvas-wrap{position:fixed;inset:0;z-index:9999;display:none;background:#000}
+#canvas-wrap.active{display:block}
+canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges}
+
+/* HUD */
+#hud{display:none!important}
+#hud .hv{color:#fff;font-weight:600}
+</style>
+</head>
+<body>
+
+<!-- Left: main area -->
+<div id="main">
+  <div class="brand">
+    <svg class="brand-logo" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" aria-hidden="true">
+      <defs>
+        <filter id="bl-glow" x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="#48C2E1" flood-opacity="0.8"/>
+        </filter>
+        <filter id="bl-glass" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="6" stdDeviation="15" flood-color="#0A1E31" flood-opacity="0.9"/>
+        </filter>
+        <radialGradient id="bl-grad" cx="50%" cy="50%" r="55%">
+          <stop offset="0%" stop-color="#9DEEFF"/>
+          <stop offset="60%" stop-color="#48C2E1"/>
+          <stop offset="100%" stop-color="#216189"/>
+        </radialGradient>
+        <radialGradient id="bl-flare" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#48C2E1" stop-opacity="0.30"/>
+          <stop offset="30%" stop-color="#216189" stop-opacity="0.10"/>
+          <stop offset="100%" stop-color="#000000" stop-opacity="0.0"/>
+        </radialGradient>
+        <path id="bl-plug" d="M 130 180 L 370 180 L 370 260 L 310 330 L 190 330 L 130 260 Z" fill="none" stroke-linejoin="round"/>
+      </defs>
+      <circle cx="250" cy="250" r="250" fill="url(#bl-flare)"/>
+      <g filter="url(#bl-glow)">
+        <circle cx="250" cy="250" r="180" fill="none" stroke="url(#bl-grad)" stroke-width="2" stroke-dasharray="8 24" opacity="0.3" transform="rotate(25 250 250)"/>
+        <circle cx="250" cy="250" r="160" fill="none" stroke="url(#bl-grad)" stroke-width="1.5" opacity="0.4"/>
+        <circle cx="250" cy="250" r="150" fill="none" stroke="url(#bl-grad)" stroke-width="3" stroke-dasharray="60 30" opacity="0.6" transform="rotate(75 250 250)"/>
+        <circle cx="250" cy="250" r="110" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-dasharray="2 12" opacity="0.5" transform="rotate(-15 250 250)"/>
+      </g>
+      <g filter="url(#bl-glass)">
+        <use href="#bl-plug" stroke="#04121F" stroke-width="16" transform="translate(0, 8)" opacity="0.8"/>
+      </g>
+      <g filter="url(#bl-glow)">
+        <use href="#bl-plug" stroke="url(#bl-grad)" stroke-width="14"/>
+        <path d="M 160 230 L 340 230" stroke="url(#bl-grad)" stroke-width="8" stroke-linecap="round"/>
+        <g fill="url(#bl-grad)">
+          <rect x="180" y="275" width="8" height="20" rx="3"/>
+          <rect x="200" y="275" width="8" height="20" rx="3"/>
+          <rect x="220" y="275" width="8" height="20" rx="3"/>
+          <rect x="240" y="275" width="10" height="22" rx="3"/>
+          <rect x="262" y="275" width="8" height="20" rx="3"/>
+          <rect x="282" y="275" width="8" height="20" rx="3"/>
+          <rect x="302" y="275" width="8" height="20" rx="3"/>
+        </g>
+      </g>
+      <use href="#bl-plug" stroke="#FFFFFF" stroke-width="2" transform="translate(-1.5, -1.5)" opacity="0.5"/>
+    </svg>
+    <span class="brand-title">HDMI Transfer</span>
+  </div>
+  <div id="dropZone">
+    <input type="file" id="fileInput"/>
+    <div class="dz-empty">
+      <div class="dz-icon">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <div class="dz-title">Drop a file to send</div>
+      <div class="dz-hint">or click anywhere to browse</div>
+    </div>
+    <div class="dz-loaded">
+      <div class="file-card">
+        <div class="file-icon">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div>
+          <div class="file-name" id="fileName">--</div>
+          <div class="file-meta">
+            <span id="fileSize">--</span>
+            <span id="fileChunks">--</span>
+          </div>
+        </div>
+        <div class="change-btn">
+          Change
+          <input type="file" id="fileInputAlt"/>
+        </div>
+      </div>
+      <div class="info-row" id="infoRow">
+        <div class="chip">Mode: <span class="cv" id="chipProtocol">Fountain</span></div>
+        <div class="chip">Profile: <span class="cv" id="chipProfile">Balanced</span></div>
+        <div class="chip">Throughput: <span class="cv" id="chipSpeed">--</span></div>
+        <div class="chip">FPS: <span class="cv" id="chipFps">--</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="startBar">
+    <button id="startBtn" disabled>Start transmission</button>
+    <button id="stopBtn" disabled>
+      <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+    </button>
+  </div>
+  <div class="shortcut-hint">Space to start / stop &middot; Esc to cancel</div>
+</div>
+
+<!-- Right: settings sidebar -->
+<div id="side">
+  <div class="callout">
+    Recommended for most 2-PC setups: Fountain + Balanced + 2 bpc. Switch to Speed only on a dedicated 120/144/240Hz HDMI path.
+  </div>
+  <div class="callout mode-callout" id="modeCallout">
+    Mode: 2-PC offline sender. No receiver API calls unless you explicitly enable local test mode.
+  </div>
+  <div>
+    <div class="side-head">
+      <div class="side-label">Protocol</div>
+      <span class="help-tip" tabindex="0">?
+        <span class="help-bubble">Fountain is the best default for real transfers and packet loss tolerance. Sequential is mainly a debug or worst-case compatibility path.</span>
+      </span>
+    </div>
+    <select class="side-select" id="protocolSelect" style="width:100%">
+      <option value="fountain" selected>Fountain - recommended default</option>
+      <option value="sequential">Sequential - debug / worst-case path</option>
+    </select>
+  </div>
+
+  <div>
+    <div class="side-head">
+      <div class="side-label">Encoding</div>
+      <span class="help-tip" tabindex="0">?
+        <span class="help-bubble">Bits per color channel used for payload data. 2 bpc is the best default. Preflight can step down automatically if the receiver does not confirm a clean path.</span>
+      </span>
+    </div>
+    <select class="side-select" id="bpcSelect" style="width:100%">
+      <option value="1">1 bpc - safest fallback</option>
+      <option value="2">2 bpc - recommended default</option>
+      <option value="3">3 bpc - only if the HDMI path is very clean</option>
+    </select>
+  </div>
+
+  <div>
+    <div class="side-head">
+      <div class="side-label">Profile</div>
+      <span class="help-tip" tabindex="0">?
+        <span class="help-bubble">Geometry and target framerate preset. Balanced is the safest default. Speed only helps when the sender output itself is running on a dedicated high-refresh HDMI path.</span>
+      </span>
+    </div>
+    <select class="side-select" id="profileSelect" style="width:100%">
+      <option value="speed">Speed - dedicated 120/144/240Hz HDMI path</option>
+      <option value="balanced" selected>Balanced - recommended for most 2-PC setups</option>
+      <option value="quality">Quality - 4K, slower but cleaner</option>
+      <option value="custom">Custom</option>
+    </select>
+  </div>
+
+  <div>
+    <button class="adv-toggle" id="advToggle">
+      <span class="arr">&#x25B6;</span> Advanced
+    </button>
+    <div class="adv-body" id="advBody">
+      <div class="side-row">
+        <span class="side-key">Resolution <span class="help-tip" tabindex="0">?<span class="help-bubble">Output raster used by the sender canvas. Leave this aligned with the selected profile unless you are debugging a very specific HDMI scaling issue.</span></span></span>
+        <select class="side-select" id="resolutionSelect">
+          <option value="1920x1080">1920x1080</option>
+          <option value="3840x2160">3840x2160</option>
+        </select>
+      </div>
+      <div class="side-row">
+        <span class="side-key">Block size <span class="help-tip" tabindex="0">?<span class="help-bubble">Pixel size of each encoded block. Leave this at 8 px unless you are tuning for a specific display scaling or capture blur issue.</span></span></span>
+        <select class="side-select" id="blockSizeSelect">
+          <option value="4">4 px</option>
+          <option value="8" selected>8 px</option>
+          <option value="16">16 px</option>
+        </select>
+      </div>
+      <div class="side-row" id="fountainRedundancyRow">
+        <span class="side-key">Target xK <span class="help-tip" tabindex="0">?<span class="help-bubble">Fountain redundancy target. Higher values trade speed for robustness. Keep 1.50 as the default unless you have measured a cleaner path.</span></span></span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-right:6px">
+          <input type="checkbox" id="fountainAutoStopInput"/>
+          Auto-stop at target
+        </label>
+        <input
+          type="number"
+          class="side-input"
+          id="fountainRedundancyInput"
+          min="0"
+          max="5"
+          step="0.05"
+          value="1.50"
+          title="Applied only when Auto-stop is enabled; otherwise the sender loops indefinitely"
+        />
+      </div>
+      <div class="side-row" id="sequentialRedundancyRow" style="display:none">
+        <span class="side-key">Repeat <span class="help-tip" tabindex="0">?<span class="help-bubble">Sequential frame repeat count. Use this only when debugging a noisy path that cannot hold fountain decoding reliably.</span></span></span>
+        <input
+          type="number"
+          class="side-input"
+          id="sequentialRedundancyInput"
+          min="1"
+          max="16"
+          step="1"
+          value="1"
+          title="Repeat each START, DATA and END frame N times"
+        />
+      </div>
+      <div class="side-row">
+        <span class="side-key">FPS mode <span class="help-tip" tabindex="0">?<span class="help-bubble">Profile default is the right choice for most setups. Auto follows the browser-detected refresh rate. Manual is only for targeted experiments.</span></span></span>
+        <select class="side-select" id="fpsModeSelect">
+          <option value="auto">Auto-detect</option>
+          <option value="profile">Profile default</option>
+          <option value="manual">Manual</option>
+        </select>
+      </div>
+      <div class="side-row" id="manualRow" style="display:none">
+        <span class="side-key">Manual FPS <span class="help-tip" tabindex="0">?<span class="help-bubble">Hard override for sender frame pacing. Only useful for controlled lab testing; leave disabled for normal operation.</span></span></span>
+        <input type="number" class="side-input" id="manualFpsInput" min="1" max="360" value="60"/>
+      </div>
+      <div class="side-note" id="configWarning" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="side-sep"></div>
+
+  <div class="side-note ok" id="detectedHz">Detecting refresh rate...</div>
+  <div class="side-note" id="derivedStats"></div>
+
+  <div style="flex:1"></div>
+
+  <div>
+    <div class="side-label">Session</div>
+    <div class="side-stats">
+      <div class="ss"><span class="ss-label">Status</span><span class="ss-val dim" id="statusLabel">Idle</span></div>
+      <div class="ss"><span class="ss-label">Frames</span><span class="ss-val" id="headerFrames">0</span></div>
+      <div class="ss"><span class="ss-label">Chunks</span><span class="ss-val" id="headerK">--</span></div>
+      <div class="ss"><span class="ss-label">Elapsed</span><span class="ss-val" id="headerTime">00:00</span></div>
+      <div class="ss"><span class="ss-label">FPS</span><span class="ss-val dim" id="headerFps">--</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Canvas (fullscreen only) -->
+<div id="canvas-wrap">
+  <canvas id="canvas" width="1920" height="1080"></canvas>
+</div>
+
+<!-- HUD during fullscreen -->
+<div id="hud">
+  <span>FPS: <span class="hv" id="hudFps">--</span></span>
+  <span>Frames: <span class="hv" id="hudFrames">0</span></span>
+  <span>K: <span class="hv" id="hudK">0</span></span>
+  <span><span class="hv" id="hudTime">00:00</span></span>
+</div>
+
+<script>
+(() => {
+{{ SCRIPT_BODY }}
+})();
+</script>
+</body>
+</html>

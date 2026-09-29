@@ -1,0 +1,32 @@
+# HDMI Transfer
+
+> Experimental proof of concept (POC) for file transfer over HDMI video, with a standalone browser sender and a local Python/Flask receiver connected to a USB HDMI capture card.
+
+The sender turns a file into video frames. The capture-card receiver decodes those frames and reconstructs the file. The payload travels over HDMI, not over a network file-sharing protocol. Fountain and sequential protocols are available. Start with Fountain, Balanced (1080p / 60 target FPS), and 2 bits per channel on both sides.
+
+This is not a production-ready transfer solution. Theoretical Fountain payload ceilings at 2 bits/channel and 8x8 blocks: Balanced 1080p60 = 1.46 MB/s (11.66 Mbps), Speed 1080p240 = 5.83 MB/s (46.63 Mbps), Quality 4K30 = 2.92 MB/s (23.32 Mbps). These are encoding-capacity estimates, not measured hardware goodput; see the README for assumptions.
+
+## Documentation
+
+- [Overview and screenshots](README.md)
+- [Comparison with Bluetooth, Wi-Fi, Ethernet and USB](README.md#compared-with-wi-fi-bluetooth-ethernet-and-usb) — sourced example link rates, not measured file-copy speeds.
+- [Installation, offline setup, LAN setup and CLI](docs/getting-started.md)
+- [Hardware and calibration](docs/hardware-setup.md)
+- [Architecture](docs/architecture.md)
+- [Testing](docs/testing.md)
+- [Screenshot provenance](docs/images/README.md)
+
+## Entry points
+
+- Docker: `docker compose up --build -d --wait`; receiver on localhost:5000, received files in a named volume. Physical capture requires explicit Linux video-device mapping; Docker Desktop does not automatically expose host USB capture devices.
+- Windows: `start.bat`; POSIX: `sh start.sh` (requires uv).
+- Manual: `uv sync --locked --extra web`, then `uv run --no-sync hdmi-web`.
+- Receiver UI: `http://localhost:5000/`.
+- Offline sender: open the generated `sender.html` locally in a browser.
+- Hosted sender: `/sender`; explicit one-PC test mode: `/sender/test`.
+- Install the `all` extra for CLI tools; the `dev` extra for testing.
+- Browser sender sources: `src/interfaces/browser_sender/`; build: `tools/build_sender_html.py`.
+
+## Boundaries
+
+Python 3.11+ is required; the repository pins its development version in `.python-version`. The Python quality gate runs on Windows; the Docker smoke test runs on Linux. Native hardware compatibility on Linux/macOS requires separate validation. Profile frame rates are targets, not measured throughput guarantees. Screenshots show an idle receiver and a prepared sample file, not a completed hardware transfer. Video encoding is not encryption. The local web server defaults to loopback; LAN hosting exposes receiver and file-management endpoints and is intended for trusted networks. The project is licensed under the MIT License (see LICENSE). A license does not imply that repository access is public.
