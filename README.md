@@ -214,7 +214,7 @@ All project documentation is available in English.
 | --- | --- |
 | [Installation and quick start](docs/getting-started.md) | Prerequisites, two-PC setup, offline mode, LAN, CLI and troubleshooting |
 | [Hardware and calibration](docs/hardware-setup.md) | Wiring, displays, capture devices and loopback testing |
-| [Architecture](docs/architecture.md) | Code organization and responsibilities |
+| [Architecture](docs/ARCHITECTURE.md) | Code organization, transfer flows, runtime and limits |
 | [Testing](docs/testing.md) | Quality gate and hardware-testing boundaries |
 | [Screenshots](docs/images/README.md) | Provenance and reproducible capture |
 | [Assistant overview](llms.txt) | Project summary and source links |

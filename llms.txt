@@ -12,7 +12,7 @@ This is not a production-ready transfer solution. Theoretical Fountain payload c
 - [Comparison with Bluetooth, Wi-Fi, Ethernet and USB](README.md#compared-with-wi-fi-bluetooth-ethernet-and-usb) — sourced example link rates, not measured file-copy speeds.
 - [Installation, offline setup, LAN setup and CLI](docs/getting-started.md)
 - [Hardware and calibration](docs/hardware-setup.md)
-- [Architecture](docs/architecture.md)
+- [Architecture](docs/ARCHITECTURE.md)
 - [Testing](docs/testing.md)
 - [Screenshot provenance](docs/images/README.md)
 
