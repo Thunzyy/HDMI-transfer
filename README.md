@@ -23,7 +23,7 @@
 
 **HDMI Transfer** encodes files into video frames displayed through an HDMI output. On the receiving computer, an **HDMI-to-USB capture card** captures those frames so the software can reconstruct the original file. The file payload travels through video; no network file share is required.
 
-A browser-based sender, a USB capture-card receiver, fountain codes and a local Python/Flask web interface work together to move files between two computers.
+A browser-based sender, a USB capture-card receiver, fountain codes and a local Python/Flask web interface work together to move files between two computers. The implementation architecture is documented in [`docs/architecture.md`](docs/architecture.md).
 
 > **Proof of concept (POC):** this is an experimental project for demonstrating file transfer over HDMI video.
 
