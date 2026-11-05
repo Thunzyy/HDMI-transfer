@@ -23,4 +23,3 @@ def test_fountain_progress_includes_unique_and_expected_droplet_counts():
     assert progress["duplicate_droplets_received"] == 3
     assert progress["bytes_received"] == 12 * 64
     assert progress["unique_bytes_received"] == 9 * 64
-

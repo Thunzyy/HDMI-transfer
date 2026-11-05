@@ -163,4 +163,3 @@ def test_cli_encoding_override_and_calibration_flags(monkeypatch):
     assert captured["calibration"] is True
     with pytest.raises(SystemExit):
         send._build_parser().parse_args(["file.bin", "--recalibrate", "--no-calibration"])
-

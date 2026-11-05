@@ -18,4 +18,3 @@ def test_4k_sequential_capacity_roundtrip_respects_uint16_payload(bpc):
     decoded = protocol.decode_frame(frame[4::8, 4::8])
     assert decoded.is_valid is True
     assert decoded.data == payload
-
