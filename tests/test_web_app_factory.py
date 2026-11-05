@@ -75,6 +75,37 @@ def test_history_page_exposes_filters_and_static_script() -> None:
     assert b"Clear the local browser history log?" in history_script.data
 
 
+def test_sender_app_uses_packaged_resources_without_repository_html(tmp_path, monkeypatch):
+    from hdmi_transfer.interfaces.browser_sender import render_sender_html
+    from hdmi_transfer.interfaces.web import app_factory
+
+    # Model the installed-wheel location: no sender.html beside the package.
+    monkeypatch.setattr(app_factory, "_REPO_ROOT", tmp_path)
+    monkeypatch.delenv("HDMI_EXFIL_ROOT", raising=False)
+    client = app_factory.create_app(runtime=False).test_client()
+
+    response = client.get("/sender/app")
+
+    assert response.status_code == 200
+    assert response.mimetype == "text/html"
+    assert response.get_data(as_text=True) == render_sender_html()
+    assert "{{ SCRIPT_BODY }}" not in response.get_data(as_text=True)
+    assert b"const FOUNTAIN_MAGIC" in response.data
+
+
+def test_sender_app_keeps_explicit_standalone_document(tmp_path):
+    from hdmi_transfer.interfaces.web.app_factory import create_app
+
+    html = tmp_path / "sender.html"
+    html.write_text("<!doctype html><title>Explicit sender</title>", encoding="utf-8")
+    app = create_app(runtime=False)
+    app.config["SENDER_HTML"] = str(html)
+
+    with app.test_client().get("/sender/app") as response:
+        assert response.status_code == 200
+        assert response.get_data(as_text=True) == html.read_text(encoding="utf-8")
+
+
 def test_create_app_runtime_primes_persistent_capture_for_raw_dshow_source(monkeypatch):
     from hdmi_transfer.interfaces.web.app_factory import create_app
 

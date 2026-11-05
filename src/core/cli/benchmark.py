@@ -1,13 +1,7 @@
-"""CLI entry point for ``hdmi-bench`` -- automated throughput measurement.
+"""Measure verified in-memory encode/decode throughput, without HDMI hardware.
 
-Runs an in-memory encode/decode benchmark and outputs results as JSON.
-No display or capture hardware required -- pure computational measurement.
-
-Usage::
-
-    hdmi-bench --profile speed --mode sequential --size 100
-    hdmi-bench --profile quality --mode fountain --size 50 --duration 5
-    hdmi-bench --no-json
+Payload preparation and a separate warm-up are excluded from the timed run.
+The timed run includes encoding, sampling, reconstruction and byte comparison.
 """
 
 from __future__ import annotations
@@ -17,32 +11,61 @@ import json
 import math
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 import numpy as np
 
 from hdmi_transfer.core.capture.sampler import sample_frame
-from hdmi_transfer.core.config import DEFAULT_PROFILE, PROFILES, ResolutionProfile
+from hdmi_transfer.core.config import PROFILES, ResolutionProfile
 from hdmi_transfer.core.protocols import get_protocol
+from hdmi_transfer.domain.transfer_defaults import (
+    DEFAULT_BITS_PER_CHANNEL,
+    DEFAULT_MODE,
+    DEFAULT_PROFILE_NAME,
+)
 
 
 @dataclass
 class BenchmarkResult:
-    """Structured benchmark measurement result."""
+    """Transfer metrics; error_rate describes frames, not file integrity."""
 
     profile: str
-    mode: str  # "sequential" or "fountain"
+    mode: str
     frames_per_sec: float
     bytes_per_sec: float
-    overhead_pct: float  # fountain only, 0.0 for sequential
+    overhead_pct: float
     error_rate: float
     duration_sec: float
     total_frames: int
     total_bytes: int
+    completed: bool = False
+    integrity_ok: bool = False
+    timed_out: bool = False
+    payload_bytes: int = 0
+    warmup_duration_sec: float = 0.0
 
     def to_json(self) -> str:
-        """Serialize to JSON string."""
         return json.dumps(asdict(self), indent=2)
+
+
+def _sample(profile: ResolutionProfile, frame: np.ndarray) -> np.ndarray:
+    return sample_frame(frame, profile.rows, profile.cols, profile.block_size)
+
+
+def _warmup_protocol(profile: ResolutionProfile, mode: str) -> float:
+    """Load/compile the exercised path before starting the transfer timer."""
+    started = time.perf_counter()
+    proto = get_protocol(mode, profile=profile)
+    payload = np.arange(proto.bytes_per_frame, dtype=np.uint8).tobytes()
+    frame = proto.encode_frame(payload, 0, 1, seed=1)
+    proto.decode_frame(_sample(profile, frame))
+    if mode == "fountain":
+        from hdmi_transfer.core.protocols.fountain import FountainDecoder
+        from hdmi_transfer.core.protocols.xor_ops import warmup
+
+        warmup()
+        FountainDecoder(1, len(payload)).add_droplet(1, payload)
+    return time.perf_counter() - started
 
 
 def run_benchmark(
@@ -51,258 +74,199 @@ def run_benchmark(
     payload_size_kb: int = 100,
     duration_sec: float = 10.0,
 ) -> BenchmarkResult:
-    """Run an in-memory encode/decode throughput benchmark.
+    """Benchmark one payload in KiB with a deadline for either protocol.
 
-    Parameters
-    ----------
-    profile:
-        Resolution profile to benchmark.
-    mode:
-        Protocol mode (``"sequential"`` or ``"fountain"``).
-    payload_size_kb:
-        Total payload size in kilobytes.
-    duration_sec:
-        Maximum benchmark duration in seconds (used for fountain mode timeout).
-
-    Returns
-    -------
-    BenchmarkResult
-        Benchmark metrics including throughput and error rate.
+    total_bytes and bytes_per_sec count a completed, byte-verified payload,
+    never padding or partial reconstruction. This does not measure display,
+    capture or physical HDMI throughput. Warm-up is reported separately.
     """
-    if mode == "sequential":
-        return _bench_sequential(profile, payload_size_kb, duration_sec)
-    elif mode == "fountain":
-        return _bench_fountain(profile, payload_size_kb, duration_sec)
-    else:
+    if mode not in ("sequential", "fountain"):
         raise ValueError(f"Unknown mode: {mode!r}")
+    if (
+        isinstance(payload_size_kb, bool)
+        or not isinstance(payload_size_kb, int)
+        or payload_size_kb <= 0
+    ):
+        raise ValueError("Payload size must be a positive integer in KiB")
+    if not math.isfinite(duration_sec) or duration_sec <= 0:
+        raise ValueError("Duration must be a finite positive number of seconds")
+    payload_per_frame = (
+        profile.seq_bytes_per_frame if mode == "sequential"
+        else profile.fount_bytes_per_frame
+    )
+    if payload_per_frame <= 0:
+        raise ValueError("Profile has no room for a frame payload")
+    if (
+        mode == "fountain"
+        and math.ceil(payload_size_kb * 1024 / payload_per_frame) > 60000
+    ):
+        raise ValueError("Payload exceeds the Fountain receiver's 60000-chunk limit")
+
+    warmup_duration = _warmup_protocol(profile, mode)
+    benchmark = _bench_sequential if mode == "sequential" else _bench_fountain
+    result = benchmark(profile, payload_size_kb, duration_sec)
+    result.warmup_duration_sec = round(warmup_duration, 6)
+    return result
+
+
+def _make_result(
+    profile: ResolutionProfile, mode: str, *, elapsed: float, deadline: float,
+    frame_count: int, errors: int, payload_bytes: int, completed: bool,
+    integrity_ok: bool, overhead_pct: float = 0.0,
+) -> BenchmarkResult:
+    useful_bytes = payload_bytes if completed and integrity_ok else 0
+    return BenchmarkResult(
+        profile=profile.name, mode=mode,
+        frames_per_sec=round(frame_count / elapsed, 2) if elapsed > 0 else 0.0,
+        bytes_per_sec=round(useful_bytes / elapsed, 2) if elapsed > 0 else 0.0,
+        overhead_pct=round(overhead_pct, 2),
+        error_rate=round(errors / frame_count, 6) if frame_count else 0.0,
+        duration_sec=round(elapsed, 6), total_frames=frame_count,
+        total_bytes=useful_bytes, completed=completed, integrity_ok=integrity_ok,
+        timed_out=elapsed >= deadline, payload_bytes=payload_bytes,
+    )
 
 
 def _bench_sequential(
-    profile: ResolutionProfile,
-    payload_size_kb: int,
-    duration_sec: float,
+    profile: ResolutionProfile, payload_size_kb: int, duration_sec: float,
 ) -> BenchmarkResult:
-    """Benchmark sequential encode/decode roundtrip in memory."""
     proto = get_protocol("sequential", profile=profile)
-    bpf = profile.seq_bytes_per_frame
-
-    # Generate test payload
-    payload = bytes(np.random.randint(0, 256, payload_size_kb * 1024, dtype=np.uint8))
+    bpf = proto.bytes_per_frame
+    payload = np.random.default_rng(0).bytes(payload_size_kb * 1024)
     total_frames = math.ceil(len(payload) / bpf)
-
     errors = 0
-    decoded_bytes = 0
-
+    frame_count = 0
+    recovered: dict[int, bytes] = {}
     start = time.perf_counter()
-
-    for i in range(total_frames):
-        chunk_start = i * bpf
-        chunk_end = min((i + 1) * bpf, len(payload))
-        chunk = payload[chunk_start:chunk_end]
-
-        # Encode
-        frame_img = proto.encode_frame(chunk, i, total_frames)
-
-        # Simulate capture: sample block centres (nearest-neighbour roundtrip)
-        sampled = sample_frame(
-            frame_img,
-            profile.rows,
-            profile.cols,
-            profile.block_size,
-        )
-
-        # Decode
-        result = proto.decode_frame(sampled)
-
-        if result.is_valid and result.data is not None:
-            decoded_bytes += len(result.data)
+    for index in range(total_frames):
+        if time.perf_counter() - start >= duration_sec:
+            break
+        chunk = payload[index * bpf : (index + 1) * bpf]
+        frame = proto.encode_frame(chunk, index, total_frames)
+        result = proto.decode_frame(_sample(profile, frame))
+        frame_count += 1
+        if (
+            result.is_valid
+            and result.data is not None
+            and result.frame_index == index
+            and result.total_frames == total_frames
+        ):
+            recovered[index] = result.data
             if result.data != chunk:
                 errors += 1
         else:
             errors += 1
-
+    completed = len(recovered) == total_frames
+    integrity_ok = completed and (
+        b"".join(recovered[i] for i in range(total_frames)) == payload
+    )
     elapsed = time.perf_counter() - start
-
-    fps = total_frames / elapsed if elapsed > 0 else 0.0
-    bps = decoded_bytes / elapsed if elapsed > 0 else 0.0
-    error_rate = errors / total_frames if total_frames > 0 else 0.0
-
-    return BenchmarkResult(
-        profile=profile.name,
-        mode="sequential",
-        frames_per_sec=round(fps, 2),
-        bytes_per_sec=round(bps, 2),
-        overhead_pct=0.0,
-        error_rate=round(error_rate, 6),
-        duration_sec=round(elapsed, 3),
-        total_frames=total_frames,
-        total_bytes=decoded_bytes,
+    return _make_result(
+        profile, "sequential", elapsed=elapsed, deadline=duration_sec,
+        frame_count=frame_count, errors=errors, payload_bytes=len(payload),
+        completed=completed, integrity_ok=integrity_ok,
     )
 
 
 def _bench_fountain(
-    profile: ResolutionProfile,
-    payload_size_kb: int,
-    duration_sec: float,
+    profile: ResolutionProfile, payload_size_kb: int, duration_sec: float,
 ) -> BenchmarkResult:
-    """Benchmark fountain encode/decode roundtrip in memory."""
     from hdmi_transfer.core.prng import choose_indices
     from hdmi_transfer.core.protocols.fountain import FountainDecoder
     from hdmi_transfer.core.protocols.xor_ops import xor_into
 
     proto = get_protocol("fountain", profile=profile)
-    payload_per_frame = profile.fount_bytes_per_frame
-
-    # Generate test payload
-    raw_payload = bytes(
-        np.random.randint(0, 256, payload_size_kb * 1024, dtype=np.uint8)
-    )
-
-    K = math.ceil(len(raw_payload) / payload_per_frame)
-    if K < 1:
-        K = 1
-
-    # Slice into chunks as numpy arrays
+    payload_per_frame = proto.bytes_per_frame
+    raw_payload = np.random.default_rng(0).bytes(payload_size_kb * 1024)
+    chunk_count = math.ceil(len(raw_payload) / payload_per_frame)
     chunks: list[np.ndarray] = []
-    for i in range(K):
-        s = i * payload_per_frame
-        e = min(s + payload_per_frame, len(raw_payload))
+    for index in range(chunk_count):
+        data = raw_payload[index * payload_per_frame : (index + 1) * payload_per_frame]
         chunk = np.zeros(payload_per_frame, dtype=np.uint8)
-        chunk[: e - s] = np.frombuffer(raw_payload[s:e], dtype=np.uint8)
+        chunk[: len(data)] = np.frombuffer(data, dtype=np.uint8)
         chunks.append(chunk)
-
-    # Decode side
-    decoder = FountainDecoder(K, payload_per_frame)
-
+    decoder = FountainDecoder(chunk_count, payload_per_frame)
     seed = 1
     frame_count = 0
     errors = 0
-    decoded_bytes = 0
-
     start = time.perf_counter()
-
     while not decoder.is_complete():
-        elapsed = time.perf_counter() - start
-        if elapsed > duration_sec:
+        if time.perf_counter() - start >= duration_sec:
             break
-
-        # Build droplet payload
-        indices = choose_indices(seed, K)
         drop_payload = np.zeros(payload_per_frame, dtype=np.uint8)
-        for idx in indices:
-            xor_into(drop_payload, chunks[idx])
-
-        # Encode
-        frame_img = proto.encode_frame(
-            drop_payload.tobytes(), frame_count, K, seed=seed,
+        for index in choose_indices(seed, chunk_count):
+            xor_into(drop_payload, chunks[index])
+        frame = proto.encode_frame(
+            drop_payload.tobytes(), frame_count, chunk_count, seed=seed,
         )
-
-        # Simulate capture
-        sampled = sample_frame(
-            frame_img,
-            profile.rows,
-            profile.cols,
-            profile.block_size,
-        )
-
-        # Decode frame
-        result = proto.decode_frame(sampled)
-
-        if result.is_valid and result.data is not None:
-            decoder.add_droplet(
-                result.frame_index, result.data,  # type: ignore[arg-type]
-            )
+        result = proto.decode_frame(_sample(profile, frame))
+        frame_count += 1
+        if (
+            result.is_valid
+            and result.data is not None
+            and result.frame_index == seed
+            and result.total_frames == chunk_count
+        ):
+            decoder.add_droplet(seed, result.data)
         else:
             errors += 1
-
-        seed = (seed + 1) & 0xFFFFFFFF
-        if seed == 0:
-            seed = 1
-        frame_count += 1
-
+        seed = ((seed + 1) & 0xFFFFFFFF) or 1
+    completed = decoder.is_complete()
+    # Fountain reconstruction includes zero padding in its last chunk.
+    integrity_ok = completed and decoder.get_file_data()[: len(raw_payload)] == raw_payload
     elapsed = time.perf_counter() - start
-
-    if decoder.is_complete():
-        file_data = decoder.get_file_data()
-        decoded_bytes = len(file_data)
-
-    fps = frame_count / elapsed if elapsed > 0 else 0.0
-    bps = decoded_bytes / elapsed if elapsed > 0 else 0.0
-    overhead_pct = (
-        ((frame_count - K) / K) * 100.0 if K > 0 and decoder.is_complete() else 0.0
+    return _make_result(
+        profile, "fountain", elapsed=elapsed, deadline=duration_sec,
+        frame_count=frame_count, errors=errors, payload_bytes=len(raw_payload),
+        completed=completed, integrity_ok=integrity_ok,
+        overhead_pct=(frame_count - chunk_count) / chunk_count * 100 if completed else 0.0,
     )
-    error_rate = errors / frame_count if frame_count > 0 else 0.0
 
-    return BenchmarkResult(
-        profile=profile.name,
-        mode="fountain",
-        frames_per_sec=round(fps, 2),
-        bytes_per_sec=round(bps, 2),
-        overhead_pct=round(overhead_pct, 2),
-        error_rate=round(error_rate, 6),
-        duration_sec=round(elapsed, 3),
-        total_frames=frame_count,
-        total_bytes=decoded_bytes,
-    )
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a finite positive number")
+    return parsed
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hdmi-bench",
-        description="HDMI Transfer Benchmark -- measure encode/decode throughput",
+        description="Measure verified in-memory encode/decode throughput (not HDMI throughput)",
     )
-    parser.add_argument(
-        "--profile",
-        choices=list(PROFILES.keys()),
-        default="speed",
-        help="Resolution profile (default: speed)",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["sequential", "fountain"],
-        default="fountain",
-        help="Encoding protocol to benchmark (default: fountain)",
-    )
-    parser.add_argument(
-        "--size",
-        type=int,
-        default=100,
-        help="Payload size in KB (default: 100)",
-    )
-    parser.add_argument(
-        "--duration",
-        type=float,
-        default=10.0,
-        help="Max duration in seconds for fountain mode (default: 10)",
-    )
-    parser.add_argument(
-        "--no-json",
-        action="store_true",
-        default=False,
-        help="Print human-readable output instead of JSON",
-    )
+    parser.add_argument("--profile", choices=list(PROFILES), default=DEFAULT_PROFILE_NAME)
+    parser.add_argument("--mode", choices=["sequential", "fountain"], default=DEFAULT_MODE)
+    parser.add_argument("--bpc", type=int, choices=[1, 2, 3], default=DEFAULT_BITS_PER_CHANNEL,
+                        help=f"Bits per color channel (default: {DEFAULT_BITS_PER_CHANNEL})")
+    parser.add_argument("--size", type=_positive_int, default=100,
+                        help="Payload size in KiB (default: 100)")
+    parser.add_argument("--duration", type=_positive_float, default=10.0,
+                        help="Transfer deadline in seconds, excluding warm-up (default: 10)")
+    parser.add_argument("--no-json", action="store_true",
+                        help="Print human-readable output instead of JSON")
     return parser
 
 
 def main() -> None:
-    """Entry point for ``hdmi-bench`` CLI command."""
     parser = _build_parser()
     args = parser.parse_args()
-
-    profile = PROFILES.get(args.profile, DEFAULT_PROFILE)
-
+    profile = replace(PROFILES[args.profile], bits_per_channel=args.bpc)
     sys.stderr.write(
-        f"Benchmarking {args.mode} mode with {args.profile} profile "
-        f"({args.size} KB payload)...\n"
+        f"In-memory {args.mode} benchmark: {args.profile}, {args.bpc} bpc, "
+        f"{args.size} KiB payload; warming up before measurement...\n"
     )
-
-    result = run_benchmark(
-        profile=profile,
-        mode=args.mode,
-        payload_size_kb=args.size,
-        duration_sec=args.duration,
-    )
-
+    try:
+        result = run_benchmark(profile, args.mode, args.size, args.duration)
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.no_json:
         print(f"Profile:       {result.profile}")
         print(f"Mode:          {result.mode}")
@@ -310,11 +274,17 @@ def main() -> None:
         print(f"Bytes/sec:     {result.bytes_per_sec:.2f}")
         print(f"Overhead:      {result.overhead_pct:.2f}%")
         print(f"Error rate:    {result.error_rate:.6f}")
-        print(f"Duration:      {result.duration_sec:.3f}s")
+        print(f"Duration:      {result.duration_sec:.6f}s")
+        print(f"Warm-up:       {result.warmup_duration_sec:.6f}s (excluded)")
         print(f"Total frames:  {result.total_frames}")
-        print(f"Total bytes:   {result.total_bytes}")
+        print(f"Useful bytes:  {result.total_bytes} / {result.payload_bytes}")
+        print(f"Completed:     {result.completed}")
+        print(f"Integrity OK:  {result.integrity_ok}")
+        print(f"Timed out:     {result.timed_out}")
     else:
         print(result.to_json())
+    if not result.completed or not result.integrity_ok or result.timed_out:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
