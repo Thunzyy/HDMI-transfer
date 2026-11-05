@@ -42,7 +42,8 @@ def test_corrupt_store_is_ignored_and_can_be_replaced(tmp_path, content):
 
 
 @pytest.mark.parametrize("sampling", [[0, 0, 0, 1], [-1, 0, 1, 1],
-    [0, 0, float("nan"), 1], [0, 0, float("inf"), 1], ["0", 0, 1, 1], [True, 0, 1, 1]])
+    [0, 0, float("nan"), 1], [0, 0, float("inf"), 1], ["0", 0, 1, 1],
+    [True, 0, 1, 1], [10**400, 0, 1, 1]])
 def test_invalid_geometry_is_never_loaded_or_saved(tmp_path, sampling):
     path = tmp_path / "calibration.json"
     path.write_text(json.dumps({"version": 1, "entries": {"bad": {"sampling": sampling}}}))

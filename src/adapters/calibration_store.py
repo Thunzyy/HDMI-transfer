@@ -44,7 +44,11 @@ def _sampling(value: object) -> Sampling | None:
     if any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in value):
         return None
     ox, oy, sx, sy = value
-    if not all(math.isfinite(v) for v in value):
+    try:
+        finite = all(math.isfinite(v) for v in value)
+    except (OverflowError, TypeError):
+        return None
+    if not finite:
         return None
     if ox != int(ox) or oy != int(oy) or not (0 <= ox <= 16384 and 0 <= oy <= 16384):
         return None

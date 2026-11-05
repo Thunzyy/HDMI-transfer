@@ -17,6 +17,11 @@ from hdmi_transfer.adapters.receive_worker import (
 @pytest.fixture(autouse=True)
 def isolate_calibration_cache(monkeypatch, tmp_path):
     monkeypatch.setenv("HDMI_TRANSFER_STATE_DIR", str(tmp_path / "state"))
+    # These tests inject decoded FrameResults over blank capture frames to
+    # exercise orchestration. Real image/pattern checks live in
+    # test_receiver_calibration.py and test_preflight.py.
+    monkeypatch.setattr("hdmi_transfer.adapters.receive_worker.is_calibration_frame_valid",
+                        lambda *args: True)
 
 
 class _FakeCap:

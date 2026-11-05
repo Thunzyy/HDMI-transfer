@@ -5,9 +5,7 @@ import pytest
 import cv2
 
 from hdmi_transfer.adapters.calibration_store import CalibrationStore, calibration_key
-from hdmi_transfer.application.preflight import build_calibration_payload
-from hdmi_transfer.core.config import FRAME_TYPE_START
-from hdmi_transfer.core.protocols import get_protocol
+from hdmi_transfer.application.preflight import build_calibration_frame
 from hdmi_transfer.domain.models import ResolutionProfile
 from hdmi_transfer.adapters.receive_worker import ReceiverWorker
 
@@ -16,9 +14,7 @@ PROFILE = ResolutionProfile("small", 160, 160, 8, 60, bits_per_channel=2)
 
 
 def calibration_frames(profile=PROFILE, indices=range(3)):
-    protocol = get_protocol("sequential", profile=profile)
-    payload = build_calibration_payload(protocol.bytes_per_frame)
-    return [protocol.encode_frame(payload, i, 1, frame_type=FRAME_TYPE_START) for i in indices]
+    return [build_calibration_frame(profile, i) for i in indices]
 
 
 class FiniteCapture:
@@ -181,3 +177,71 @@ def test_calibration_pattern_can_remain_visible_without_restarting_geometry_sear
                         lambda *args: pytest.fail("A validated calibration tail must not trigger a search"))
     receiver._run_fountain(FiniteCapture(receiver, frames * 5))
     assert receiver.get_runtime_state()["state"] == "stopped"
+
+
+def test_capture_size_change_clears_the_validated_geometry_hint(tmp_path):
+    receiver = worker(tmp_path)
+    assert receiver._wait_for_preflight(FiniteCapture(receiver, calibration_frames()))
+    receiver._sampling = (8, 8, 0.9, 0.9)
+    receiver._set_runtime_state(calibration_reused=True)
+    receiver._ensure_size(np.zeros((320, 320, 3), dtype=np.uint8))
+    assert receiver._sampling == (0, 0, 1.0, 1.0)
+    assert receiver.get_runtime_state()["calibration_reused"] is False
+    assert receiver.get_runtime_state()["calibration_state"] == "calibrating"
+
+
+def test_auto_waiting_for_offline_confirmation_does_not_switch_capture_device(tmp_path, monkeypatch):
+    from hdmi_transfer.application.send_session import SendSession
+
+    receiver = worker(tmp_path, mode="auto", backend=int(cv2.CAP_DSHOW),
+                      fallback_targets=[(1, int(cv2.CAP_MSMF))], output_dir=str(tmp_path))
+    receiver._fallback_targets = [(1, int(cv2.CAP_MSMF))]
+    frames = calibration_frames()
+    assert receiver._wait_for_preflight(FiniteCapture(receiver, frames))
+    source = tmp_path / "short.bin"
+    source.write_bytes(b"confirmed after six seconds")
+    sender = SendSession.from_input(input_path=str(source), mode="fountain", profile=PROFILE)
+    payload = next(sender.iter_frame_packets()).frame
+    events = []
+    original = receiver._publish
+    monkeypatch.setattr(receiver, "_publish", lambda kind, data: (events.append((kind, data)), original(kind, data)))
+    receiver._run_auto(FiniteCapture(receiver, frames * 120 + [payload]))
+    complete = next(data for kind, data in events if kind == "complete")
+    assert complete["sha256_ok"] is True
+    assert not any(data.get("state") == "fallback" for _, data in events)
+
+
+def test_auto_replays_original_capture_size_without_invalidating_calibration(tmp_path):
+    from hdmi_transfer.application.send_session import SendSession
+
+    receiver = worker(tmp_path, mode="auto", output_dir=str(tmp_path))
+    raw_frames = [cv2.resize(frame, (320, 320), interpolation=cv2.INTER_NEAREST)
+                  for frame in calibration_frames()]
+    assert receiver._wait_for_preflight(FiniteCapture(receiver, raw_frames))
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"raw capture dimensions survive auto-detection")
+    sender = SendSession.from_input(input_path=str(source), mode="fountain", profile=PROFILE)
+    raw_payload = cv2.resize(next(sender.iter_frame_packets()).frame, (320, 320),
+                            interpolation=cv2.INTER_NEAREST)
+    receiver._run_auto(FiniteCapture(receiver, [raw_payload]))
+    state = receiver.get_runtime_state()
+    assert state["state"] == "complete"
+    assert state["sha256_ok"] is True
+    assert state["calibration_state"] == "saved"
+    assert receiver._calibration_capture_shape == (320, 320)
+
+
+def test_worker_never_saves_calibration_with_a_corrupt_4k_tail(tmp_path):
+    from hdmi_transfer.core.config import PROFILES
+
+    profile = replace(PROFILES["quality"], bits_per_channel=2)
+    receiver = ReceiverWorker(device=0, profile=profile, require_preflight=True,
+                              calibration_store=CalibrationStore(tmp_path / "calibration.json"))
+    frames = []
+    for index in range(3):
+        frame = build_calibration_frame(profile, index)
+        frame[-8:, -8:] = 255 - frame[-8:, -8:]
+        frames.append(frame)
+    assert not receiver._wait_for_preflight(FiniteCapture(receiver, frames))
+    assert receiver.get_runtime_state()["preflight_state"] != "ok"
+    assert not receiver._calibration_store.path.exists()

@@ -23,7 +23,7 @@ import time
 
 import cv2
 
-from hdmi_transfer.application.preflight import is_preflight_start_result
+from hdmi_transfer.application.preflight import is_calibration_frame_valid, is_preflight_start_result
 from hdmi_transfer.adapters.calibration_store import CalibrationStore, calibration_key
 from hdmi_transfer.application.receive_geometry import (
     build_geometry_candidates,
@@ -122,6 +122,7 @@ class ReceiverWorker(threading.Thread):
         self._force_recalibration = bool(force_recalibration)
         self._awaiting_payload = False
         self._calibration_protocol = None
+        self._calibration_capture_shape: tuple[int, int] | None = None
         self._device_identity = device_identity or str(device)
         self._calibration_store = calibration_store or CalibrationStore()
         self._stop_event = threading.Event()
@@ -403,8 +404,13 @@ class ReceiverWorker(threading.Thread):
                     hints[key] = None if self._force_recalibration else self._calibration_store.load(key)
                     current[key] = hints[key] or (0, 0, 1.0, 1.0)
                 self._sampling = current[key]
+
+                def decode_calibration(sampled):
+                    decoded = protocol.decode_frame(sampled)
+                    return decoded if is_calibration_frame_valid(sampled, profile, decoded) else None
+
                 result, geometry_cursor, sampling = self._decode_with_sampling_fallbacks(
-                    frame, profile, protocol.decode_frame, geometry_candidates, geometry_cursor,
+                    frame, profile, decode_calibration, geometry_candidates, geometry_cursor,
                 )
                 if not is_preflight_start_result(result) or result.frame_index is None:
                     continue
@@ -427,6 +433,7 @@ class ReceiverWorker(threading.Thread):
                 self._profile = profile
                 self._awaiting_payload = True
                 self._calibration_protocol = protocol
+                self._calibration_capture_shape = raw_frame.shape[:2]
                 saved = self._calibration_store.save(key, sampling)
                 calibration_state = "reused" if reused else ("saved" if saved else "validated")
                 self._publish("status", {
@@ -670,13 +677,14 @@ class ReceiverWorker(threading.Thread):
             if not ret:
                 time.sleep(0.001)
                 continue
-            frames_probed += 1
 
             self._maybe_publish_preview(frame)
 
-            frame = self._ensure_size(frame)
+            raw_frame = frame
+            frame = self._ensure_size(raw_frame)
             if self._is_calibration_tail(frame):
                 continue
+            frames_probed += 1
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             if float(gray.mean()) < 1.5 and float(gray.std()) < 1.0:
                 black_streak += 1
@@ -697,13 +705,6 @@ class ReceiverWorker(threading.Thread):
                         "state": "probing",
                         "message": "Signal restored. Auto-detecting protocol and bpc...",
                     })
-
-            self._maybe_request_runtime_fallback(
-                protocol_name="auto",
-                frames_captured=frames_probed,
-                has_progress=False,
-                low_signal_streak=black_streak,
-            )
 
             for bpc, profile, seq, fount in probe_candidates:
                 detected = [None]
@@ -734,12 +735,21 @@ class ReceiverWorker(threading.Thread):
                     "protocol": protocol_name,
                 })
                 # Detection must not consume the first payload/START packet.
-                replay = _FirstFrameCapture(frame, cap)
+                replay = _FirstFrameCapture(raw_frame, cap)
                 if protocol_name == "sequential":
                     self._run_sequential(replay)
                 else:
                     self._run_fountain(replay)
                 return
+
+            # Only failed payload probes count toward switching devices.
+            # A long, valid calibration pattern is not a no-progress failure.
+            self._maybe_request_runtime_fallback(
+                protocol_name="auto",
+                frames_captured=frames_probed,
+                has_progress=False,
+                low_signal_streak=black_streak,
+            )
 
         self._publish("stopped", {
             "message": "Stopped by user",
@@ -758,6 +768,14 @@ class ReceiverWorker(threading.Thread):
         return is_preflight_start_result(self._calibration_protocol.decode_frame(sampled))
 
     def _ensure_size(self, frame):
+        if (self._calibration_capture_shape is not None
+                and frame.shape[:2] != self._calibration_capture_shape):
+            # A new capture size changes the cache identity. CRC-based fallback
+            # may recover the ongoing transfer, but its old hint is no longer
+            # described as calibrated and is never saved under the new size.
+            self._calibration_capture_shape = None
+            self._sampling = (0, 0, 1.0, 1.0)
+            self._set_runtime_state(calibration_state="calibrating", calibration_reused=False)
         return ensure_frame_size(frame, self._profile)
 
     def _decode_with_sampling_fallbacks(
