@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import math
 import time
 
 import numpy as np
 
 from hdmi_transfer.application.events import ReceiveEvent
+from hdmi_transfer.application.preflight import is_preflight_start_result
 from hdmi_transfer.core.config import (
     DEFAULT_PROFILE,
     FRAME_TYPE_DATA,
@@ -21,7 +23,7 @@ from hdmi_transfer.core.file_handling.metadata import (
 )
 from hdmi_transfer.core.file_handling.writer import verify_integrity
 from hdmi_transfer.core.protocols import get_protocol
-from hdmi_transfer.core.protocols.base import FrameResult
+from hdmi_transfer.core.protocols.base import EncodingProtocol, FrameResult
 from hdmi_transfer.core.protocols.fountain import FountainDecoder
 
 
@@ -34,7 +36,12 @@ class ReceiveSession:
         mode: str = "auto",
         profile: ResolutionProfile | None = None,
         profile_name: str | None = None,
+        progress_interval_s: float = 0.0,
     ) -> None:
+        if not math.isfinite(progress_interval_s) or progress_interval_s < 0:
+            raise ValueError("progress_interval_s must be finite and nonnegative")
+        self._progress_interval_s = progress_interval_s
+        self._last_progress_at: float | None = None
         self.mode = mode
         self.profile = self._resolve_profile(
             profile=profile,
@@ -49,6 +56,40 @@ class ReceiveSession:
         self._completed = False
         self._reset_sequential_state()
         self._reset_fountain_state()
+
+    @property
+    def sequential_protocol(self) -> EncodingProtocol:
+        return self._sequential_protocol
+
+    @property
+    def fountain_protocol(self) -> EncodingProtocol:
+        return self._fountain_protocol
+
+    @property
+    def has_progress(self) -> bool:
+        """Whether any transfer metadata or data has been accepted."""
+        return bool(
+            self._fountain_decoder is not None
+            or self._seq_saw_start
+            or self._seq_saw_end
+            or self._seq_received
+        )
+
+    def _elapsed(self) -> float:
+        if self._started_at is None:
+            return 0.0
+        return max(0.0, time.monotonic() - self._started_at)
+
+    def _progress_due(self, *, force: bool = False) -> bool:
+        now = time.monotonic()
+        if (
+            not force
+            and self._last_progress_at is not None
+            and now - self._last_progress_at < self._progress_interval_s
+        ):
+            return False
+        self._last_progress_at = now
+        return True
 
     @staticmethod
     def _resolve_profile(
@@ -98,12 +139,17 @@ class ReceiveSession:
         if self._completed or not result.is_valid:
             return []
 
+        # Calibration uses a sequential START frame even before a Fountain
+        # transfer. It must neither select a protocol nor start a file.
+        if protocol == "sequential" and is_preflight_start_result(result):
+            return []
+
         if self.mode in {"sequential", "fountain"} and protocol != self.mode:
             return []
 
         events: list[ReceiveEvent] = []
         if self._started_at is None:
-            self._started_at = time.time()
+            self._started_at = time.monotonic()
 
         if self.detected_protocol is None:
             self.detected_protocol = protocol
@@ -235,8 +281,8 @@ class ReceiveSession:
                 self._seq_received[frame_index] = data
                 self._seq_bytes_received += len(data)
             self._seq_last_data_idx = frame_index
-            if self._seq_total_expected:
-                duration = time.time() - self._started_at if self._started_at else 0
+            if self._seq_total_expected and self._progress_due():
+                duration = self._elapsed()
                 percent = round(
                     len(self._seq_received) / self._seq_total_expected * 100,
                     1,
@@ -282,7 +328,7 @@ class ReceiveSession:
         else:
             file_content = full_data
 
-        duration = time.time() - self._started_at if self._started_at else 0
+        duration = self._elapsed()
         speed_mbps = (
             (len(file_content) * 8) / duration / 1_000_000
             if duration > 0
@@ -335,14 +381,16 @@ class ReceiveSession:
     def _reset_fountain_state(self) -> None:
         self._fountain_decoder: FountainDecoder | None = None
         self._fountain_bytes_received = 0
+        self._fountain_unique_bytes_received = 0
         self._fountain_droplets_received = 0
         self._fountain_unique_droplets_received = 0
         self._fountain_expected_droplets: int | None = None
         self._fountain_seen_seeds: set[int] = set()
+        self._fountain_content_range: tuple[int, int] | None = None
 
     def _handle_fountain_result(self, result: FrameResult) -> list[ReceiveEvent]:
         if (
-            result.data is None
+            not result.data
             or result.frame_index is None
             or result.total_frames is None
         ):
@@ -362,12 +410,10 @@ class ReceiveSession:
         events: list[ReceiveEvent] = []
 
         if self._fountain_decoder is None or self._fountain_decoder.K != total_chunks:
+            self._reset_fountain_state()
             self._fountain_decoder = FountainDecoder(total_chunks, len(payload))
-            self._fountain_bytes_received = 0
-            self._fountain_droplets_received = 0
-            self._fountain_unique_droplets_received = 0
-            self._fountain_seen_seeds.clear()
             self._fountain_expected_droplets = expected_droplets
+            self._last_progress_at = None
             events.append(ReceiveEvent(
                 kind="status",
                 data={
@@ -381,33 +427,80 @@ class ReceiveSession:
         elif expected_droplets is not None and self._fountain_expected_droplets is None:
             self._fountain_expected_droplets = expected_droplets
 
+        assert self._fountain_decoder is not None
+        if len(payload) != self._fountain_decoder.payload_size:
+            return events
+
+        self._fountain_bytes_received += len(payload)
+        self._fountain_droplets_received += 1
         if seed not in self._fountain_seen_seeds:
             self._fountain_seen_seeds.add(seed)
             self._fountain_unique_droplets_received += 1
+            self._fountain_unique_bytes_received += len(payload)
+            self._fountain_decoder.add_droplet(seed, payload)
 
-        assert self._fountain_decoder is not None
-        self._fountain_decoder.add_droplet(seed, payload)
-        self._fountain_bytes_received += len(payload)
-        self._fountain_droplets_received += 1
+        complete = self._fountain_decoder.is_complete()
+        if self._progress_due(force=complete):
+            events.append(self._build_fountain_progress_event())
+        if complete:
+            events.append(self._build_fountain_complete_event())
+        return events
 
-        decoded = len(self._fountain_decoder.chunks)
-        duration = time.time() - self._started_at if self._started_at else 0
-        speed = (
-            self._fountain_bytes_received / duration
-            if duration > 2
-            else 0
+    def _fountain_useful_bytes(self, decoded_indices: list[int]) -> int | None:
+        """Count recovered file bytes, excluding metadata and final padding.
+
+        A Fountain file's metadata may itself span multiple chunks. Until
+        that prefix is recovered, the useful size is unknown, not zero.
+        This work runs only at the requested progress cadence.
+        """
+        decoder = self._fountain_decoder
+        assert decoder is not None
+        if self._fountain_content_range is None:
+            prefix = bytearray()
+            # The metadata parser allows at most 1024 filename bytes.
+            prefix_chunks = min(decoder.K, math.ceil(1062 / decoder.payload_size))
+            for index in range(prefix_chunks):
+                chunk = decoder.chunks.get(index)
+                if chunk is None:
+                    break
+                prefix.extend(chunk.tobytes())
+                size, _, _, offset = parse_fountain_metadata(prefix)
+                if size is not None and offset is not None:
+                    if offset + size <= decoder.K * decoder.payload_size:
+                        self._fountain_content_range = (offset, offset + size)
+                    break
+        if self._fountain_content_range is None:
+            return None
+        start, end = self._fountain_content_range
+        return sum(
+            max(
+                0,
+                min(end, (index + 1) * decoder.payload_size)
+                - max(start, index * decoder.payload_size),
+            )
+            for index in decoded_indices
         )
-        remaining = max(0, total_chunks - decoded) * len(payload)
-        eta_seconds = remaining / speed if speed > 0 else -1
-        percent = round(decoded / total_chunks * 100, 1)
+
+    def _build_fountain_progress_event(self) -> ReceiveEvent:
+        assert self._fountain_decoder is not None
+        decoded_indices = sorted(self._fountain_decoder.chunks)
+        decoded = len(decoded_indices)
+        useful_bytes = self._fountain_useful_bytes(decoded_indices)
+        duration = self._elapsed()
+        speed = (useful_bytes or 0) / duration if duration > 2 else 0
+        captured_speed = self._fountain_bytes_received / duration if duration > 2 else 0
+        unique_speed = (
+            self._fountain_unique_bytes_received / duration if duration > 2 else 0
+        )
+        percent = round(decoded / self._fountain_decoder.K * 100, 1)
         if percent >= 100.0:
             percent = 99.9
-        events.append(ReceiveEvent(
+        return ReceiveEvent(
             kind="progress",
             data={
                 "protocol": "fountain",
                 "chunks_decoded": decoded,
-                "total_chunks": total_chunks,
+                "total_chunks": self._fountain_decoder.K,
                 "percent": percent,
                 "droplets_received": self._fountain_droplets_received,
                 "unique_droplets_received": (
@@ -415,16 +508,22 @@ class ReceiveSession:
                 ),
                 "expected_droplets": self._fountain_expected_droplets,
                 "bytes_received": self._fountain_bytes_received,
+                "captured_bytes": self._fountain_bytes_received,
+                "unique_bytes_received": self._fountain_unique_bytes_received,
+                "duplicate_droplets_received": (
+                    self._fountain_droplets_received
+                    - self._fountain_unique_droplets_received
+                ),
+                "useful_bytes_decoded": useful_bytes,
                 "speed_kbps": round(speed / 1024, 1) if speed > 0 else 0,
-                "eta_seconds": round(eta_seconds, 1) if eta_seconds >= 0 else -1,
-                "decoded_indices": sorted(self._fountain_decoder.chunks.keys()),
+                "captured_speed_kbps": round(captured_speed / 1024, 1),
+                "unique_speed_kbps": round(unique_speed / 1024, 1),
+                # Fountain progress can jump when equations resolve; captured
+                # bandwidth cannot predict how many useful equations remain.
+                "eta_seconds": -1,
+                "decoded_indices": decoded_indices,
             },
-        ))
-
-        if self._fountain_decoder.is_complete():
-            events.append(self._build_fountain_complete_event())
-
-        return events
+        )
 
     def _build_fountain_complete_event(self) -> ReceiveEvent:
         assert self._fountain_decoder is not None
@@ -449,7 +548,7 @@ class ReceiveSession:
             sha256_ok = False
             sha256_available = False
 
-        duration = time.time() - self._started_at if self._started_at else 0
+        duration = self._elapsed()
         speed_mbps = (
             (file_size * 8) / duration / 1_000_000
             if duration > 0
@@ -468,6 +567,13 @@ class ReceiveSession:
                 "duration_s": round(duration, 2),
                 "speed_mbps": round(speed_mbps, 2),
                 "bytes_received": self._fountain_bytes_received,
+                "captured_bytes": self._fountain_bytes_received,
+                "unique_bytes_received": self._fountain_unique_bytes_received,
+                "useful_bytes_decoded": len(file_content) if sha256_available else None,
+                "duplicate_droplets_received": (
+                    self._fountain_droplets_received
+                    - self._fountain_unique_droplets_received
+                ),
                 "chunks_decoded": len(self._fountain_decoder.chunks),
                 "total_chunks": self._fountain_decoder.K,
                 "droplets_received": self._fountain_droplets_received,
