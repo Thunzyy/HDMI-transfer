@@ -554,6 +554,15 @@ class ReceiveSession:
             if duration > 0
             else 0
         )
+        # Final averages remain meaningful even before the progress warm-up.
+        # The existing *_kbps fields use KiB/s; speed_mbps uses decimal Mbit/s.
+        speed_kbps = len(file_content) / duration / 1024 if duration > 0 else 0
+        captured_speed_kbps = (
+            self._fountain_bytes_received / duration / 1024 if duration > 0 else 0
+        )
+        unique_speed_kbps = (
+            self._fountain_unique_bytes_received / duration / 1024 if duration > 0 else 0
+        )
 
         self._completed = True
         return ReceiveEvent(
@@ -566,6 +575,11 @@ class ReceiveSession:
                 "sha256_available": sha256_available,
                 "duration_s": round(duration, 2),
                 "speed_mbps": round(speed_mbps, 2),
+                "speed_kbps": round(speed_kbps, 1),
+                "captured_speed_kbps": round(captured_speed_kbps, 1),
+                "unique_speed_kbps": round(unique_speed_kbps, 1),
+                "percent": 100.0,
+                "eta_seconds": 0,
                 "bytes_received": self._fountain_bytes_received,
                 "captured_bytes": self._fountain_bytes_received,
                 "unique_bytes_received": self._fountain_unique_bytes_received,
