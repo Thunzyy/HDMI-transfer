@@ -25,20 +25,17 @@ import numpy as np
 from hdmi_transfer.application.send_session import SendSession
 from hdmi_transfer.application.preflight import (
     PREFLIGHT_OFFLINE_RECHECK_MS,
-    PREFLIGHT_TOTAL_FRAMES,
-    build_calibration_payload,
+    build_calibration_frame,
 )
 from hdmi_transfer.core import settings
 from hdmi_transfer.core.config import (
     DEFAULT_PROFILE,
-    FRAME_TYPE_START,
     PROFILES,
     ResolutionProfile,
 )
 from hdmi_transfer.sender.display.monitors import get_monitors
 from hdmi_transfer.sender.display.renderer import FrameRenderer, PygameRenderer
 from hdmi_transfer.core.protocols.xor_ops import warmup as warmup_numba
-from hdmi_transfer.core.protocols import get_protocol
 from hdmi_transfer.domain.transfer_defaults import (
     DEFAULT_BITS_PER_CHANNEL,
     DEFAULT_MODE,
@@ -418,19 +415,12 @@ def _calibrate_sender(
     HDMI has no return channel here. A stored *operator confirmation* permits
     a short recheck, but does not claim that the remote receiver acknowledged it.
     """
-    protocol = get_protocol("sequential", profile=profile)
-    payload = build_calibration_payload(profile.seq_bytes_per_frame)
     started = time.monotonic()
     count = 0
     configuration = None
     cached = False
     while True:
-        frame = protocol.encode_frame(
-            payload,
-            frame_index=count & 0xFFFFFFFF,
-            total_frames=PREFLIGHT_TOTAL_FRAMES,
-            frame_type=FRAME_TYPE_START,
-        )
+        frame = build_calibration_frame(profile, count & 0xFFFFFFFF)
         key = renderer.show(frame, delay_ms=delay)
         count += 1
         if key in (27, ord("q")):
