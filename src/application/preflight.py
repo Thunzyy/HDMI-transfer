@@ -24,6 +24,9 @@ PREFLIGHT_POLL_INTERVAL_MS = 300
 PREFLIGHT_SETTLE_MS = 200
 PREFLIGHT_OFFLINE_INITIAL_MS = 3_000
 PREFLIGHT_OFFLINE_RECHECK_MS = 1_000
+# Native fullscreen notifications can cover the HDMI signal for several seconds.
+# Keep displaying calibration through this interval before timing the clean check.
+PREFLIGHT_FULLSCREEN_SETTLE_MS = 5_000
 PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS = 4_000
 PREFLIGHT_FILLER_BYTES = bytes(
     (((index * 73) + 19) ^ (index * 29)) & 0xFF

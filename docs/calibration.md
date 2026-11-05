@@ -14,7 +14,7 @@ pattern, then saves the sampling geometry. The recommended configuration is
 4. For an offline transfer, wait until the receiver reports **Calibration saved**
    or a verified signal, then press **Enter on the sending computer**. No file data
    is emitted before that first confirmation. The sender needs at least three
-   seconds of pattern display before accepting Enter.
+   seconds of unobstructed pattern display before accepting Enter.
 5. The receiver reconstructs the file and checks its SHA-256 hash. Confirm that
    result before using the received file.
 
@@ -36,6 +36,18 @@ still verifies the pattern; the sender cannot observe its result over a
 one-way HDMI connection. If the receiver remains in calibration, stop sending
 and recalibrate both sides. No offline completion message proves successful
 reception: use the receiver's SHA-256 result.
+
+Entering native browser fullscreen can briefly cover the signal with a browser
+notification. After a new successful fullscreen transition, the sender displays
+the calibration pattern for five seconds to let that notification clear, then
+starts the normal check: one further second for a saved setup, or three seconds
+before the first Enter confirmation. Connected mode also starts its calibration
+timeout and encoding fallback timers after this settling interval. This is a
+display allowance, not an acknowledgement from the receiver. Browser or system
+notifications that remain longer still require stopping and recalibrating.
+
+When the browser is already fullscreen (including F11 or kiosk mode), the sender
+does not request native fullscreen again and retains the one-second saved check.
 
 Saved geometry reduces repeated computation; it does not increase the physical
 refresh rate or guarantee a particular transfer speed.

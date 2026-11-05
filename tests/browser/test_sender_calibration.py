@@ -64,6 +64,15 @@ def stop(browser):
     browser.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
 
 
+def assert_signal_cursor_hidden(browser):
+    assert browser.execute_script("""
+      const wrapper = document.getElementById('canvas-wrap');
+      return getComputedStyle(wrapper).display === 'block'
+        && getComputedStyle(wrapper).cursor === 'none'
+        && getComputedStyle(document.getElementById('canvas')).cursor === 'none';
+    """) is True
+
+
 def test_offline_first_confirmation_saved_recheck_and_forced_calibration(browser, tmp_path):
     wait = prepare(browser, tmp_path)
     browser.find_element(By.ID, "startBtn").click()
@@ -71,6 +80,7 @@ def test_offline_first_confirmation_saved_recheck_and_forced_calibration(browser
     assert "[PREFLIGHT]" in browser.title
     assert " f=0 " in browser.title
     assert browser.execute_script("return window.fetchCalls") == 0
+    assert_signal_cursor_hidden(browser)
 
     # Decode actual canvas pixels, proving the generated JS agrees with Python.
     png = browser.execute_script("return document.getElementById('canvas').toDataURL().split(',')[1]")
@@ -84,6 +94,7 @@ def test_offline_first_confirmation_saved_recheck_and_forced_calibration(browser
 
     browser.find_element(By.TAG_NAME, "body").send_keys(Keys.ENTER)
     wait.until(lambda d: label(d) == "Transmitting")
+    assert_signal_cursor_hidden(browser)
     stop(browser)
     assert label(browser) == "Stopped"
     assert browser.execute_script("return localStorage.getItem('hdmi_transfer_calibration_v1')")
@@ -161,4 +172,126 @@ def test_cancelled_response_cannot_confirm_restarted_sender(browser, tmp_path):
     assert "[PREFLIGHT]" in browser.title
     assert " f=0 " in browser.title
     assert browser.find_element(By.ID, "bpcSelect").get_attribute("value") == "3"
+    stop(browser)
+
+
+def simulate_native_fullscreen(browser):
+    """Model a successful DOM transition; headless Chrome has no native toast."""
+    browser.execute_script("""
+      window.nativeFullscreen = false;
+      window.fullscreenRequests = 0;
+      Object.defineProperty(screen, 'width', {configurable:true, value:innerWidth + 100});
+      Object.defineProperty(screen, 'height', {configurable:true, value:innerHeight + 100});
+      Object.defineProperty(document, 'fullscreenElement', {
+        configurable:true, get:() => window.nativeFullscreen ? document.documentElement : null,
+      });
+      document.documentElement.requestFullscreen = () => {
+        window.fullscreenRequests++;
+        window.nativeFullscreen = true;
+        window.fullscreenStartedAt = performance.now();
+        return Promise.resolve();
+      };
+      document.exitFullscreen = () => {
+        window.nativeFullscreen = false;
+        return Promise.resolve();
+      };
+    """)
+
+
+def wait_until_elapsed(browser, seconds):
+    WebDriverWait(browser, seconds + 3).until(
+        lambda d: d.execute_script("return performance.now() - window.fullscreenStartedAt")
+        >= seconds * 1000
+    )
+
+
+def test_already_fullscreen_skips_native_request_and_keeps_short_saved_check(browser, tmp_path):
+    wait = prepare(browser, tmp_path)
+    browser.execute_script("""
+      Object.defineProperty(screen, 'width', {configurable:true, value:innerWidth});
+      Object.defineProperty(screen, 'height', {configurable:true, value:innerHeight});
+      window.fullscreenRequests = 0;
+      document.documentElement.requestFullscreen = () => {
+        window.fullscreenRequests++;
+        return Promise.reject(new Error('Unexpected fullscreen request'));
+      };
+    """)
+    browser.find_element(By.ID, "startBtn").click()
+    wait.until(lambda d: label(d) == "Receiver ready? Press Enter")
+    browser.find_element(By.TAG_NAME, "body").send_keys(Keys.ENTER)
+    wait.until(lambda d: label(d) == "Transmitting")
+    stop(browser)
+    browser.execute_script("window.savedCheckStartedAt = performance.now()")
+    browser.find_element(By.ID, "startBtn").click()
+    wait.until(lambda d: label(d) == "Transmitting")
+    elapsed = browser.execute_script("return performance.now() - window.savedCheckStartedAt")
+    assert 900 <= elapsed < 4000
+    assert browser.execute_script("return window.fullscreenRequests") == 0
+    stop(browser)
+
+
+def test_native_transition_settles_before_first_confirmation_and_saved_check(browser, tmp_path):
+    wait = prepare(browser, tmp_path)
+    simulate_native_fullscreen(browser)
+    browser.find_element(By.ID, "startBtn").click()
+    wait.until(lambda d: "[PREFLIGHT]" in d.title)
+    wait_until_elapsed(browser, 4)
+    browser.find_element(By.TAG_NAME, "body").send_keys(Keys.ENTER)
+    assert "[PREFLIGHT]" in browser.title
+    assert " f=0 " in browser.title
+    assert label(browser) != "Receiver ready? Press Enter"
+    wait.until(lambda d: label(d) == "Receiver ready? Press Enter")
+    assert browser.execute_script("return performance.now() - window.fullscreenStartedAt") >= 8000
+    browser.find_element(By.TAG_NAME, "body").send_keys(Keys.ENTER)
+    wait.until(lambda d: label(d) == "Transmitting")
+    stop(browser)
+    browser.find_element(By.ID, "startBtn").click()
+    wait.until(lambda d: "[PREFLIGHT]" in d.title)
+    wait_until_elapsed(browser, 5.3)
+    assert "[PREFLIGHT]" in browser.title
+    assert " f=0 " in browser.title
+    wait.until(lambda d: label(d) == "Transmitting")
+    assert browser.execute_script("return performance.now() - window.fullscreenStartedAt") >= 6000
+    assert browser.execute_script("return window.fullscreenRequests") == 2
+    stop(browser)
+
+
+def test_connected_encoding_fallback_starts_after_fullscreen_settles(browser, tmp_path):
+    wait = prepare(browser, tmp_path, connected=True)
+    simulate_native_fullscreen(browser)
+    browser.find_element(By.ID, "startBtn").click()
+    wait.until(lambda d: "[PREFLIGHT]" in d.title)
+    wait_until_elapsed(browser, 5.5)
+    assert "more robust encoding" not in browser.execute_script(
+        "return document.getElementById('configWarning').textContent"
+    )
+    assert " f=0 " in browser.title
+    browser.execute_script("window.receiverState = {active:true, preflight_required:true, preflight_state:'ok', transfer_bpc:2}")
+    wait.until(lambda d: label(d) == "Transmitting")
+    assert browser.find_element(By.ID, "bpcSelect").get_attribute("value") == "2"
+    stop(browser)
+
+
+def test_cancel_during_fullscreen_settle_does_not_confirm_new_run(browser, tmp_path):
+    wait = prepare(browser, tmp_path, connected=True)
+    simulate_native_fullscreen(browser)
+    browser.find_element(By.ID, "startBtn").click()
+    wait.until(lambda d: "[PREFLIGHT]" in d.title)
+    stop(browser)
+    browser.execute_script("""
+      document.documentElement.requestFullscreen = () => Promise.reject(new Error('Denied'));
+      window.fullscreenStartedAt = performance.now();
+    """)
+    browser.find_element(By.ID, "startBtn").click()
+    wait.until(lambda d: "[PREFLIGHT]" in d.title)
+    wait_until_elapsed(browser, 5.5)
+    assert "[PREFLIGHT]" in browser.title
+    assert " f=0 " in browser.title
+    # A rejected request did not enter fullscreen, so the new connected run's
+    # ordinary four-second fallback must not inherit the cancelled guard.
+    assert "more robust encoding" in browser.execute_script(
+        "return document.getElementById('configWarning').textContent"
+    )
+    browser.execute_script("window.receiverState = {active:true, preflight_required:true, preflight_state:'ok', transfer_bpc:2}")
+    wait.until(lambda d: label(d) == "Transmitting")
     stop(browser)
