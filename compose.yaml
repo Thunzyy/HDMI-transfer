@@ -6,9 +6,13 @@ services:
       - "${HDMI_BIND_ADDRESS:-127.0.0.1}:${HDMI_PORT:-5000}:5000"
     volumes:
       - received-files:/app/received_files
+      - calibration-state:/app/state
+    environment:
+      HDMI_TRANSFER_STATE_DIR: /app/state
     init: true
     restart: unless-stopped
     stop_grace_period: 20s
 
 volumes:
   received-files:
+  calibration-state:

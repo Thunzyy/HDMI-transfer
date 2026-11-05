@@ -9,6 +9,8 @@ if str(_REPO_ROOT) not in sys.path:
 
 
 def pytest_addoption(parser):
+    parser.addoption("--browser", action="store_true", default=False,
+                     help="Run headless Chrome UI checks (no HDMI hardware)")
     parser.addoption(
         "--hardware",
         action="store_true",
@@ -24,5 +26,7 @@ def pytest_configure(config):
 
 
 def pytest_runtest_setup(item):
+    if "browser" in item.keywords and not item.config.getoption("--browser"):
+        pytest.skip("Use --browser to run headless Chrome UI checks")
     if "hardware" in item.keywords and not item.config.getoption("--hardware"):
         pytest.skip("Skipping hardware test: use --hardware to run")

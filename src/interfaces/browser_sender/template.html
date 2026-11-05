@@ -136,6 +136,11 @@ body{display:flex}
   text-align:center;font-size:11px;color:var(--muted);
   letter-spacing:.5px;margin-top:6px;
 }
+.calibration-controls{display:flex;align-items:center;gap:12px;margin-top:8px}
+.calibration-controls p{flex:1;margin:0;font-size:12px;line-height:1.5;color:var(--muted)}
+#recalibrateBtn{padding:8px 12px;border:1px solid var(--accent-border);border-radius:5px;background:transparent;color:var(--text);font:inherit;cursor:pointer}
+#recalibrateBtn:disabled{opacity:.4;cursor:not-allowed}
+#recalibrateBtn:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 
 /* ── Sidebar sections ──────────────────── */
 .side-label{
@@ -329,6 +334,10 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     </button>
   </div>
   <div class="shortcut-hint">Space to start / stop &middot; Esc to cancel</div>
+  <div class="calibration-controls">
+    <p id="calibrationHint" role="status">First transfer: wait for calibration on the receiver, then press Enter on this computer.</p>
+    <button id="recalibrateBtn" type="button">Recalibrate</button>
+  </div>
 </div>
 
 <!-- Right: settings sidebar -->

@@ -48,6 +48,7 @@ def main() -> None:
             ("/settings", b"Settings"),
             ("/history", b"History"),
             ("/static/images/logo.svg", b"<svg"),
+            ("/static/shared.css", b":root"),
         ]:
             assert marker in read(base, path), path
         assert json.loads(read(base, "/api/receive/status"))["active"] is False
@@ -64,12 +65,18 @@ def main() -> None:
                 "from pathlib import Path; "
                 f"Path('/app/received_files/docker-smoke.txt').write_text({payload!r})")
         assert read(base, "/api/receive/download/docker-smoke.txt") == payload.encode()
+        compose("exec", "-T", "hdmi-transfer", "python", "-c",
+                "from hdmi_transfer.adapters.calibration_store import CalibrationStore; "
+                "assert CalibrationStore().save('docker-smoke', (0, 0, 1.0, 1.0))")
         compose("up", "-d", "--force-recreate", "--wait", "--wait-timeout", "120")
         base = address()
         assert read(base, "/api/receive/download/docker-smoke.txt") == payload.encode()
         files = json.loads(read(base, "/api/receive/files"))
         assert [item["filename"] for item in files] == ["docker-smoke.txt"]
-        print("PASS: file download and persistence after container recreation", flush=True)
+        compose("exec", "-T", "hdmi-transfer", "python", "-c",
+                "from hdmi_transfer.adapters.calibration_store import CalibrationStore; "
+                "assert CalibrationStore().load('docker-smoke') == (0, 0, 1.0, 1.0)")
+        print("PASS: file and calibration persistence after container recreation", flush=True)
     except Exception:
         compose("logs", "--tail", "100")
         raise

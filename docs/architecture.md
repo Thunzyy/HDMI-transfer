@@ -15,7 +15,7 @@ src/
   core/            Protocols, encoding, sampling and file handling
   sender/          Display detection and frame renderers
   receiver/        Capture source and video backends
-  web/             Web entry point, receiver worker and static assets
+  web/             Web entry point and static assets
 ```
 
 ## Responsibilities
@@ -32,6 +32,7 @@ src/
 - `hdmi_transfer.domain.protocol_manifest` defines profiles, magic values, header sizes and parameters exposed to the browser sender.
 - `tools/build_sender_html.py` generates `sender.html` and `protocol.generated.js` from the manifest and browser sources. Do not edit the standalone HTML directly.
 - `hdmi_transfer.application.send_session.SendSession` and `hdmi_transfer.application.receive_session.ReceiveSession` provide shared state machines. CLI and web interfaces use these services instead of duplicating behavior.
+- `hdmi_transfer.domain.transfer_defaults` defines recommended interface defaults. Legacy wire-format defaults remain separate.
 
 ## Sending flow
 
@@ -43,9 +44,15 @@ src/
 ## Receiving flow
 
 1. `CaptureManager` opens or reuses a persistent capture handle.
-2. The interface reads frames and converts them into sampled grids.
+2. `hdmi_transfer.adapters.receive_worker.ReceiverWorker` reads live capture for both CLI and web. It validates three distinct calibration patterns, first trying the hint in `CalibrationStore`, then searching only when necessary. The optional video-file CLI path uses the same geometry helpers and session.
 3. `ReceiveSession` detects the protocol, tracks progress and reconstructs the file.
 4. Web routes or CLI commands expose events and resulting files.
+
+Calibration state is persisted atomically by capture configuration and revalidated
+on each reception. Fountain seeds are deduplicated before reconstruction; expensive
+progress snapshots are rate-limited, and JPEG previews are produced only while a
+viewer is connected. See [calibration](calibration.md) for offline confirmation,
+stored state and forced recalibration.
 
 ## Web application
 

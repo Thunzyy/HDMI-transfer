@@ -5,36 +5,21 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>HDMI Transfer — Receiver</title>
 <link rel="icon" type="image/svg+xml" href="/static/images/logo.svg"/>
+<link rel="stylesheet" href="/static/shared.css" />
 <style>
 :root {
-  --bg:#16181e; --bg2:#0f1117; --panel:rgba(22,24,30,0.92);
-  --accent:#7c8aff; --accent-dim:rgba(124,138,255,0.1);
-  --accent-border:rgba(255,255,255,0.1);
-  --green:#4ade80; --yellow:#fbbf24; --red:#f87171;
-  --text:#e4e4e7; --dim:rgba(228,228,231,0.5);
-  --bright:#ffffff; --muted:#a1a1aa;
-  --font-ui:'Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --panel:rgba(22,24,30,0.92);
+  --green:#4ade80;
+  --yellow:#fbbf24;
+  --red:#f87171;
+  --dim:rgba(228,228,231,0.5);
   --font-mono:'SF Mono','Cascadia Code','Fira Code','Consolas',monospace;
 }
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{
-  width:100%;height:100vh;overflow:hidden;
-  background:var(--bg2);color:var(--text);
-  font-family:var(--font-ui);
-  font-size:14px;display:flex;flex-direction:column;
-}
+
 ::selection{background:var(--accent);color:var(--bg2)}
 
 /* ── Header ──────────────────────────────── */
-#header{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:0 20px;height:44px;
-  background:var(--bg);border-bottom:1px solid var(--accent-border);
-  flex-shrink:0;
-}
-.h-left{display:flex;align-items:center;gap:10px}
-.h-logo{width:26px;height:26px;display:block;flex-shrink:0}
-.h-title{color:var(--bright);font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+
 .h-pill{
   display:flex;align-items:center;gap:6px;
   padding:5px 14px;border-radius:999px;
@@ -47,23 +32,8 @@ html,body{
 .h-dot.error{background:var(--red);box-shadow:0 0 6px var(--red)}
 
 /* ── Layout ──────────────────────────────── */
-#layout{flex:1;display:flex;overflow:hidden}
 
 /* ── Left Sidebar ────────────────────────── */
-#sidebar{
-  width:220px;border-right:1px solid var(--accent-border);
-  background:var(--bg);display:flex;flex-direction:column;
-  flex-shrink:0;
-}
-.nav{padding:16px 12px;display:flex;flex-direction:column;gap:2px}
-.nav a{
-  display:block;padding:10px 14px;border-radius:6px;
-  color:var(--muted);text-decoration:none;
-  font-size:13px;font-weight:500;text-transform:uppercase;
-  letter-spacing:1px;transition:all .15s;
-}
-.nav a:hover{color:var(--text);background:rgba(255,255,255,0.04)}
-.nav a.active{color:var(--bright);background:rgba(255,255,255,0.07);font-weight:700}
 
 /* Config */
 .config{
@@ -430,11 +400,13 @@ html,body{
       </div>
       <div class="top-btns">
         <button class="cbtn cbtn-start" id="startBtn" disabled>Start</button>
+        <button class="cbtn cbtn-reset" id="recalibrateBtn" disabled>Recalibrate</button>
         <button class="cbtn cbtn-reset" id="resetBtn" disabled>Reset</button>
         <button class="cbtn cbtn-stop" id="stopBtn" disabled>Stop</button>
       </div>
     </div>
     <div id="statusMsg"></div>
+    <div id="calibrationStatus" class="sub" role="status" aria-live="polite">Calibration is saved for this capture setup and checked before each file.</div>
     <div class="center-body">
       <div id="preview">
         <div class="preview-badges">
@@ -511,6 +483,8 @@ html,body{
   const bpcSelect     = document.getElementById("bpcSelect");
   const previewQualitySelect = document.getElementById("previewQualitySelect");
   const startBtn      = document.getElementById("startBtn");
+  const recalibrateBtn = document.getElementById("recalibrateBtn");
+  const calibrationStatus = document.getElementById("calibrationStatus");
   const resetBtn      = document.getElementById("resetBtn");
   const stopBtn       = document.getElementById("stopBtn");
   const refreshBtn    = document.getElementById("refreshBtn");
@@ -711,6 +685,7 @@ html,body{
     });
     statusMsg.textContent = devs.length + " device(s) found.";
     startBtn.disabled = false;
+    recalibrateBtn.disabled = false;
     resetBtn.disabled = false;
     updateBadge();
   }
@@ -778,6 +753,7 @@ html,body{
     deviceSelect.disabled = false;
     refreshBtn.disabled = false;
     resetBtn.disabled = !deviceSelect.value;
+    recalibrateBtn.disabled = !deviceSelect.value;
     applySavedSettings();
   }
 
@@ -789,7 +765,8 @@ html,body{
   deviceSelect.addEventListener("change", () => warmDevice(deviceSelect.value));
 
   /* ── Start / Stop ──────────────────────── */
-  async function start() {
+  async function start(options = {}) {
+    if (sse) { sse.close(); sse = null; }
     resetTransferStats();
     activeProtocol = modeSelect.value === "auto" ? null : modeSelect.value;
     downloadArea.classList.remove("visible");
@@ -803,11 +780,16 @@ html,body{
           mode:modeSelect.value,
           bpc:+bpcSelect.value,
           preflight:true,
+          force_recalibration: options.force === true,
         }),
       });
       if (!r.ok) { const e = await r.json(); statusMsg.textContent = "Error: " + (e.error||"Failed"); log("error", e.error||"Start failed"); return; }
     } catch (e) { statusMsg.textContent = "Network error: " + e.message; log("error", "Network: " + e.message); return; }
     startBtn.disabled = true; stopBtn.disabled = false; resetBtn.disabled = false;
+    recalibrateBtn.disabled = false;
+    calibrationStatus.textContent = options.force === true
+      ? "New calibration requested. Start the calibration pattern on the sender."
+      : "Checking saved settings. Start the sender to validate the signal.";
     deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = true;
     badgeRec.style.display = "flex";
     previewIdle.classList.add("hidden");
@@ -849,6 +831,7 @@ html,body{
       previewLastSeq = 0;
       cleanup();
       resetBtn.disabled = !deviceSelect.value;
+    recalibrateBtn.disabled = !deviceSelect.value;
     }
   }
 
@@ -956,6 +939,16 @@ html,body{
       markPreviewHeartbeat();
       setLink(d.state);
       statusMsg.textContent = d.message || "";
+      if (d.calibration_state) {
+        const labels = {
+          checking: "Checking saved calibration...",
+          calibrating: "Calibrating the current HDMI signal...",
+          reused: "Saved calibration verified. Ready for the file.",
+          saved: "Calibration saved. Ready for the file.",
+          validated: "Signal verified. Calibration could not be saved.",
+        };
+        calibrationStatus.textContent = labels[d.calibration_state] || "Checking calibration...";
+      }
       if (
         (d.state === "waiting" || d.state === "preflight_wait")
         && Number.isFinite(Number(d.frames_captured))
@@ -1026,6 +1019,7 @@ html,body{
     if (sse) { sse.close(); sse = null; }
     startBtn.disabled = !deviceSelect.value; stopBtn.disabled = true;
     resetBtn.disabled = !deviceSelect.value;
+    recalibrateBtn.disabled = !deviceSelect.value;
     deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = false;
     badgeRec.style.display = "none";
     if (idlePreviewEnabled) {
@@ -1238,6 +1232,7 @@ html,body{
     startPreviewStream(true);
   }, 2000);
   startBtn.addEventListener("click", start);
+  recalibrateBtn.addEventListener("click", () => start({ force: true }));
   resetBtn.addEventListener("click", resetConnection);
   stopBtn.addEventListener("click", stop);
   previewQualitySelect.addEventListener("change", () => {

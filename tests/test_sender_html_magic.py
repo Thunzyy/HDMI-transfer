@@ -4,6 +4,7 @@ from pathlib import Path
 
 from hdmi_transfer.core.config import SEQ_MAGIC
 from hdmi_transfer.domain.protocol_manifest import get_protocol_manifest
+from hdmi_transfer.domain.transfer_defaults import DEFAULT_BITS_PER_CHANNEL, DEFAULT_MODE
 from tools.build_sender_html import render_sender_html
 
 
@@ -24,7 +25,9 @@ def test_sender_html_matches_generated_output() -> None:
 def test_sender_html_defaults_match_python_sender_behavior() -> None:
     sender_html = Path(__file__).resolve().parents[1] / "sender.html"
     text = sender_html.read_text(encoding="utf-8")
-    assert 'protocol: "fountain", bpc: 2,' in text
+    assert f'const DEFAULT_TRANSFER_MODE = "{DEFAULT_MODE}";' in text
+    assert f'const DEFAULT_TRANSFER_BPC = {DEFAULT_BITS_PER_CHANNEL};' in text
+    assert 'protocol: DEFAULT_TRANSFER_MODE, bpc: DEFAULT_TRANSFER_BPC,' in text
     assert "fountainAutoStop: true," in text
     assert 'sequentialRedundancy: 1,' in text
     assert 'fpsMode: "profile"' in text
@@ -41,7 +44,7 @@ def test_sender_html_contains_preflight_handshake_logic() -> None:
     assert "PREFLIGHT_FILENAME" in text
     assert 'resolveReceiverApiUrl("/api/receive/status")' in text
     assert "preflight_state" in text
-    assert "preflight_stage" in text
+    assert "waitForOfflineCalibration" in text
     assert "transfer_bpc" in text
     assert "PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS" in text
 
@@ -78,7 +81,8 @@ def test_sender_html_defaults_to_offline_two_pc_mode() -> None:
     assert "Receiver API is enabled for preflight and auto-stop coordination on this machine." in text
     assert "function isReceiverApiEnabled()" in text
     assert "return runtimeOptions.receiverApi || runtimeOptions.apiBaseUrl.length > 0;" in text
-    assert "if (!isReceiverApiEnabled()) return false;" in text
+    assert "? await waitForReceiverPreflight(runId)" in text
+    assert ": await waitForOfflineCalibration(runId)" in text
     assert 'throw new Error("Receiver API disabled for offline sender mode");' in text
 
 

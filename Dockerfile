@@ -30,8 +30,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Keep build tools and dependency-download caches out of the runtime image.
 FROM base AS runtime
 RUN useradd --uid 10001 --create-home hdmi \
-    && mkdir -p /app/received_files \
-    && chown hdmi:hdmi /app/received_files
+    && mkdir -p /app/received_files /app/state \
+    && chown hdmi:hdmi /app/received_files /app/state
 COPY --from=builder --chown=hdmi:hdmi /app /app
 USER hdmi
 EXPOSE 5000
