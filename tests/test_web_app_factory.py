@@ -12,6 +12,21 @@ def test_web_logo_and_favicon_are_served_from_images():
         assert favicon.data == logo_data
 
 
+def test_web_pages_load_shared_stylesheet():
+    from hdmi_transfer.interfaces.web.app_factory import create_app
+
+    client = create_app(runtime=False).test_client()
+    response = client.get("/static/shared.css")
+    assert response.status_code == 200
+    assert response.mimetype == "text/css"
+    assert b"--font-ui:" in response.data
+    assert b".nav a.active{" in response.data
+    for route in ("/", "/history", "/settings", "/sender", "/sender/test"):
+        page = client.get(route)
+        assert page.status_code == 200
+        assert b'<link rel="stylesheet" href="/static/shared.css"' in page.data
+
+
 def test_create_app_registers_receive_and_file_routes():
     from hdmi_transfer.interfaces.web.app_factory import create_app
 
