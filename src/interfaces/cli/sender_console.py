@@ -11,7 +11,9 @@ Usage::
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import os
+from pathlib import Path
 import webbrowser
 
 from InquirerPy import inquirer
@@ -21,6 +23,11 @@ from hdmi_transfer.core.config import PROFILES
 from hdmi_transfer.core import settings
 from hdmi_transfer.interfaces.cli.send import run_send
 from hdmi_transfer.sender.display.monitors import get_monitors
+from hdmi_transfer.domain.transfer_defaults import (
+    DEFAULT_BITS_PER_CHANNEL,
+    DEFAULT_MODE,
+    DEFAULT_PROFILE_NAME,
+)
 
 
 # ------------------------------------------------------------------
@@ -29,7 +36,7 @@ from hdmi_transfer.sender.display.monitors import get_monitors
 
 _MENU_SEND_PYTHON = "Send file (Python)"
 _MENU_SEND_BROWSER = "Send file (Browser)"
-_MENU_CALIBRATE = "Calibrate"
+_MENU_CALIBRATE = "Display test patterns"
 _MENU_DETECT = "Detect hardware"
 _MENU_BENCHMARK = "Benchmark"
 _MENU_SETTINGS = "Settings"
@@ -59,6 +66,11 @@ def _show_main_menu() -> str:
 # ------------------------------------------------------------------
 
 
+def _saved_bpc(cfg: dict) -> int:
+    value = cfg.get("bpc", DEFAULT_BITS_PER_CHANNEL)
+    return value if value in (1, 2, 3) else DEFAULT_BITS_PER_CHANNEL
+
+
 def _action_send_python() -> None:
     """Collect send parameters via prompts and delegate to run_send()."""
     cfg = settings.load()["sender"]
@@ -71,7 +83,7 @@ def _action_send_python() -> None:
     ).execute().strip('"').strip("'")
 
     # 2. Resolution profile (SEND-04)
-    default_profile = cfg.get("profile", "speed")
+    default_profile = cfg.get("profile", DEFAULT_PROFILE_NAME)
     profile_choices = [
         {"name": "speed (1080p @ 240fps)", "value": "speed"},
         {"name": "balanced (1080p @ 60fps)", "value": "balanced"},
@@ -82,10 +94,10 @@ def _action_send_python() -> None:
         choices=profile_choices,
         default=default_profile,
     ).execute()
-    profile = PROFILES[profile_name]
+    profile = replace(PROFILES[profile_name], bits_per_channel=_saved_bpc(cfg))
 
     # 3. Encoding mode (SEND-05)
-    default_mode = cfg.get("mode", "sequential")
+    default_mode = cfg.get("mode", DEFAULT_MODE)
     mode = inquirer.select(
         message="Encoding mode:",
         choices=["sequential", "fountain"],
@@ -95,7 +107,7 @@ def _action_send_python() -> None:
     # 4. Target monitor (SEND-06)
     monitors = get_monitors()
     saved_monitor = cfg.get("monitor")
-    if saved_monitor is not None and saved_monitor < len(monitors):
+    if isinstance(saved_monitor, int) and 0 <= saved_monitor < len(monitors):
         m = monitors[saved_monitor]
         print(f"  Using saved monitor {saved_monitor}: "
               f"{m['width']}x{m['height']} at ({m['left']},{m['top']})")
@@ -117,6 +129,7 @@ def _action_send_python() -> None:
             choices=monitor_choices,
         ).execute()
 
+    print(f"  Encoding: {profile.bits_per_channel} bits per channel (change in Settings)")
     # Delegate to extracted run_send()
     run_send(
         input_path=file_path,
@@ -136,10 +149,19 @@ def _action_send_browser() -> None:
         resolved = os.path.normpath(candidate)
         if os.path.isfile(resolved):
             print(f"Opening {resolved} in browser...")
-            webbrowser.open(f"file://{resolved}")
+            webbrowser.open(Path(resolved).resolve().as_uri())
             return
-    print("sender.html not found. Expected in project root directory.")
-    print("Run from the project directory or open sender.html manually.")
+    from hdmi_transfer.interfaces.browser_sender import render_sender_html
+
+    output = settings.settings_path().parent / "sender.html"
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(render_sender_html(), encoding="utf-8")
+    except OSError as exc:
+        print(f"Unable to prepare the standalone sender: {exc}")
+        return
+    print(f"Opening {output} in browser...")
+    webbrowser.open(output.resolve().as_uri())
 
 
 def _action_calibrate() -> None:
@@ -147,7 +169,7 @@ def _action_calibrate() -> None:
     profile_name = inquirer.select(
         message="Resolution profile:",
         choices=list(PROFILES.keys()),
-        default="speed",
+        default=DEFAULT_PROFILE_NAME,
     ).execute()
     profile = PROFILES[profile_name]
 
@@ -178,16 +200,18 @@ def _action_benchmark() -> None:
     profile_name = inquirer.select(
         message="Resolution profile:",
         choices=list(PROFILES.keys()),
-        default="speed",
+        default=DEFAULT_PROFILE_NAME,
     ).execute()
 
     mode = inquirer.select(
         message="Encoding mode:",
         choices=["sequential", "fountain"],
-        default="fountain",
+        default=DEFAULT_MODE,
     ).execute()
 
-    profile = PROFILES[profile_name]
+    profile = replace(
+        PROFILES[profile_name], bits_per_channel=_saved_bpc(settings.load()["sender"]),
+    )
     print(f"\nBenchmarking {mode} mode with {profile_name} profile...")
     result = run_benchmark(profile=profile, mode=mode)
 
@@ -198,6 +222,12 @@ def _action_benchmark() -> None:
     print(f"  Overhead:    {result.overhead_pct:.2f}%")
     print(f"  Error rate:  {result.error_rate:.6f}")
     print(f"  Duration:    {result.duration_sec:.3f}s")
+    print(f"  Completed:   {result.completed}")
+    print(f"  Integrity:   {result.integrity_ok}")
+    print(f"  Timed out:   {result.timed_out}")
+    if not result.completed or not result.integrity_ok:
+        print("  Benchmark failed: no verified complete transfer.")
+    print("  These are software measurements, not HDMI hardware throughput.")
     print()
 
 
@@ -210,13 +240,17 @@ def _action_settings() -> None:
     cfg = settings.load()["sender"]
     print(f"\nSender Settings ({settings.settings_path()}):")
     print(f"  Monitor:   {cfg.get('monitor') if cfg.get('monitor') is not None else '(auto-detect)'}")
-    print(f"  Profile:   {cfg.get('profile', 'speed')}")
-    print(f"  Mode:      {cfg.get('mode', 'sequential')}")
+    print(f"  Profile:   {cfg.get('profile', DEFAULT_PROFILE_NAME)}")
+    print(f"  Mode:      {cfg.get('mode', DEFAULT_MODE)}")
+    print(f"  Encoding:  {_saved_bpc(cfg)} bits per channel")
     print()
 
     action = inquirer.select(
         message="Edit settings?",
-        choices=["Change monitor", "Change profile", "Change mode", "Back to menu"],
+        choices=[
+            "Change monitor", "Change profile", "Change mode", "Change encoding",
+            "Recalibrate next transfer", "Back to menu",
+        ],
     ).execute()
 
     if action == "Change monitor":
@@ -237,7 +271,7 @@ def _action_settings() -> None:
         picked = inquirer.select(
             message="Default profile:",
             choices=list(PROFILES.keys()),
-            default=cfg.get("profile", "speed"),
+            default=cfg.get("profile", DEFAULT_PROFILE_NAME),
         ).execute()
         settings.set_value("sender", "profile", picked)
         print(f"  Saved: profile = {picked}")
@@ -246,10 +280,19 @@ def _action_settings() -> None:
         picked = inquirer.select(
             message="Default mode:",
             choices=["sequential", "fountain"],
-            default=cfg.get("mode", "sequential"),
+            default=cfg.get("mode", DEFAULT_MODE),
         ).execute()
         settings.set_value("sender", "mode", picked)
         print(f"  Saved: mode = {picked}")
+    elif action == "Change encoding":
+        picked = inquirer.select(
+            message="Bits per color channel:", choices=[1, 2, 3], default=_saved_bpc(cfg),
+        ).execute()
+        settings.set_value("sender", "bpc", picked)
+        print(f"  Saved: encoding = {picked} bpc")
+    elif action == "Recalibrate next transfer":
+        settings.set_value("sender", "calibration_confirmation", None)
+        print("  The next send will wait for receiver confirmation before file data.")
     print()
 
 

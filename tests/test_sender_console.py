@@ -12,6 +12,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def isolated_settings(monkeypatch, tmp_path):
+    from hdmi_transfer.core import settings
+
+    monkeypatch.setattr(settings, "_SETTINGS_DIR", tmp_path / "settings")
+    monkeypatch.setattr(settings, "_SETTINGS_FILE", tmp_path / "settings" / "settings.json")
+
+
 # ------------------------------------------------------------------
 # Test 1: Interface entry points exist
 # ------------------------------------------------------------------
@@ -121,6 +129,7 @@ def test_action_send_python(mock_inq, mock_monitors, mock_run_send):
         assert call_kwargs.kwargs["input_path"] == "/tmp/test.bin"
     else:
         assert call_kwargs[1]["input_path"] == "/tmp/test.bin"
+    assert call_kwargs.kwargs["profile"].bits_per_channel == 2
 
 
 # ------------------------------------------------------------------
@@ -144,6 +153,9 @@ def test_action_benchmark(mock_inq):
             overhead_pct=5.0,
             error_rate=0.0,
             duration_sec=10.0,
+            completed=True,
+            integrity_ok=True,
+            timed_out=False,
         )
         _action_benchmark()
         mock_bench.assert_called_once()
@@ -201,3 +213,50 @@ def test_main_dispatches_action(mock_menu):
     with patch.dict(_DISPATCH, {_MENU_DETECT: mock_detect}):
         main()
         mock_detect.assert_called_once()
+
+
+def test_encoding_setting_is_saved_without_overwriting_other_preferences(monkeypatch):
+    from hdmi_transfer.core import settings
+    from hdmi_transfer.interfaces.cli import sender_console
+
+    settings.set_value("receiver", "device_name", "HDMI capture")
+    prompt = MagicMock()
+    prompt.execute.side_effect = ["Change encoding", 3]
+    monkeypatch.setattr(sender_console.inquirer, "select", lambda **kwargs: prompt)
+    sender_console._action_settings()
+    assert settings.get("sender", "bpc") == 3
+    assert settings.get("receiver", "device_name") == "HDMI capture"
+
+
+def test_browser_sender_uses_packaged_generator_when_checkout_html_is_absent(monkeypatch):
+    from hdmi_transfer.core import settings
+    from hdmi_transfer.interfaces.cli import sender_console
+    import hdmi_transfer.interfaces.browser_sender as browser_sender
+
+    opened = []
+    monkeypatch.setattr(sender_console.os.path, "isfile", lambda path: False)
+    monkeypatch.setattr(browser_sender, "render_sender_html", lambda: "<!doctype html><title>Sender</title>")
+    monkeypatch.setattr(sender_console.webbrowser, "open", opened.append)
+    sender_console._action_send_browser()
+    generated = settings.settings_path().parent / "sender.html"
+    assert generated.read_text(encoding="utf-8") == "<!doctype html><title>Sender</title>"
+    assert opened == [generated.resolve().as_uri()]
+
+
+def test_benchmark_console_reports_failed_completion(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from hdmi_transfer.interfaces.cli import sender_console
+    from hdmi_transfer.core.cli import benchmark
+
+    prompt = MagicMock()
+    prompt.execute.side_effect = ["balanced", "fountain"]
+    monkeypatch.setattr(sender_console.inquirer, "select", lambda **kwargs: prompt)
+    monkeypatch.setattr(benchmark, "run_benchmark", lambda **kwargs: SimpleNamespace(
+        frames_per_sec=0, bytes_per_sec=0, overhead_pct=0, error_rate=0,
+        duration_sec=1, completed=False, integrity_ok=False, timed_out=True,
+    ))
+    sender_console._action_benchmark()
+    output = capsys.readouterr().out
+    assert "Benchmark failed" in output
+    assert "Timed out:   True" in output

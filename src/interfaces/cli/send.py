@@ -16,20 +16,34 @@ Usage::
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import sys
 import time
 
 import numpy as np
 
 from hdmi_transfer.application.send_session import SendSession
+from hdmi_transfer.application.preflight import (
+    PREFLIGHT_OFFLINE_RECHECK_MS,
+    PREFLIGHT_TOTAL_FRAMES,
+    build_calibration_payload,
+)
+from hdmi_transfer.core import settings
 from hdmi_transfer.core.config import (
     DEFAULT_PROFILE,
+    FRAME_TYPE_START,
     PROFILES,
     ResolutionProfile,
 )
 from hdmi_transfer.sender.display.monitors import get_monitors
 from hdmi_transfer.sender.display.renderer import FrameRenderer, PygameRenderer
 from hdmi_transfer.core.protocols.xor_ops import warmup as warmup_numba
+from hdmi_transfer.core.protocols import get_protocol
+from hdmi_transfer.domain.transfer_defaults import (
+    DEFAULT_BITS_PER_CHANNEL,
+    DEFAULT_MODE,
+    DEFAULT_PROFILE_NAME,
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -41,8 +55,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--mode",
         choices=["sequential", "fountain"],
-        default="sequential",
-        help="Encoding protocol (default: sequential)",
+        default=DEFAULT_MODE,
+        help=f"Encoding protocol (default: {DEFAULT_MODE})",
     )
     parser.add_argument(
         "--renderer",
@@ -53,8 +67,21 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--profile",
         choices=list(PROFILES.keys()),
-        default=None,
+        default=DEFAULT_PROFILE_NAME,
         help="Resolution profile: speed (1080p@240fps), balanced (1080p@60fps), quality (4K@30fps)",
+    )
+    parser.add_argument(
+        "--bpc", type=int, choices=[1, 2, 3], default=DEFAULT_BITS_PER_CHANNEL,
+        help="Bits per color channel (default: 2; must match the receiver)",
+    )
+    calibration = parser.add_mutually_exclusive_group()
+    calibration.add_argument(
+        "--recalibrate", action="store_true",
+        help="Repeat calibration and ask for receiver confirmation before sending",
+    )
+    calibration.add_argument(
+        "--no-calibration", action="store_true",
+        help="Skip calibration for legacy receivers or explicit automation",
     )
     parser.add_argument(
         "--fps",
@@ -334,15 +361,128 @@ def _print_stats(
 # run_send -- core send logic callable without argparse
 # ------------------------------------------------------------------
 
+def _calibration_configuration(
+    renderer: FrameRenderer | PygameRenderer,
+    *,
+    profile: ResolutionProfile,
+    mode: str,
+    renderer_type: str,
+    screen: int,
+    monitor: dict,
+    fps: int,
+) -> dict:
+    """Identify the actual display configuration confirmed by the operator."""
+    display = None
+    surface = getattr(renderer, "_screen", None)
+    if surface is not None:
+        display = list(surface.get_size())
+    elif getattr(renderer, "_window_name", None):
+        import cv2
+
+        try:
+            display = list(cv2.getWindowImageRect(renderer._window_name))
+        except cv2.error:
+            pass
+    return {
+        "version": 1,
+        "profile": profile.name,
+        "width": profile.width,
+        "height": profile.height,
+        "block_size": profile.block_size,
+        "bpc": profile.bits_per_channel,
+        "fps": fps,
+        "mode": mode,
+        "renderer": renderer_type,
+        "screen": screen,
+        "monitor": {
+            key: int(monitor[key]) for key in ("left", "top", "width", "height")
+        },
+        "display": display,
+    }
+
+
+def _calibrate_sender(
+    renderer: FrameRenderer | PygameRenderer,
+    *,
+    profile: ResolutionProfile,
+    mode: str,
+    renderer_type: str,
+    screen: int,
+    monitor: dict,
+    fps: int,
+    delay: int,
+    force: bool = False,
+) -> bool:
+    """Send fresh calibration frames; confirm only via the receiver/operator.
+
+    HDMI has no return channel here. A stored *operator confirmation* permits
+    a short recheck, but does not claim that the remote receiver acknowledged it.
+    """
+    protocol = get_protocol("sequential", profile=profile)
+    payload = build_calibration_payload(profile.seq_bytes_per_frame)
+    started = time.monotonic()
+    count = 0
+    configuration = None
+    cached = False
+    while True:
+        frame = protocol.encode_frame(
+            payload,
+            frame_index=count & 0xFFFFFFFF,
+            total_frames=PREFLIGHT_TOTAL_FRAMES,
+            frame_type=FRAME_TYPE_START,
+        )
+        key = renderer.show(frame, delay_ms=delay)
+        count += 1
+        if key in (27, ord("q")):
+            print("Calibration cancelled. No file data was sent.")
+            return False
+        if configuration is None:
+            configuration = _calibration_configuration(
+                renderer, profile=profile, mode=mode, renderer_type=renderer_type,
+                screen=screen, monitor=monitor, fps=fps,
+            )
+            cached = (
+                not force
+                and settings.get("sender", "calibration_confirmation") == configuration
+            )
+            if cached:
+                print("Rechecking the previously confirmed display for one second...")
+                print("If the receiver is not ready, stop and use --recalibrate.")
+            else:
+                print("Calibration pattern active. Start reception on the receiving PC.")
+                print("Wait for 'Calibration saved' on the receiver, then press Enter here.")
+                print("Press ESC or q to cancel. File data has not started.")
+
+        if count < 3:
+            continue
+        if cached and time.monotonic() - started >= PREFLIGHT_OFFLINE_RECHECK_MS / 1000:
+            print("Calibration recheck sent; receiver confirmation remains on the receiving PC.")
+            return True
+        if not cached and key in (10, 13):
+            # Store only an explicit human confirmation, never a timed guess.
+            configuration = _calibration_configuration(
+                renderer, profile=profile, mode=mode, renderer_type=renderer_type,
+                screen=screen, monitor=monitor, fps=fps,
+            )
+            try:
+                settings.set_value("sender", "calibration_confirmation", configuration)
+            except OSError as exc:
+                print(f"Could not save calibration confirmation: {exc}")
+            print("Receiver confirmation recorded. Starting file data.")
+            return True
+
+
 def run_send(
     input_path: str,
-    mode: str = "sequential",
+    mode: str = DEFAULT_MODE,
     profile: ResolutionProfile | None = None,
     renderer_type: str = "pygame",
     screen: int = 0,
     fps: int | None = None,
     redundancy: int = 1,
     fountain_redundancy: float | None = None,
+    recalibrate: bool = False,
+    calibration: bool = True,
 ) -> None:
     """Execute the full send pipeline with explicit parameters.
 
@@ -357,7 +497,8 @@ def run_send(
     mode:
         Encoding protocol -- ``"sequential"`` or ``"fountain"``.
     profile:
-        Resolution profile.  ``None`` falls back to ``DEFAULT_PROFILE``.
+        Resolution profile. ``None`` uses Balanced with 2 bits per channel.
+        An explicitly supplied profile retains its encoding settings.
     renderer_type:
         Display backend -- ``"pygame"`` or ``"cv2"``.
     screen:
@@ -371,10 +512,16 @@ def run_send(
         ``None`` loops forever.
     """
     # Resolve profile
-    profile = profile or DEFAULT_PROFILE
+    profile = profile or replace(
+        PROFILES[DEFAULT_PROFILE_NAME], bits_per_channel=DEFAULT_BITS_PER_CHANNEL,
+    )
 
     # Individual overrides: --fps beats profile target_fps
     target_fps = fps if fps is not None else profile.target_fps
+    if target_fps <= 0 or redundancy <= 0 or screen < 0:
+        raise ValueError("fps and redundancy must be positive; screen cannot be negative")
+    if recalibrate and not calibration:
+        raise ValueError("recalibrate cannot be combined with calibration=False")
 
     try:
         session = SendSession.from_input(
@@ -406,8 +553,12 @@ def run_send(
         y_offset = target["top"]
     else:
         print(f"Warning: Screen {screen} out of range. Using primary.")
-        x_offset = 0
-        y_offset = 0
+        screen = 0
+        target = monitors[0] if monitors else {
+            "left": 0, "top": 0, "width": profile.width, "height": profile.height,
+        }
+        x_offset = target["left"]
+        y_offset = target["top"]
 
     print(f"Targeting screen {screen} at ({x_offset}, {y_offset})")
 
@@ -431,21 +582,16 @@ def run_send(
             "y_offset": y_offset,
         }
 
-    # Create renderer and show calibration frame
+    # Calibration and file data share the same renderer and display placement.
     with renderer_cls(**renderer_kwargs) as renderer:
-        # Calibration frame: solid white border on black (works for both renderers)
-        calibration = np.zeros((profile.height, profile.width, 3), dtype=np.uint8)
-        calibration[0:5, :] = 255
-        calibration[-5:, :] = 255
-        calibration[:, 0:5] = 255
-        calibration[:, -5:] = 255
-        print("Press any key to start...")
-
-        # Warm up Numba JIT during calibration wait (before data transfer)
+        # Warm up Numba before calibration so it does not delay file data.
         if session.mode == "fountain":
             warmup_numba()
-
-        renderer.show(calibration, delay_ms=0)
+        if calibration and not _calibrate_sender(
+            renderer, profile=profile, mode=mode, renderer_type=renderer_type,
+            screen=screen, monitor=target, fps=target_fps, delay=delay, force=recalibrate,
+        ):
+            return
 
         # Dispatch to mode-specific send loop
         if session.mode == "sequential":
@@ -472,12 +618,14 @@ def main() -> None:
     run_send(
         input_path=args.input_path,
         mode=args.mode,
-        profile=PROFILES[args.profile] if args.profile else None,
+        profile=replace(PROFILES[args.profile], bits_per_channel=args.bpc),
         renderer_type=args.renderer,
         screen=args.screen,
         fps=args.fps,
         redundancy=args.redundancy,
         fountain_redundancy=args.fountain_redundancy,
+        recalibrate=args.recalibrate,
+        calibration=not args.no_calibration,
     )
 
 
