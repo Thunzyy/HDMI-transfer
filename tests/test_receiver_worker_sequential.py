@@ -8,10 +8,15 @@ import pytest
 
 from hdmi_transfer.core.config import FRAME_TYPE_DATA, FRAME_TYPE_START, PROFILES
 from hdmi_transfer.core.protocols.base import FrameResult
-from hdmi_transfer.web.receiver_worker import (
+from hdmi_transfer.adapters.receive_worker import (
     ReceiverWorker,
     _CaptureFallbackRequested,
 )
+
+
+@pytest.fixture(autouse=True)
+def isolate_calibration_cache(monkeypatch, tmp_path):
+    monkeypatch.setenv("HDMI_TRANSFER_STATE_DIR", str(tmp_path / "state"))
 
 
 class _FakeCap:
@@ -39,17 +44,22 @@ class _IdleCaptureSource:
 
 
 def test_reassemble_sequential_data_preserves_partial_last_chunk() -> None:
+    from hdmi_transfer.application.receive_session import ReceiveSession
+
     profile = replace(PROFILES["balanced"], bits_per_channel=1)
-    worker = ReceiverWorker(device=0, profile=profile, mode="sequential")
+    session = ReceiveSession(mode="sequential", profile=profile)
     bpf = profile.seq_bytes_per_frame
-
-    full_data, missing = worker._reassemble_sequential_data({
-        0: b"A" * bpf,
-        1: b"tail",
-    }, total_frames=2)
-
-    assert missing == []
-    assert full_data == (b"A" * bpf) + b"tail"
+    session.feed_frame_result("sequential", FrameResult(
+        data=b"A" * bpf, frame_type=FRAME_TYPE_DATA, frame_index=0,
+        total_frames=2, is_valid=True,
+    ))
+    session.feed_frame_result("sequential", FrameResult(
+        data=b"tail", frame_type=FRAME_TYPE_DATA, frame_index=1,
+        total_frames=2, is_valid=True,
+    ))
+    complete = session.finalize_partial()
+    assert complete.data["missing_frames"] == []
+    assert complete.data["file_content"] == (b"A" * bpf) + b"tail"
 
 
 def test_sequential_finalizes_after_wrap_without_end_frame(
@@ -98,7 +108,7 @@ def test_sequential_finalizes_after_wrap_without_end_frame(
         })
         return str(tmp_path / filename)
 
-    monkeypatch.setattr("hdmi_transfer.web.receiver_worker.write_output", fake_write_output)
+    monkeypatch.setattr("hdmi_transfer.adapters.receive_worker.write_output", fake_write_output)
 
     def fake_decode(frame, profile, decode_frame, geometry_candidates, geometry_cursor):
         try:
@@ -152,7 +162,7 @@ def test_worker_retries_alternate_capture_target_when_runtime_fallback_requested
             worker._request_capture_fallback("retry")
         worker._publish("complete", {"filename": "ok.bin"})
 
-    monkeypatch.setattr("hdmi_transfer.web.receiver_worker.CaptureSource", FakeCaptureSource)
+    monkeypatch.setattr("hdmi_transfer.adapters.receive_worker.CaptureSource", FakeCaptureSource)
     monkeypatch.setattr(worker, "_run_sequential", fake_run_sequential)
     original_publish = worker._publish
 
@@ -196,13 +206,10 @@ def test_worker_waits_for_preflight_before_receive_loop(monkeypatch) -> None:
             total_frames=1,
             is_valid=False,
         ),
-        FrameResult(
-            data=build_preflight_start_payload(),
-            frame_type=FRAME_TYPE_START,
-            frame_index=0,
-            total_frames=1,
-            is_valid=True,
-        ),
+        *[FrameResult(
+            data=build_preflight_start_payload(), frame_type=FRAME_TYPE_START,
+            frame_index=i, total_frames=1, is_valid=True,
+        ) for i in range(3)],
     ])
 
     original_publish = worker._publish
@@ -214,6 +221,8 @@ def test_worker_waits_for_preflight_before_receive_loop(monkeypatch) -> None:
     worker._publish = capture_publish  # type: ignore[method-assign]
 
     def fake_decode(frame, profile, decode_frame, geometry_candidates, geometry_cursor):
+        if profile.bits_per_channel != 1:
+            return None, geometry_cursor, None
         try:
             return next(results), geometry_cursor, worker._sampling
         except StopIteration:
@@ -264,12 +273,12 @@ def test_worker_preflight_negotiates_lower_transfer_bpc(monkeypatch) -> None:
                 total_frames=1,
                 is_valid=True,
             ), geometry_cursor, worker._sampling
-        if bpc == 2 and detections[2] == 0 and detections[1] == 1:
+        if bpc == 2 and detections[2] < 3 and detections[1] == 1:
             detections[2] += 1
             return FrameResult(
                 data=build_preflight_start_payload(),
                 frame_type=FRAME_TYPE_START,
-                frame_index=0,
+                frame_index=detections[2],
                 total_frames=1,
                 is_valid=True,
             ), geometry_cursor, worker._sampling
@@ -281,7 +290,7 @@ def test_worker_preflight_negotiates_lower_transfer_bpc(monkeypatch) -> None:
     assert int(worker._profile.bits_per_channel) == 2
     assert worker.get_runtime_state()["transfer_bpc"] == 2
     assert any(
-        event_type == "status" and data.get("state") == "preflight_transfer_wait"
+        event_type == "status" and data.get("preflight_stage") == "transfer"
         for event_type, data in events
     )
     assert any(
@@ -313,12 +322,14 @@ def test_worker_preflight_falls_back_to_safe_transfer_bpc_when_only_bpc1_is_visi
 
     worker._publish = capture_publish  # type: ignore[method-assign]
 
+    indices = iter(range(10))
+
     def fake_decode(frame, profile, decode_frame, geometry_candidates, geometry_cursor):
         if int(profile.bits_per_channel) == 1:
             return FrameResult(
                 data=build_preflight_start_payload(),
                 frame_type=FRAME_TYPE_START,
-                frame_index=0,
+                frame_index=next(indices),
                 total_frames=1,
                 is_valid=True,
             ), geometry_cursor, worker._sampling
@@ -367,7 +378,7 @@ def test_worker_marks_preflight_low_signal_from_elapsed_time(monkeypatch) -> Non
     times = iter([0.0, 1.2, 2.4, 3.6, 4.8, 6.0, 7.2, 8.4, 9.6, 10.8])
 
     monkeypatch.setattr(
-        "hdmi_transfer.web.receiver_worker.time.time",
+        "hdmi_transfer.adapters.receive_worker.time.time",
         lambda: next(times, 6.0),
     )
     worker._decode_with_sampling_fallbacks = fake_decode  # type: ignore[method-assign]
@@ -460,7 +471,7 @@ def test_worker_named_dshow_source_prefers_raw_dshow_before_msmf(monkeypatch) ->
             return
         worker._publish("complete", {"filename": "ok.bin"})
 
-    monkeypatch.setattr("hdmi_transfer.web.receiver_worker.CaptureSource", FakeCaptureSource)
+    monkeypatch.setattr("hdmi_transfer.adapters.receive_worker.CaptureSource", FakeCaptureSource)
     monkeypatch.setattr(worker, "_run_sequential", fake_run_sequential)
 
     worker.run()

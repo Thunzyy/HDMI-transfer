@@ -144,7 +144,7 @@ def test_run_receive_uses_resolved_capture_target(monkeypatch, capsys):
     monkeypatch.setattr(
         receive,
         "_run_receiver_worker",
-        lambda resolved_source, mode, output, profile: dispatched.update({
+        lambda resolved_source, mode, output, profile, **kwargs: dispatched.update({
             "resolved_source": resolved_source,
             "mode": mode,
             "output": output,
@@ -159,18 +159,31 @@ def test_run_receive_uses_resolved_capture_target(monkeypatch, capsys):
         output="received_files",
     )
 
-    assert opened == {
-        "source": 1,
-        "width": receive.PROFILES["balanced"].width,
-        "height": receive.PROFILES["balanced"].height,
-        "fps": receive.PROFILES["balanced"].target_fps,
-        "backend": int(cv2.CAP_DSHOW),
-        "released": True,
-    }
+    assert opened == {}  # The shared worker alone owns opening the device.
     assert dispatched["resolved_source"] is resolved
     assert dispatched["mode"] == "auto"
     output = capsys.readouterr().out
     assert "Auto-fixed capture target" in output
+
+
+def test_receive_cli_uses_common_defaults_and_supports_recalibration(monkeypatch):
+    import hdmi_transfer.interfaces.cli.receive as receive
+
+    calls = []
+    monkeypatch.setattr(receive, "run_receive", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(receive.sys, "argv", ["hdmi-recv", "raw:0"])
+    receive.main()
+    assert calls[-1]["profile"].name == "balanced"
+    assert calls[-1]["profile"].bits_per_channel == 2
+    assert calls[-1]["mode"] == "fountain"
+    assert calls[-1]["require_preflight"] is True
+    monkeypatch.setattr(receive.sys, "argv", [
+        "hdmi-recv", "raw:0", "--profile", "quality", "--bpc", "3", "--recalibrate",
+    ])
+    receive.main()
+    assert calls[-1]["profile"].name == "quality"
+    assert calls[-1]["profile"].bits_per_channel == 3
+    assert calls[-1]["force_recalibration"] is True
 
 
 def test_calibrate_open_capture_uses_resolved_capture_target(monkeypatch, capsys):

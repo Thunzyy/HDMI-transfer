@@ -166,6 +166,14 @@ def decode_with_sampling_fallbacks(
     add(sampling)
     add((0, 0, 1.0, 1.0))
 
+    # The stable path must not scan the full image to find alternatives that
+    # will never be needed. Cached geometry is still checked by the frame CRC.
+    for candidate in batch:
+        result = decode_frame(sample_grid(frame, profile, candidate))
+        if getattr(result, "is_valid", False):
+            return result, geometry_cursor, candidate
+    batch.clear()
+
     dynamic_sampling = estimate_sampling_from_frame(frame, profile)
     if dynamic_sampling is not None:
         add(dynamic_sampling)

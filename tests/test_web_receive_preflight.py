@@ -58,7 +58,7 @@ def test_api_receive_start_passes_explicit_preflight_flag(monkeypatch, tmp_path)
         def start(self) -> None:
             return None
 
-    monkeypatch.setattr("hdmi_transfer.web.receiver_worker.ReceiverWorker", FakeWorker)
+    monkeypatch.setattr("hdmi_transfer.adapters.receive_worker.ReceiverWorker", FakeWorker)
     client = app.test_client()
 
     response = client.post("/api/receive/start", json={
@@ -75,6 +75,34 @@ def test_api_receive_start_passes_explicit_preflight_flag(monkeypatch, tmp_path)
     assert captured["mode"] == "sequential"
     assert captured["profile"] == replace(PROFILES["balanced"], bits_per_channel=1)
     assert captured["require_preflight"] is True
+
+
+def test_api_receive_defaults_and_explicit_recalibration(monkeypatch, tmp_path):
+    app = server.create_app(output_dir=str(tmp_path), runtime=False)
+    app._device_registry = _FakeRegistry({
+        "index": 4, "name": "Test capture card", "backend": int(cv2.CAP_DSHOW),
+        "dshow_index": 4,
+    })
+    app._capture_manager = _FakeCaptureManager()
+    captured = {}
+
+    class FakeWorker:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr("hdmi_transfer.adapters.receive_worker.ReceiverWorker", FakeWorker)
+    response = app.test_client().post("/api/receive/start", json={
+        "device": 4, "force_recalibration": True,
+    })
+    assert response.status_code == 200
+    assert captured["profile"] == replace(PROFILES["balanced"], bits_per_channel=2)
+    assert captured["mode"] == "fountain"
+    assert captured["require_preflight"] is True
+    assert captured["force_recalibration"] is True
+    assert captured["device_identity"] == "Test capture card"
 
 
 def test_api_receive_status_exposes_runtime_preflight_state(monkeypatch, tmp_path) -> None:
