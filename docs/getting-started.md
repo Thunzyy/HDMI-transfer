@@ -91,7 +91,7 @@ sender.html → HDMI output → HDMI input → USB output → Receive interface
 3. In the sender PC's display settings, identify the output connected to the card. Start at 1920 × 1080 and 60 Hz.
 4. Open `sender.html` locally, select a small test file and move the browser window to that output. The default mode is **2-PC offline sender**, with no receiver API.
 5. Select the card in **Receive**. Use **Fountain**, **Balanced** and **2 bpc** on both interfaces. Keep **Preview quality: Low** on the receiver.
-6. Click **Start** on the receiver, then **Start transmission** on the sender. Allow full-screen mode if prompted. Nothing should cover the signal shown to the capture card.
+6. Click **Start** on the receiver, then **Start transmission** on the sender. Allow full-screen mode if prompted. Nothing should cover the signal shown to the capture card. For the first offline transfer, wait for **Calibration saved** on the receiver, then press **Enter on the sending computer**. The saved setup is rechecked briefly on later transfers. See [calibration and saved setups](calibration.md) to force recalibration or use automatic confirmation in local test mode.
 7. Wait for **Download**, save the file and stop transmission. Compare SHA-256 hashes of the original and downloaded files to validate the hardware path.
 
 In PowerShell:

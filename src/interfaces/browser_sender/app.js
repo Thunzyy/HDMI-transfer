@@ -5,8 +5,8 @@
   };
 
   const config = {
-    protocol: "fountain", bpc: 2,
-    profileName: "balanced", width: 1920, height: 1080, blockSize: 8,
+    protocol: DEFAULT_TRANSFER_MODE, bpc: DEFAULT_TRANSFER_BPC,
+    profileName: DEFAULT_TRANSFER_PROFILE, width: 1920, height: 1080, blockSize: 8,
     fountainRedundancy: 1.5,
     sequentialRedundancy: 1,
     fountainAutoStop: true,
@@ -25,7 +25,9 @@
     config.bitsPerFrame = config.rows * config.cols * 3 * config.bpc;
     config.bytesPerFrame = config.bitsPerFrame / 8;
     const headerLen = config.protocol === "fountain" ? FOUNTAIN_HEADER_LEN : SEQ_HEADER_LEN;
-    config.payloadSize = config.bytesPerFrame - headerLen;
+    config.payloadSize = config.protocol === "sequential"
+      ? Math.min(65535, config.bytesPerFrame - headerLen)
+      : config.bytesPerFrame - headerLen;
   }
 
   function getEffectiveFps() {
@@ -101,6 +103,8 @@
 
   const startBtn = document.getElementById("startBtn");
   const stopBtn = document.getElementById("stopBtn");
+  const recalibrateBtn = document.getElementById("recalibrateBtn");
+  const calibrationHint = document.getElementById("calibrationHint");
 
   const bpcSelect = document.getElementById("bpcSelect");
   const protocolSelect = document.getElementById("protocolSelect");
@@ -135,12 +139,16 @@
   const textEncoder = new TextEncoder();
   const preflightNameBytes = textEncoder.encode(PREFLIGHT_FILENAME);
   let preflightPayloadPromise = null;
+  const receiverStatusRequests = new Set();
   const FOUNTAIN_RECEIVER_WAIT_POLL_MS = 300;
   const FOUNTAIN_RECEIVER_WAIT_MIN_MS = 30000;
 
   // ── State ──────────────────────────────
   const state = {
     chunks: [], K: 0, seed: 1, frame: 0, running: false,
+    runId: 0, offlineCalibrationConfirmed: false, offlineConfirmationReady: false,
+    fullscreenSettleUntil: 0,
+    preflightPayloads: {},
     bits: new Uint8Array(config.rows * config.cols * 3),
     vals: new Uint8Array(config.rows * config.cols * 3),
     raf: null,
@@ -185,7 +193,7 @@
       rechunk();
       startBtn.disabled = !valid;
     } else { startBtn.disabled = true; }
-    updateDerivedStats(); updateChips(); saveSettings();
+    updateDerivedStats(); updateChips(); saveSettings(); updateCalibrationHint();
   }
 
   const APP_SETTINGS_KEY = "hdmi_transfer_settings";
@@ -297,13 +305,17 @@
       if (config.fpsMode === "manual") config.targetFps = manualFps;
     }
 
-    const fountainRedundancy = Number(params.get("fountainRedundancy"));
-    if (Number.isFinite(fountainRedundancy)) {
+    const fountainRedundancyParam = params.get("fountainRedundancy");
+    const fountainRedundancy = Number(fountainRedundancyParam);
+    if (fountainRedundancyParam !== null && fountainRedundancyParam.trim() !== ""
+        && Number.isFinite(fountainRedundancy)) {
       config.fountainRedundancy = Math.max(0, Math.min(5, fountainRedundancy));
     }
 
-    const sequentialRedundancy = Number(params.get("sequentialRepeat") || params.get("sequentialRedundancy"));
-    if (Number.isFinite(sequentialRedundancy)) {
+    const sequentialRedundancyParam = params.get("sequentialRepeat") || params.get("sequentialRedundancy");
+    const sequentialRedundancy = Number(sequentialRedundancyParam);
+    if (sequentialRedundancyParam !== null && sequentialRedundancyParam.trim() !== ""
+        && Number.isFinite(sequentialRedundancy)) {
       config.sequentialRedundancy = Math.max(1, Math.min(16, Math.floor(sequentialRedundancy)));
     }
 
@@ -502,84 +514,90 @@
     if (!isReceiverApiEnabled()) {
       throw new Error("Receiver API disabled for offline sender mode");
     }
-    const response = await fetch(resolveReceiverApiUrl("/api/receive/status"), { cache: "no-store" });
-    if (!response.ok) throw new Error(`Receiver status unavailable (${response.status})`);
-    return response.json();
-  }
-
-  async function shouldUseReceiverPreflight() {
-    if (!isReceiverApiEnabled()) return false;
+    const controller = new AbortController();
+    receiverStatusRequests.add(controller);
+    const timeout = window.setTimeout(() => controller.abort(), 1500);
     try {
-      const status = await getReceiverStatus();
-      return status.active && status.preflight_required === true;
-    } catch {
-      return false;
+      const response = await fetch(resolveReceiverApiUrl("/api/receive/status"), {
+        cache: "no-store", signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`Receiver status unavailable (${response.status})`);
+      return await response.json();
+    } finally {
+      window.clearTimeout(timeout);
+      receiverStatusRequests.delete(controller);
     }
   }
 
-  async function waitForReceiverPreflight() {
+  function updateCalibrationHint() {
+    calibrationHint.textContent = isReceiverApiEnabled()
+      ? "Calibration is confirmed automatically by the receiver before sending."
+      : calibrationMemory.confirmed(config)
+        ? "Saved setup: a short signal check runs before sending. Recalibrate if the hardware or display changes."
+        : "First transfer: start the receiver, then start here. Once the receiver says Calibration saved, press Enter on this computer to send the file.";
+  }
+
+  async function waitForFullscreenSettle(runId) {
+    while (state.running && state.runId === runId && state.phase === "preflight") {
+      if (performance.now() >= state.fullscreenSettleUntil) return true;
+      await sleep(100);
+    }
+    return false;
+  }
+
+  async function waitForOfflineCalibration(runId) {
+    if (!await waitForFullscreenSettle(runId) || !state.running || state.runId !== runId) {
+      return { ok: false, reason: "stopped" };
+    }
+    const reuse = calibrationMemory.confirmed(config);
+    const duration = reuse ? PREFLIGHT_OFFLINE_RECHECK_MS : PREFLIGHT_OFFLINE_INITIAL_MS;
+    const deadline = performance.now() + duration;
+    const firstCleanFrame = state.preflightFrames;
+    state.offlineCalibrationConfirmed = false;
+    state.offlineConfirmationReady = false;
+    while (state.running && state.runId === runId && state.phase === "preflight") {
+      if (performance.now() >= deadline && state.preflightFrames - firstCleanFrame >= 3) {
+        state.offlineConfirmationReady = true;
+        if (reuse || state.offlineCalibrationConfirmed) {
+          if (!reuse) calibrationMemory.remember(config);
+          return { ok: true, transferBpc: config.bpc };
+        }
+        statusLabel.textContent = "Receiver ready? Press Enter";
+      }
+      await sleep(100);
+    }
+    return { ok: false, reason: "stopped" };
+  }
+
+  async function waitForReceiverPreflight(runId) {
+    if (!await waitForFullscreenSettle(runId) || !state.running || state.runId !== runId) {
+      return { ok: false, reason: "stopped" };
+    }
     const deadline = performance.now() + PREFLIGHT_TIMEOUT_MS;
-    let transferCandidateDeadline = 0;
-    let transferCandidateBpc = Math.max(PREFLIGHT_BITS_PER_CHANNEL, config.bpc | 0);
-    while (state.running && state.phase === "preflight") {
+    let candidateDeadline = performance.now() + PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS;
+    let candidateBpc = config.bpc;
+    while (state.running && state.runId === runId && state.phase === "preflight") {
       try {
         const status = await getReceiverStatus();
-        if (status.preflight_state === "ok") {
-          const negotiated = Number(status.transfer_bpc || transferCandidateBpc || config.bpc);
-          return {
-            ok: true,
-            transferBpc: [1, 2, 3].includes(negotiated) ? negotiated : config.bpc,
-          };
-        }
+        if (!state.running || state.runId !== runId) return { ok: false, reason: "stopped" };
         if (status.active === false) return { ok: false, reason: "receiver_inactive" };
-
-        const stage = String(status.preflight_stage || "path");
-        if (stage === "transfer") {
-          const requestedBpc = Number(status.requested_transfer_bpc || config.bpc);
-          if (state.preflightPhase !== "transfer") {
-            state.preflightPhase = "transfer";
-            state.preflightRequestedBpc = [1, 2, 3].includes(requestedBpc)
-              ? requestedBpc
-              : Math.max(PREFLIGHT_BITS_PER_CHANNEL, config.bpc | 0);
-            transferCandidateBpc = state.preflightRequestedBpc;
-            state.preflightRenderBpc = transferCandidateBpc;
-            transferCandidateDeadline =
-              performance.now() + PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS;
-            configWarningEl.className = "side-note";
-            configWarningEl.style.display = "";
-            configWarningEl.textContent =
-              `HDMI path validated. Probing transfer bpc=${transferCandidateBpc}...`;
-          } else if (
-            performance.now() >= transferCandidateDeadline
-            && transferCandidateBpc > PREFLIGHT_BITS_PER_CHANNEL
-          ) {
-            const failedBpc = transferCandidateBpc;
-            transferCandidateBpc -= 1;
-            state.preflightRenderBpc = transferCandidateBpc;
-            transferCandidateDeadline =
-              performance.now() + PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS;
-            configWarningEl.className = "side-note warn";
-            configWarningEl.style.display = "";
-            configWarningEl.textContent =
-              `Receiver did not confirm transfer bpc=${failedBpc}. Retrying bpc=${transferCandidateBpc}...`;
-          }
-        } else {
-          state.preflightPhase = "path";
-          state.preflightRenderBpc = PREFLIGHT_BITS_PER_CHANNEL;
-          transferCandidateDeadline = 0;
+        if (status.preflight_state === "ok" && state.preflightFrames >= 3) {
+          const negotiated = Number(status.transfer_bpc);
+          if ([1, 2, 3].includes(negotiated)) return { ok: true, transferBpc: negotiated };
+        }
+        if (status.preflight_required !== true) {
+          return { ok: false, reason: "calibration_disabled" };
         }
       } catch {
-        // Keep rendering the preflight frame while the receiver catches up.
+        // Continue the calibration pattern until the bounded deadline.
       }
-      if (state.preflightPhase === "transfer" && transferCandidateDeadline > 0) {
-        const transferTimedOut =
-          transferCandidateBpc <= PREFLIGHT_BITS_PER_CHANNEL
-          && performance.now() >= transferCandidateDeadline;
-        if (transferTimedOut) {
-          return { ok: false, reason: "transfer_bpc_timeout" };
-        }
-      } else if (performance.now() >= deadline) {
-        return { ok: false, reason: "path_timeout" };
+      if (!state.running || state.runId !== runId) return { ok: false, reason: "stopped" };
+      if (performance.now() >= deadline) return { ok: false, reason: "path_timeout" };
+      if (performance.now() >= candidateDeadline && candidateBpc > PREFLIGHT_BITS_PER_CHANNEL) {
+        candidateBpc -= 1;
+        state.preflightRenderBpc = candidateBpc;
+        candidateDeadline = performance.now() + PREFLIGHT_TRANSFER_CANDIDATE_TIMEOUT_MS;
+        configWarningEl.textContent = `Checking a more robust encoding (${candidateBpc} bpc)...`;
       }
       await sleep(PREFLIGHT_POLL_INTERVAL_MS);
     }
@@ -605,12 +623,13 @@
     return Math.max(FOUNTAIN_RECEIVER_WAIT_MIN_MS, baseMs * 20);
   }
 
-  async function waitForReceiverCompletion() {
+  async function waitForReceiverCompletion(runId) {
     const deadline = performance.now() + getFountainReceiverWaitMaxMs();
-    while (state.running && state.phase === "wait_complete") {
+    while (state.running && state.runId === runId && state.phase === "wait_complete") {
       try {
         const status = await getReceiverStatus();
-        if (status.active === false) return true;
+        if (!state.running || state.runId !== runId) return false;
+        if (status.active === false) return status.state === "complete" && status.sha256_ok === true;
       } catch {
         // Keep transmitting while the receiver finishes or reconnects.
       }
@@ -633,8 +652,9 @@
       "Receiver still active after local fountain target. Continuing droplets...";
     updateDebugTitle();
 
-    const completed = await waitForReceiverCompletion();
-    if (!state.running || state.phase !== "wait_complete") return;
+    const runId = state.runId;
+    const completed = await waitForReceiverCompletion(runId);
+    if (!state.running || state.runId !== runId || state.phase !== "wait_complete") return;
 
     if (completed) {
       stopSending({
@@ -646,10 +666,9 @@
 
     stopSending({
       saveHistory: false,
-      statusText: "Receiver timeout",
+      statusText: "Reception not confirmed",
       warningText: (
-        "Receiver still active after local fountain target. "
-        + "Transmission stopped after timeout."
+        "The receiver did not confirm an intact file. Check its result before restarting reception."
       ),
     });
   }
@@ -870,22 +889,31 @@
       Math.min(3, state.preflightRenderBpc | 0),
     );
     const preflightBytesPerFrame = bytesPerFrameForBpc(preflightBpc);
+    if (!state.preflightPayloads[preflightBpc]) {
+      const size = Math.min(65535, preflightBytesPerFrame - SEQ_HEADER_LEN);
+      const payload = new Uint8Array(size);
+      payload.set(state.preflightPayload);
+      applyPreflightVisualFiller(payload, state.preflightPayload.length);
+      state.preflightPayloads[preflightBpc] = payload;
+    }
+    const payload = state.preflightPayloads[preflightBpc];
     const frameBytes = buildSeqFrame(
       FRAME_TYPE_START,
-      0,
+      state.preflightFrames,
       PREFLIGHT_TOTAL_FRAMES,
-      state.preflightPayload,
+      payload,
       preflightBytesPerFrame,
     );
     applyPreflightVisualFiller(
       frameBytes,
-      SEQ_HEADER_LEN + state.preflightPayload.length,
+      SEQ_HEADER_LEN + payload.length,
     );
     bytesToValues(frameBytes, preflightBpc);
     drawValues(state.vals, preflightBpc);
   }
 
   function renderFrame() {
+    if (state.phase === "idle") return;
     if (state.phase === "preflight") {
       renderPreflightFrame();
       state.preflightFrames += 1;
@@ -969,9 +997,21 @@
   }
 
   // ── Start / Stop ───────────────────────
+  function hasFullscreenViewport() {
+    if (document.fullscreenElement) return true;
+    // Browser fullscreen (F11/kiosk) does not set fullscreenElement. Re-entering
+    // the DOM fullscreen API there would unnecessarily cover the signal again.
+    return window.screen.width > 0 && window.screen.height > 0
+      && Math.abs(window.innerWidth - window.screen.width) <= 2
+      && Math.abs(window.innerHeight - window.screen.height) <= 2;
+  }
+
   async function startSending() {
     if (!state.chunks.length || !validateConfig() || state.running) return;
     state.running = true; state.seed = 1; state.frame = 0;
+    const runId = ++state.runId;
+    state.fullscreenSettleUntil = 0;
+    recalibrateBtn.disabled = true;
     state.seqPhase = "start"; state.seqDataIdx = 0; state.seqRepeat = 0;
       state.phase = "idle";
       state.preflightFrames = 0;
@@ -990,62 +1030,61 @@
     hud.classList.add("active");
     updateDebugTitle();
     const begin = async () => {
-      if (!state.running) return;
+      if (!state.running || state.runId !== runId) return;
       checkViewportGeometry();
       state.startTime = performance.now();
       state.lastRenderAt = state.startTime;
       lastFrameTime = 0;
-      const shouldPreflight = await shouldUseReceiverPreflight();
-      if (shouldPreflight) {
-        state.preflightPayload = await getPreflightPayload();
-        state.phase = "preflight";
-        state.preflightFrames = 0;
-        state.preflightPhase = "path";
-        state.preflightRenderBpc = PREFLIGHT_BITS_PER_CHANNEL;
-        state.preflightRequestedBpc = Math.max(PREFLIGHT_BITS_PER_CHANNEL, config.bpc | 0);
-        state.preflightNegotiatedBpc = state.preflightRequestedBpc;
-        statusLabel.textContent = "Preflight";
-        statusLabel.style.color = "var(--yellow)";
-        configWarningEl.className = "side-note";
-        configWarningEl.style.display = "";
-        configWarningEl.textContent = "Validating HDMI path on receiver...";
-        renderLoop(0);
-        const preflight = await waitForReceiverPreflight();
-        if (!preflight.ok) {
-          if (state.running) {
-            const warningText = preflight.reason === "transfer_bpc_timeout"
-              ? (
-                "Receiver did not confirm any supported transfer bpc. "
-                + "Check the HDMI duplication path or lower the target profile."
-              )
-              : (
-                "Receiver did not confirm the HDMI preflight frame. "
-                + "Check the HDMI duplication path."
-              );
-            stopSending({
-              saveHistory: false,
-              statusText: "Preflight failed",
-              warningText,
-            });
+      const receiverConnected = isReceiverApiEnabled();
+      if (receiverConnected) {
+        try {
+          const initialStatus = await getReceiverStatus();
+          if (!state.running || state.runId !== runId) return;
+          if (!initialStatus.active || initialStatus.preflight_required !== true
+              || initialStatus.preflight_state === "ok") {
+            stopSending({ saveHistory: false, statusText: "Start reception first",
+              warningText: "Start or restart reception before sending this file, so calibration belongs to a fresh transfer." });
+            return;
+          }
+        } catch {
+          if (state.running && state.runId === runId) {
+            stopSending({ saveHistory: false, statusText: "Receiver unavailable",
+              warningText: "The receiver did not respond. Check its address and start reception before retrying." });
           }
           return;
         }
-        state.preflightNegotiatedBpc = preflight.transferBpc;
-        if (preflight.transferBpc !== config.bpc) {
-          applyNegotiatedTransferBpc(preflight.transferBpc);
-          configWarningEl.className = "side-note warn";
-          configWarningEl.style.display = "";
-          configWarningEl.textContent =
-            `Transfer bpc downgraded automatically to ${preflight.transferBpc}.`;
-        }
-        await sleep(PREFLIGHT_SETTLE_MS);
       }
-      if (!state.running) return;
-      state.receiverDrivenFountainStop = (
-        shouldPreflight
-        && config.protocol === "fountain"
-        && config.fountainAutoStop
-      );
+      state.preflightPayload = await getPreflightPayload();
+      if (!state.running || state.runId !== runId) return;
+      state.preflightPayloads = {};
+      state.phase = "preflight";
+      state.preflightFrames = 0;
+      state.preflightPhase = "transfer";
+      state.preflightRenderBpc = config.bpc;
+      state.preflightRequestedBpc = config.bpc;
+      statusLabel.textContent = receiverConnected ? "Calibrating" : "Calibration pattern";
+      configWarningEl.className = "side-note";
+      configWarningEl.style.display = "";
+      configWarningEl.textContent = receiverConnected
+        ? "Checking the signal and saved calibration on the receiver..."
+        : "When the receiver confirms calibration, press Enter to send. No receiver confirmation is available over HDMI alone.";
+      renderLoop(0);
+      const preflight = receiverConnected
+        ? await waitForReceiverPreflight(runId)
+        : await waitForOfflineCalibration(runId);
+      if (!state.running || state.runId !== runId) return;
+      if (!preflight.ok) {
+        stopSending({ saveHistory: false, statusText: "Calibration failed",
+          warningText: "Start the receiver with calibration enabled, check the HDMI display, then retry." });
+        return;
+      }
+      state.preflightNegotiatedBpc = preflight.transferBpc;
+      applyNegotiatedTransferBpc(preflight.transferBpc);
+      await sleep(PREFLIGHT_SETTLE_MS);
+      if (!state.running || state.runId !== runId) return;
+      state.receiverDrivenFountainStop = receiverConnected
+        && config.protocol === "fountain" && config.fountainAutoStop;
+      configWarningEl.style.display = "none";
       state.phase = "transmitting";
       state.frame = 0;
       state.startTime = performance.now();
@@ -1060,20 +1099,35 @@
       }
       if (!state.raf) renderLoop(0);
     };
-    const fsReq = document.documentElement.requestFullscreen
+    const enterFullscreen = !hasFullscreenViewport()
+      && typeof document.documentElement.requestFullscreen === "function";
+    const fsReq = enterFullscreen
       ? document.documentElement.requestFullscreen()
       : Promise.resolve();
-    Promise.resolve(fsReq).catch(() => {}).finally(() => setTimeout(begin, 120));
+    Promise.resolve(fsReq).then(() => {
+      if (!state.running || state.runId !== runId) return;
+      if (enterFullscreen && document.fullscreenElement) {
+        state.fullscreenSettleUntil = performance.now() + PREFLIGHT_FULLSCREEN_SETTLE_MS;
+      }
+    }).catch(() => {}).finally(() => {
+      if (state.running && state.runId === runId) setTimeout(begin, 120);
+    });
   }
 
   function stopSending(options = {}) {
     const {
-      saveHistory = state.phase !== "preflight" && state.frame > 0 && !!state.fileName,
+      saveHistory: shouldSaveHistory = state.phase !== "preflight" && state.frame > 0 && !!state.fileName,
       statusText = "Stopped",
       warningText = "",
     } = options;
     const finalFrames = state.phase === "preflight" ? state.preflightFrames : state.frame;
     state.running = false;
+    state.runId += 1;
+    for (const request of receiverStatusRequests) request.abort();
+    receiverStatusRequests.clear();
+    state.offlineConfirmationReady = false;
+    recalibrateBtn.disabled = false;
+    updateCalibrationHint();
     if (state.raf) cancelAnimationFrame(state.raf);
     state.raf = null;
     if (document.fullscreenElement) document.exitFullscreen();
@@ -1107,7 +1161,7 @@
       configWarningEl.textContent = "";
     }
     updateDebugTitle();
-    if (saveHistory) {
+    if (shouldSaveHistory) {
       saveHistory({
         type: "sent", filename: state.fileName, size: state.fileSize,
         duration: elapsed, speed: elapsed > 0 ? state.fileSize / elapsed : 0,
@@ -1204,7 +1258,12 @@
   });
 
   startBtn.addEventListener("click", startSending);
-  stopBtn.addEventListener("click", stopSending);
+  stopBtn.addEventListener("click", () => stopSending());
+  recalibrateBtn.addEventListener("click", () => {
+    calibrationMemory.forget();
+    updateCalibrationHint();
+    statusLabel.textContent = "Calibration required";
+  });
 
   advToggle.addEventListener("click", () => {
     advToggle.classList.toggle("open");
@@ -1212,7 +1271,11 @@
   });
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { e.preventDefault(); if (state.running) stopSending(); }
+    if (e.key === "Enter" && state.running && state.phase === "preflight"
+        && !isReceiverApiEnabled() && state.offlineConfirmationReady) {
+      e.preventDefault();
+      state.offlineCalibrationConfirmed = true;
+    } else if (e.key === "Escape") { e.preventDefault(); if (state.running) stopSending(); }
     else if (e.key === " " && e.target === document.body) {
       e.preventDefault();
       if (state.running) stopSending();
@@ -1232,7 +1295,7 @@
   });
 
   setInterval(() => {
-    if (!state.running) return;
+    if (!state.running || state.phase === "idle") return;
     const dt = performance.now() - state.lastRenderAt;
     if (dt <= 2500) return;
     if (state.raf) cancelAnimationFrame(state.raf);
@@ -1278,12 +1341,12 @@
     manualRow.style.display = config.fpsMode === "manual" ? "" : "none";
     if (config.fpsMode === "auto") config.targetFps = config.detectedHz || 60;
     else if (config.fpsMode === "profile") { const p = PROFILES[config.profileName]; config.targetFps = p ? p.targetFps : 60; }
-    updateDerivedStats(); updateChips(); saveSettings();
+    updateDerivedStats(); updateChips(); saveSettings(); updateCalibrationHint();
   });
   manualFpsInput.addEventListener("change", () => {
     const val = Math.max(1, Math.min(360, Number(manualFpsInput.value)));
     config.manualFps = val; config.targetFps = val; manualFpsInput.value = val;
-    updateDerivedStats(); updateChips(); saveSettings();
+    updateDerivedStats(); updateChips(); saveSettings(); updateCalibrationHint();
   });
   sequentialRedundancyInput.addEventListener("change", () => {
     const val = Math.max(1, Math.min(16, Math.floor(Number(sequentialRedundancyInput.value))));
@@ -1313,6 +1376,7 @@
   loadSettings();
   const urlOptions = applyUrlParams();
   updateModeCallout();
+  updateCalibrationHint();
   recalcDerived();
   bpcSelect.value = String(config.bpc);
   protocolSelect.value = config.protocol;

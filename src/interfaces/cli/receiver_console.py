@@ -12,6 +12,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import contextlib
 import os
 import re
@@ -24,6 +25,9 @@ from InquirerPy.separator import Separator
 from hdmi_transfer.adapters.capture.device_registry import detect_devices
 from hdmi_transfer.adapters.capture.resolver import resolve_saved_capture_target
 from hdmi_transfer.core.config import PROFILES
+from hdmi_transfer.domain.transfer_defaults import (
+    DEFAULT_PROFILE_NAME, DEFAULT_MODE, DEFAULT_BITS_PER_CHANNEL,
+)
 from hdmi_transfer.core import settings
 from hdmi_transfer.interfaces.cli.receive import run_receive
 
@@ -156,8 +160,8 @@ def _action_receive() -> None:
     """Use saved settings to start receiving immediately."""
     cfg = settings.load()["receiver"]
 
-    profile_name = cfg.get("profile", "speed")
-    profile = PROFILES[profile_name]
+    profile_name = cfg.get("profile", DEFAULT_PROFILE_NAME)
+    profile = replace(PROFILES[profile_name], bits_per_channel=int(cfg.get("bpc", DEFAULT_BITS_PER_CHANNEL)))
     source = None
 
     # Fast path: try saved device directly (skip full detection scan)
@@ -193,7 +197,7 @@ def _action_receive() -> None:
 
     # Use saved settings directly — no prompts
     output = cfg.get("output", "received_files")
-    mode = cfg.get("mode", "auto")
+    mode = cfg.get("mode", DEFAULT_MODE)
 
     print(f"  Profile: {profile_name} | Mode: {mode} | Output: {output}")
     print()
@@ -217,13 +221,13 @@ def _action_calibrate() -> None:
         return
     source_idx = _pick_device(devices)
 
-    default_profile = cfg.get("profile", "speed")
+    default_profile = cfg.get("profile", DEFAULT_PROFILE_NAME)
     profile_name = inquirer.select(
         message="Resolution profile:",
         choices=list(PROFILES.keys()),
         default=default_profile,
     ).execute()
-    profile = PROFILES[profile_name]
+    profile = replace(PROFILES[profile_name], bits_per_channel=int(cfg.get("bpc", DEFAULT_BITS_PER_CHANNEL)))
 
     # Import and call the calibrate recv function
     from hdmi_transfer.interfaces.cli.calibrate import _cmd_recv
@@ -267,15 +271,16 @@ def _action_settings() -> None:
     cfg = settings.load()["receiver"]
     print(f"\nReceiver Settings ({settings.settings_path()}):")
     print(f"  Capture device:  {cfg.get('device_name') or '(auto-detect)'}")
-    print(f"  Profile:         {cfg.get('profile', 'speed')}")
-    print(f"  Receive mode:    {cfg.get('mode', 'auto')}")
+    print(f"  Profile:         {cfg.get('profile', DEFAULT_PROFILE_NAME)}")
+    print(f"  Receive mode:    {cfg.get('mode', DEFAULT_MODE)}")
+    print(f"  Encoding:        {cfg.get('bpc', DEFAULT_BITS_PER_CHANNEL)} bpc")
     print(f"  Output dir:      {cfg.get('output', 'received_files')}")
     print()
 
     action = inquirer.select(
         message="Edit settings?",
         choices=["Change capture device", "Change profile", "Change mode",
-                 "Change output dir", "Back to menu"],
+                 "Change encoding", "Change output dir", "Back to menu"],
     ).execute()
 
     if action == "Change capture device":
@@ -302,7 +307,7 @@ def _action_settings() -> None:
         picked = inquirer.select(
             message="Default profile:",
             choices=list(PROFILES.keys()),
-            default=cfg.get("profile", "speed"),
+            default=cfg.get("profile", DEFAULT_PROFILE_NAME),
         ).execute()
         settings.set_value("receiver", "profile", picked)
         print(f"  Saved: profile = {picked}")
@@ -311,10 +316,18 @@ def _action_settings() -> None:
         picked = inquirer.select(
             message="Default mode:",
             choices=["auto", "sequential", "fountain"],
-            default=cfg.get("mode", "auto"),
+            default=cfg.get("mode", DEFAULT_MODE),
         ).execute()
         settings.set_value("receiver", "mode", picked)
         print(f"  Saved: mode = {picked}")
+
+    elif action == "Change encoding":
+        picked = inquirer.select(
+            message="Bits per colour channel:", choices=[1, 2, 3],
+            default=int(cfg.get("bpc", DEFAULT_BITS_PER_CHANNEL)),
+        ).execute()
+        settings.set_value("receiver", "bpc", picked)
+        print(f"  Saved: encoding = {picked} bpc")
 
     elif action == "Change output dir":
         picked = inquirer.text(

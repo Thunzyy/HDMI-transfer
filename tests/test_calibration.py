@@ -166,6 +166,11 @@ def test_benchmark_result_json() -> None:
         "duration_sec",
         "total_frames",
         "total_bytes",
+        "completed",
+        "integrity_ok",
+        "timed_out",
+        "payload_bytes",
+        "warmup_duration_sec",
     }
     assert set(data.keys()) == expected_keys
     assert data["profile"] == "speed"

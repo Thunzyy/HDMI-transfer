@@ -42,7 +42,8 @@ class ResolutionProfile:
 
     @property
     def seq_bytes_per_frame(self) -> int:
-        return (self.bits_per_frame // 8) - self.SEQUENTIAL_HEADER_SIZE
+        # The sequential header stores payload length in an unsigned uint16.
+        return min(65535, (self.bits_per_frame // 8) - self.SEQUENTIAL_HEADER_SIZE)
 
     @property
     def fount_header_size(self) -> int:

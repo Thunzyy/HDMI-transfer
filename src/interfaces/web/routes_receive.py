@@ -14,6 +14,9 @@ from hdmi_transfer.adapters.capture.device_registry import (
     resolve_device_open_target,
 )
 from hdmi_transfer.core.config import PROFILES
+from hdmi_transfer.domain.transfer_defaults import (
+    DEFAULT_PROFILE_NAME, DEFAULT_MODE, DEFAULT_BITS_PER_CHANNEL,
+)
 
 from .preview_stream import create_preview_response
 
@@ -64,14 +67,15 @@ def register_receive_routes(app: Flask) -> None:
 
             data = request.get_json(force=True)
             device = int(data.get("device", 0))
-            profile_name = data.get("profile", "speed")
-            mode = data.get("mode", "auto")
+            profile_name = data.get("profile", DEFAULT_PROFILE_NAME)
+            mode = data.get("mode", DEFAULT_MODE)
             output = data.get("output", app.config["OUTPUT_DIR"])
-            require_preflight = bool(data.get("preflight", False))
+            require_preflight = bool(data.get("preflight", True))
+            force_recalibration = bool(data.get("force_recalibration", False))
 
-            bpc = int(data.get("bpc", 1))
+            bpc = int(data.get("bpc", DEFAULT_BITS_PER_CHANNEL))
             if bpc not in (1, 2, 3):
-                bpc = 1
+                bpc = DEFAULT_BITS_PER_CHANNEL
 
             base_profile = PROFILES.get(profile_name)
             if base_profile is None:
@@ -130,7 +134,7 @@ def register_receive_routes(app: Flask) -> None:
                     )
                 )
 
-            from hdmi_transfer.web.receiver_worker import ReceiverWorker
+            from hdmi_transfer.adapters.receive_worker import ReceiverWorker
 
             worker = ReceiverWorker(
                 device=decode_device,
@@ -142,6 +146,8 @@ def register_receive_routes(app: Flask) -> None:
                 on_cap_return=on_cap_return,
                 fallback_targets=fallback_targets,
                 require_preflight=require_preflight,
+                force_recalibration=force_recalibration,
+                device_identity=str((device_info or {}).get("name") or decode_device),
             )
             app._receiver_worker = worker
             worker.start()
@@ -231,7 +237,7 @@ def register_receive_routes(app: Flask) -> None:
         if "scale" in data:
             worker._preview_scale = max(0.25, min(1.0, float(data["scale"])))
         if "fps" in data:
-            worker._preview_target_fps = max(1.0, min(120.0, float(data["fps"])))
+            worker._preview_target_fps = max(0.0, min(120.0, float(data["fps"])))
         return jsonify({
             "quality": worker._preview_quality,
             "scale": worker._preview_scale,

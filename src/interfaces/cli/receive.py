@@ -15,6 +15,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import os
 import queue
 import sys
@@ -34,11 +35,13 @@ from hdmi_transfer.core.cli.progress import ProgressTracker
 from hdmi_transfer.receiver.capture.source import CaptureSource
 from hdmi_transfer.core.capture.threaded import FPSReporter, ThreadedCapture
 from hdmi_transfer.core.config import (
-    DEFAULT_PROFILE,
     PROFILES,
     ResolutionProfile,
 )
 from hdmi_transfer.core.file_handling.writer import write_output
+from hdmi_transfer.domain.transfer_defaults import (
+    DEFAULT_PROFILE_NAME, DEFAULT_MODE, DEFAULT_BITS_PER_CHANNEL,
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -62,15 +65,21 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--mode",
         choices=["auto", "sequential", "fountain"],
-        default="auto",
-        help="Decoding protocol (default: auto-detect from magic number)",
+        default=DEFAULT_MODE,
+        help="Decoding protocol (default: fountain)",
     )
     parser.add_argument(
         "--profile",
         choices=list(PROFILES.keys()),
-        default=None,
+        default=DEFAULT_PROFILE_NAME,
         help="Resolution profile: speed (1080p@240fps), balanced (1080p@60fps), quality (4K@30fps)",
     )
+    parser.add_argument("--bpc", type=int, choices=(1, 2, 3), default=DEFAULT_BITS_PER_CHANNEL,
+                        help="Bits per colour channel (default: 2)")
+    parser.add_argument("--recalibrate", action="store_true",
+                        help="Ignore the saved calibration and learn the capture path again")
+    parser.add_argument("--no-calibration", action="store_true",
+                        help="Receive older senders that do not emit calibration frames")
     parser.add_argument(
         "--threaded",
         action="store_true",
@@ -111,8 +120,8 @@ def _receive_with_session(
     geometry_candidates = build_geometry_candidates(profile)
     geometry_cursor = 0
     sampling = (0, 0, 1.0, 1.0)
-    sequential_protocol = session._sequential_protocol
-    fountain_protocol = session._fountain_protocol
+    sequential_protocol = session.sequential_protocol
+    fountain_protocol = session.fountain_protocol
     intro_message = {
         "auto": "Auto mode: probing frames for protocol magic number...",
         "sequential": "Sequential mode: capturing frames...",
@@ -426,9 +435,11 @@ def _run_receiver_worker(
     mode: str,
     output: str,
     profile: ResolutionProfile,
+    force_recalibration: bool = False,
+    require_preflight: bool = True,
 ) -> None:
-    """Run the validated web receiver worker as the CLI capture engine."""
-    from hdmi_transfer.web.receiver_worker import ReceiverWorker
+    """Run the shared receiver worker as the CLI capture engine."""
+    from hdmi_transfer.adapters.receive_worker import ReceiverWorker
 
     worker = ReceiverWorker(
         device=resolved_source.open_source,
@@ -437,6 +448,9 @@ def _run_receiver_worker(
         output_dir=output,
         backend=resolved_source.backend,
         fallback_targets=list(resolved_source.fallback_targets),
+        require_preflight=require_preflight,
+        force_recalibration=force_recalibration,
+        device_identity=resolved_source.device_name or str(resolved_source.open_source),
     )
     event_queue = worker.subscribe()
     worker.start()
@@ -486,11 +500,13 @@ def _run_receiver_worker(
 
 def run_receive(
     source: int | str,
-    mode: str = "auto",
+    mode: str = DEFAULT_MODE,
     profile: ResolutionProfile | None = None,
     output: str = "received_files",
     threaded: bool = True,
     buffer_size: int = 16,
+    force_recalibration: bool = False,
+    require_preflight: bool = True,
 ) -> None:
     """Execute the full receive pipeline with explicit parameters.
 
@@ -504,7 +520,7 @@ def run_receive(
     mode:
         Decoding protocol: ``"auto"``, ``"sequential"``, or ``"fountain"``.
     profile:
-        Resolution profile.  Defaults to *DEFAULT_PROFILE* if ``None``.
+        Resolution profile.  Defaults to Balanced / 2 bpc if ``None``.
     output:
         Directory to save received files.
     threaded:
@@ -512,7 +528,7 @@ def run_receive(
     buffer_size:
         Ring buffer size for threaded capture.
     """
-    profile = profile or DEFAULT_PROFILE
+    profile = profile or replace(PROFILES[DEFAULT_PROFILE_NAME], bits_per_channel=DEFAULT_BITS_PER_CHANNEL)
 
     try:
         resolved = resolve_capture_target(source)
@@ -521,6 +537,14 @@ def run_receive(
         return
 
     print(resolved.describe())
+
+    if resolved.backend is not None or isinstance(resolved.open_source, int):
+        print("Using shared receiver capture engine.")
+        _run_receiver_worker(
+            resolved_source=resolved, mode=mode, output=output, profile=profile,
+            force_recalibration=force_recalibration, require_preflight=require_preflight,
+        )
+        return
 
     try:
         cap = CaptureSource(
@@ -538,17 +562,6 @@ def run_receive(
         f"Camera: {cap.actual_width}x{cap.actual_height} "
         f"@ {cap.actual_fps} FPS"
     )
-
-    if resolved.backend is not None:
-        cap.release()
-        print("Using unified receiver worker path for resolved capture device.")
-        _run_receiver_worker(
-            resolved_source=resolved,
-            mode=mode,
-            output=output,
-            profile=profile,
-        )
-        return
 
     with cap:
         if threaded:
@@ -572,10 +585,12 @@ def main() -> None:
     run_receive(
         source=args.source,
         mode=args.mode,
-        profile=PROFILES[args.profile] if args.profile else None,
+        profile=replace(PROFILES[args.profile], bits_per_channel=args.bpc),
         output=args.output,
         threaded=args.threaded,
         buffer_size=args.buffer_size,
+        force_recalibration=args.recalibrate,
+        require_preflight=not args.no_calibration,
     )
 
 

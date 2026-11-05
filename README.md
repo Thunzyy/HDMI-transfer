@@ -116,10 +116,12 @@ uv run --no-sync hdmi-web
 2. Copy [`sender.html`](sender.html) to the sending computer using an authorized method, then open it in a browser. It runs in offline mode by default.
 3. On the receiver, open **Receive**, choose the capture card and select **Fountain · Balanced · 2 bpc · Preview Low**.
 4. On the sender, choose a small test file and match the receiver’s protocol, profile and encoding settings.
-5. Move the sender window to the display connected to the capture card. Click **Start** on the receiver, then **Start transmission** on the sender. The signal must fill the captured display.
+5. Move the sender window to the display connected to the capture card. Click **Start** on the receiver, then **Start transmission** on the sender. The signal must fill the captured display. On the first offline transfer, wait for **Calibration saved** on the receiver, then press **Enter on the sender** to send the file. The confirmed setup is remembered; later transfers use a short verification pattern.
 6. Once reception is complete, use **Download** on the receiver. Stop the sender if it is still transmitting.
 
 **Need to load the sender over a LAN or test on a single PC?** The [step-by-step guide](docs/getting-started.md) covers both options, display settings and common problems.
+
+See [calibration and saved setups](docs/calibration.md) for automatic confirmation in local test mode, forced recalibration, CLI options and persistent settings.
 
 ## Choose your setup
 

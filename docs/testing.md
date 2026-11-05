@@ -32,6 +32,17 @@ uv run pytest tests/test_sender_build.py tests/test_sender_html_magic.py -v
 uv run pytest tests/test_fountain_overhead.py tests/perf/test_fountain_budget.py -v
 ```
 
+## Browser calibration checks
+
+```powershell
+uv run --no-sync pytest tests/browser/test_sender_calibration.py --browser -v
+```
+
+These checks run real headless Chrome without a capture card. They verify offline
+confirmation and reuse, forced recalibration, connected acknowledgment, bounded
+network waits, and cross-language decoding of the actual canvas. They are run
+separately from the standard gate and also run in Windows CI.
+
 ## Docker smoke test
 
 With Docker and Python available, run:
@@ -40,7 +51,7 @@ With Docker and Python available, run:
 python tools/docker_smoke.py
 ```
 
-This builds the image and starts a uniquely named temporary Compose project. It checks health, web pages, APIs, non-root execution, downloads and file persistence after container recreation. It then removes only its own test containers and volume. GitHub Actions runs this check on Linux; the Python quality gate runs on Windows. This does not test physical HDMI reception.
+This builds the image and starts a uniquely named temporary Compose project. It checks health, web pages, APIs, non-root execution, downloads, and file/calibration persistence after container recreation. It then removes only its own test containers and volumes. GitHub Actions runs this check on Linux; the Python quality gate runs on Windows. This does not test physical HDMI reception.
 
 ## Hardware validation
 

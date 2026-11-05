@@ -6,7 +6,7 @@ import os
 import threading
 from pathlib import Path
 
-from flask import Flask, send_file, send_from_directory
+from flask import Flask, Response, send_file, send_from_directory
 
 _SOURCE_ROOT = Path(__file__).resolve().parents[2]
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -56,7 +56,10 @@ def _register_page_routes(app: Flask, static_dir: Path) -> None:
     def _send_sender_html():
         path = app.config["SENDER_HTML"]
         if not os.path.isfile(path):
-            return "sender.html not found", 404
+            # Wheels contain the source assets, but no repository-root HTML.
+            from hdmi_transfer.interfaces.browser_sender import render_sender_html
+
+            return Response(render_sender_html(), mimetype="text/html")
         return send_file(path)
 
     @app.route("/")

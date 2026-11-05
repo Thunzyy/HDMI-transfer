@@ -94,12 +94,13 @@ packages = [
 [tool.setuptools.package-data]
 "hdmi_transfer.core" = ["constants.json"]
 "hdmi_transfer.interfaces.browser_sender" = ["*.html", "*.js"]
-"hdmi_transfer.web" = ["static/*.html", "static/*.js", "static/images/*.svg"]
+"hdmi_transfer.web" = ["static/*.html", "static/*.js", "static/*.css", "static/images/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--strict-markers", "-v", "--import-mode=importlib", "-p", "no:xonsh"]
 markers = [
+    "browser: headless Chrome UI checks, enabled with --browser",
     "hardware: marks tests requiring Elgato capture card (deselect with '-m \"not hardware\"')",
     "slow: marks tests that take >10s (deselect with '-k \"not slow\"')",
 ]

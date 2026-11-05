@@ -24,60 +24,70 @@ def _clamp_float(value: str | None, lo: float, hi: float, default: float) -> flo
 def create_preview_response(app: Flask) -> Response:
     import cv2
 
-    idle_quality = _clamp_int(request.args.get("quality"), 10, 100, 75)
-    idle_scale = _clamp_float(request.args.get("scale"), 0.25, 1.0, 1.0)
-    idle_fps = _clamp_float(request.args.get("idle_fps"), 1.0, 60.0, 20.0)
+    idle_quality = _clamp_int(request.args.get("quality"), 10, 100, 45)
+    idle_scale = _clamp_float(request.args.get("scale"), 0.25, 1.0, 0.5)
+    idle_fps = _clamp_float(request.args.get("idle_fps"), 1.0, 60.0, 10.0)
 
     def generate():
         last_worker = None
         last_seq = 0
 
-        while True:
-            worker = app._receiver_worker
-            if worker is not None and worker.is_alive():
-                if worker is not last_worker:
-                    last_worker = worker
-                    last_seq = 0
+        try:
+            while True:
+                worker = app._receiver_worker
+                if worker is not None and worker.is_alive():
+                    if worker is not last_worker:
+                        if last_worker is not None:
+                            last_worker.remove_preview_consumer()
+                        worker.add_preview_consumer()
+                        last_worker = worker
+                        last_seq = 0
 
-                jpeg, seq = worker.wait_for_preview(last_seq, timeout_s=1.0)
-                if jpeg is None or seq <= last_seq:
-                    continue
-                last_seq = seq
-            else:
-                ret, frame = app._capture_manager.read()
-                if not ret or frame is None:
-                    time.sleep(0.05)
-                    continue
+                    jpeg, seq = worker.wait_for_preview(last_seq, timeout_s=1.0)
+                    if jpeg is None or seq <= last_seq:
+                        continue
+                    last_seq = seq
+                else:
+                    if last_worker is not None:
+                        last_worker.remove_preview_consumer()
+                        last_worker = None
+                    ret, frame = app._capture_manager.read()
+                    if not ret or frame is None:
+                        time.sleep(0.05)
+                        continue
 
-                if idle_scale < 1.0:
-                    height, width = frame.shape[:2]
-                    scaled_width = max(1, int(width * idle_scale))
-                    scaled_height = max(1, int(height * idle_scale))
-                    frame = cv2.resize(
+                    if idle_scale < 1.0:
+                        height, width = frame.shape[:2]
+                        scaled_width = max(1, int(width * idle_scale))
+                        scaled_height = max(1, int(height * idle_scale))
+                        frame = cv2.resize(
+                            frame,
+                            (scaled_width, scaled_height),
+                            interpolation=cv2.INTER_AREA,
+                        )
+
+                    ok, encoded = cv2.imencode(
+                        ".jpg",
                         frame,
-                        (scaled_width, scaled_height),
-                        interpolation=cv2.INTER_AREA,
+                        [cv2.IMWRITE_JPEG_QUALITY, idle_quality],
                     )
+                    if not ok:
+                        time.sleep(0.01)
+                        continue
 
-                ok, encoded = cv2.imencode(
-                    ".jpg",
-                    frame,
-                    [cv2.IMWRITE_JPEG_QUALITY, idle_quality],
+                    jpeg = encoded.tobytes()
+                    time.sleep(1.0 / idle_fps)
+
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n"
+                    + jpeg
+                    + b"\r\n"
                 )
-                if not ok:
-                    time.sleep(0.01)
-                    continue
-
-                jpeg = encoded.tobytes()
-                time.sleep(1.0 / idle_fps)
-
-            yield (
-                b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n"
-                b"Content-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n"
-                + jpeg
-                + b"\r\n"
-            )
+        finally:
+            if last_worker is not None:
+                last_worker.remove_preview_consumer()
 
     return Response(
         generate(),

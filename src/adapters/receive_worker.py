@@ -1,4 +1,4 @@
-"""Background receiver worker for the web application.
+"""Shared background capture receiver used by CLI and web interfaces.
 
 Runs the capture-decode loop in a daemon thread, publishing structured
 events to subscriber queues.  Reuses all existing core modules:
@@ -23,10 +23,8 @@ import time
 
 import cv2
 
-from hdmi_transfer.application.preflight import (
-    PREFLIGHT_BITS_PER_CHANNEL,
-    is_preflight_start_result,
-)
+from hdmi_transfer.application.preflight import is_calibration_frame_valid, is_preflight_start_result
+from hdmi_transfer.adapters.calibration_store import CalibrationStore, calibration_key
 from hdmi_transfer.application.receive_geometry import (
     build_geometry_candidates,
     decode_with_sampling_fallbacks,
@@ -38,10 +36,7 @@ from hdmi_transfer.application.receive_session import ReceiveSession
 from hdmi_transfer.core.config import (
     ResolutionProfile,
 )
-from hdmi_transfer.core.file_handling.metadata import (
-    parse_fountain_metadata,
-)
-from hdmi_transfer.core.file_handling.writer import verify_integrity, write_output
+from hdmi_transfer.core.file_handling.writer import write_output
 from hdmi_transfer.core.protocols import get_protocol
 from hdmi_transfer.receiver.capture.source import CaptureSource
 
@@ -53,6 +48,20 @@ _RUNTIME_FALLBACK_NO_PROGRESS_AFTER_S = 6.0
 
 class _CaptureFallbackRequested(RuntimeError):
     """Internal control-flow exception used to retry another capture target."""
+
+
+class _FirstFrameCapture:
+    """Replay the detection frame once before continuing the capture stream."""
+
+    def __init__(self, frame, source):
+        self._frame = frame
+        self._source = source
+
+    def read(self):
+        if self._frame is not None:
+            frame, self._frame = self._frame, None
+            return True, frame
+        return self._source.read()
 
 
 class ReceiverWorker(threading.Thread):
@@ -81,6 +90,9 @@ class ReceiverWorker(threading.Thread):
         on_cap_return: "callable | None" = None,
         fallback_targets: list[tuple[int | str, int | None]] | None = None,
         require_preflight: bool = False,
+        force_recalibration: bool = False,
+        device_identity: str | None = None,
+        calibration_store: CalibrationStore | None = None,
     ) -> None:
         super().__init__(daemon=True)
         self._device = device
@@ -107,6 +119,12 @@ class ReceiverWorker(threading.Thread):
         self._active_backend = backend
         self._fallback_targets: list[tuple[int | str, int | None]] = []
         self._require_preflight = bool(require_preflight)
+        self._force_recalibration = bool(force_recalibration)
+        self._awaiting_payload = False
+        self._calibration_protocol = None
+        self._calibration_capture_shape: tuple[int, int] | None = None
+        self._device_identity = device_identity or str(device)
+        self._calibration_store = calibration_store or CalibrationStore()
         self._stop_event = threading.Event()
         self._subscribers: list[queue.Queue] = []
         self._lock = threading.Lock()
@@ -119,6 +137,9 @@ class ReceiverWorker(threading.Thread):
             "preflight_stage": "path" if self._require_preflight else "disabled",
             "requested_transfer_bpc": int(self._profile.bits_per_channel),
             "transfer_bpc": None,
+            "calibration_state": "checking" if self._require_preflight else "disabled",
+            "calibration_reused": False,
+            "calibration_samples": 0,
             "active_device": self._active_device,
             "active_backend": self._active_backend,
         }
@@ -126,9 +147,10 @@ class ReceiverWorker(threading.Thread):
         self._preview_frame: bytes | None = None
         self._preview_condition = threading.Condition()
         self._preview_seq = 0
-        self._preview_quality = 75
-        self._preview_scale = 1.0  # 1.0 = native
-        self._preview_target_fps = 30.0
+        self._preview_quality = 45
+        self._preview_scale = 0.5
+        self._preview_target_fps = 10.0
+        self._preview_consumers = 0
         self._preview_last_publish = 0.0
         self._preview_last_frame_monotonic = 0.0
         # Sampling geometry for letterboxed/scaled browser output.
@@ -187,9 +209,22 @@ class ReceiverWorker(threading.Thread):
         except Exception:
             pass
 
+    def add_preview_consumer(self) -> None:
+        with self._preview_condition:
+            self._preview_consumers += 1
+
+    def remove_preview_consumer(self) -> None:
+        with self._preview_condition:
+            self._preview_consumers = max(0, self._preview_consumers - 1)
+
     def _maybe_publish_preview(self, frame) -> None:
-        """Publish preview frames at a bounded rate while keeping low latency."""
+        """Only encode preview images when a client actually consumes them."""
+        with self._preview_condition:
+            if self._preview_consumers <= 0:
+                return
         target_fps = self._preview_target_fps
+        if target_fps <= 0:
+            return
         if target_fps > 0:
             now = time.perf_counter()
             interval = 1.0 / target_fps
@@ -306,176 +341,134 @@ class ReceiverWorker(threading.Thread):
     # -- fountain mode ---------------------------------------------------
 
     def _wait_for_preflight(self, cap: CaptureSource) -> bool:
-        selected_bpc = int(self._profile.bits_per_channel)
-        candidate_bpcs = [PREFLIGHT_BITS_PER_CHANNEL, selected_bpc]
-        candidate_bpcs.extend(
-            b for b in (1, 2, 3)
-            if b not in candidate_bpcs
-        )
-        probe_candidates: list[tuple[int, ResolutionProfile, object]] = []
-        for bpc in candidate_bpcs:
-            profile = (
-                self._profile
-                if bpc == selected_bpc
-                else replace(self._profile, bits_per_channel=bpc)
-            )
-            probe_candidates.append((
-                bpc,
-                profile,
-                get_protocol("sequential", profile=profile),
-            ))
+        """Validate three distinct live calibration frames before receiving data.
 
-        frames_captured = 0
-        low_signal_streak = 0
-        low_signal_since: float | None = None
-        last_waiting_emit = 0.0
-        wait_started_at = time.time()
+        The sender emits calibration directly at the requested encoding. There
+        is no ambiguous 1-bpc path stage. A stored geometry is only a first
+        candidate: CRC-valid fresh frames must confirm it every time.
+        """
+        selected_bpc = int(self._profile.bits_per_channel)
+        probe_candidates = []
+        for bpc in [selected_bpc] + [b for b in (1, 2, 3) if b != selected_bpc]:
+            profile = replace(self._profile, bits_per_channel=bpc)
+            probe_candidates.append((bpc, profile, get_protocol("sequential", profile=profile)))
         geometry_candidates = self._build_geometry_candidates(self._profile)
         geometry_cursor = 0
-        path_confirmed = False
-
+        hints: dict[str, tuple[int, int, float, float] | None] = {}
+        current: dict[str, tuple[int, int, float, float]] = {}
+        stable_match = None
+        unique_frames: set[int] = set()
+        frames_captured = 0
+        low_signal_streak = 0
+        low_signal_since = None
+        wait_started_at = time.time()
+        last_waiting_emit = 0.0
+        self._sampling = (0, 0, 1.0, 1.0)
         self._publish("status", {
-            "state": "preflight_wait",
-            "message": "Waiting for HDMI preflight frame...",
-            "preflight_required": True,
-            "preflight_state": "waiting",
-            "preflight_stage": "path",
-            "requested_transfer_bpc": selected_bpc,
-            "transfer_bpc": None,
-            "low_signal_streak": 0,
-            "low_signal_duration_s": 0.0,
-            "low_signal_detected": False,
+            "state": "preflight_wait", "message": "Waiting for calibration signal...",
+            "preflight_required": True, "preflight_state": "waiting",
+            "preflight_stage": "transfer", "requested_transfer_bpc": selected_bpc,
+            "transfer_bpc": None, "calibration_state": "checking",
+            "calibration_reused": False, "calibration_samples": 0,
         })
-
         while not self._stop_event.is_set():
-            ret, frame = cap.read()
+            ret, raw_frame = cap.read()
             if not ret:
                 time.sleep(0.001)
                 continue
-
             frames_captured += 1
-            self._maybe_publish_preview(frame)
+            self._maybe_publish_preview(raw_frame)
             now = time.time()
-            low_signal_streak, low_signal_since, low_signal_duration_s = (
-                self._update_low_signal_state(
-                    frame,
-                    low_signal_streak,
-                    low_signal_since,
-                    now,
-                )
+            low_signal_streak, low_signal_since, low_signal_duration_s = self._update_low_signal_state(
+                raw_frame, low_signal_streak, low_signal_since, now,
             )
-            if (now - last_waiting_emit) >= 1.0:
+            if now - last_waiting_emit >= 1.0:
                 last_waiting_emit = now
-                waiting_stage = (
-                    "transfer"
-                    if path_confirmed and selected_bpc != PREFLIGHT_BITS_PER_CHANNEL
-                    else "path"
-                )
-                waiting_message = (
-                    f"Waiting for transfer bpc calibration... ({frames_captured:,} frames scanned)"
-                    if waiting_stage == "transfer"
-                    else f"Waiting for HDMI preflight frame... ({frames_captured:,} frames scanned)"
-                )
                 self._publish("status", {
-                    "state": "preflight_wait",
-                    "message": waiting_message,
+                    "state": "preflight_wait", "message": "Checking calibration signal...",
                     "frames_captured": frames_captured,
-                    "preflight_required": True,
-                    "preflight_state": "waiting",
-                    "preflight_stage": waiting_stage,
-                    "requested_transfer_bpc": selected_bpc,
-                    "transfer_bpc": None,
+                    "preflight_state": "waiting", "preflight_stage": "transfer",
                     "low_signal_streak": low_signal_streak,
                     "low_signal_duration_s": round(low_signal_duration_s, 2),
-                    "low_signal_detected": self._is_low_signal_detected(
-                        low_signal_duration_s,
-                        low_signal_streak,
-                    ),
+                    "low_signal_detected": self._is_low_signal_detected(low_signal_duration_s, low_signal_streak),
                 })
-
-            frame = self._ensure_size(frame)
+            frame = self._ensure_size(raw_frame)
+            matched = False
             for bpc, profile, protocol in probe_candidates:
-                result, geometry_cursor, _ = self._decode_with_sampling_fallbacks(
-                    frame,
-                    profile,
-                    protocol.decode_frame,
-                    geometry_candidates,
-                    geometry_cursor,
+                key = calibration_key(
+                    device_identity=self._device_identity, open_device=self._active_device,
+                    backend=self._active_backend, profile=profile,
+                    capture_shape=raw_frame.shape,
                 )
-                if result is None or not result.is_valid:
-                    continue
-                if not is_preflight_start_result(result):
-                    continue
-                low_signal_streak = 0
-                low_signal_since = None
-                if (
-                    not path_confirmed
-                    and selected_bpc != PREFLIGHT_BITS_PER_CHANNEL
-                    and bpc == PREFLIGHT_BITS_PER_CHANNEL
-                ):
-                    path_confirmed = True
-                    self._publish("status", {
-                        "state": "preflight_transfer_wait",
-                        "message": (
-                            "HDMI path validated. "
-                            f"Waiting for transfer bpc={selected_bpc} calibration..."
-                        ),
-                        "frames_captured": frames_captured,
-                        "preflight_required": True,
-                        "preflight_state": "waiting",
-                        "preflight_stage": "transfer",
-                        "requested_transfer_bpc": selected_bpc,
-                        "transfer_bpc": None,
-                        "low_signal_streak": 0,
-                        "low_signal_duration_s": 0.0,
-                        "low_signal_detected": False,
-                    })
-                    continue
+                if key not in hints:
+                    hints[key] = None if self._force_recalibration else self._calibration_store.load(key)
+                    current[key] = hints[key] or (0, 0, 1.0, 1.0)
+                self._sampling = current[key]
 
-                path_confirmed = True
+                def decode_calibration(sampled):
+                    decoded = protocol.decode_frame(sampled)
+                    return decoded if is_calibration_frame_valid(sampled, profile, decoded) else None
+
+                result, geometry_cursor, sampling = self._decode_with_sampling_fallbacks(
+                    frame, profile, decode_calibration, geometry_candidates, geometry_cursor,
+                )
+                if not is_preflight_start_result(result) or result.frame_index is None:
+                    continue
+                sampling = sampling or self._sampling
+                current[key] = sampling
+                match = (key, sampling)
+                if stable_match != match:
+                    unique_frames.clear()
+                    stable_match = match
+                unique_frames.add(result.frame_index)
+                matched = True
+                reused = hints[key] is not None and sampling == hints[key]
+                self._set_runtime_state(
+                    calibration_state="checking" if reused else "calibrating",
+                    calibration_reused=False, calibration_samples=len(unique_frames),
+                )
+                if len(unique_frames) < 3:
+                    break
+                self._sampling = sampling
                 self._profile = profile
+                self._awaiting_payload = True
+                self._calibration_protocol = protocol
+                self._calibration_capture_shape = raw_frame.shape[:2]
+                saved = self._calibration_store.save(key, sampling)
+                calibration_state = "reused" if reused else ("saved" if saved else "validated")
                 self._publish("status", {
                     "state": "preflight_ok",
                     "message": self._preflight_detected_message(
-                        selected_bpc=selected_bpc,
-                        detected_bpc=bpc,
-                        sampling=self._sampling,
-                        keep_transfer_profile=False,
+                        selected_bpc=selected_bpc, detected_bpc=bpc, sampling=sampling,
                     ),
                     "frames_captured": frames_captured,
-                    "preflight_required": True,
-                    "preflight_state": "ok",
-                    "preflight_stage": "done",
-                    "requested_transfer_bpc": selected_bpc,
-                    "transfer_bpc": bpc,
-                    "low_signal_streak": 0,
-                    "low_signal_duration_s": 0.0,
+                    "preflight_required": True, "preflight_state": "ok",
+                    "preflight_stage": "done", "requested_transfer_bpc": selected_bpc,
+                    "transfer_bpc": bpc, "calibration_state": calibration_state,
+                    "calibration_reused": reused, "calibration_samples": len(unique_frames),
+                    "low_signal_streak": 0, "low_signal_duration_s": 0.0,
                     "low_signal_detected": False,
                 })
                 return True
-
+            if not matched:
+                stable_match = None
+                unique_frames.clear()
+                self._set_runtime_state(calibration_state="calibrating", calibration_samples=0)
             self._maybe_request_runtime_fallback(
-                protocol_name="preflight",
-                frames_captured=frames_captured,
-                has_progress=False,
-                low_signal_streak=low_signal_streak,
+                protocol_name="preflight", frames_captured=frames_captured,
+                has_progress=False, low_signal_streak=low_signal_streak,
                 low_signal_duration_s=low_signal_duration_s,
                 no_progress_duration_s=max(0.0, now - wait_started_at),
             )
-
-        self._publish("stopped", {
-            "message": "Stopped by user",
-            "frames_captured": frames_captured,
-        })
+        self._publish("stopped", {"message": "Stopped by user", "frames_captured": frames_captured})
         return False
 
     def _run_fountain(self, cap: CaptureSource) -> None:
         protocol = get_protocol("fountain", profile=self._profile)
-        session = ReceiveSession(mode="fountain", profile=self._profile)
+        session = ReceiveSession(mode="fountain", profile=self._profile, progress_interval_s=0.2)
         frames_captured = 0
         low_signal_streak = 0
         low_signal_since: float | None = None
-        last_progress = 0.0
         last_waiting_emit = 0.0
         started_at = time.time()
         geometry_candidates = self._build_geometry_candidates(self._profile)
@@ -518,6 +511,8 @@ class ReceiverWorker(threading.Thread):
                 })
 
             frame = self._ensure_size(frame)
+            if self._is_calibration_tail(frame):
+                continue
             result, geometry_cursor, _ = self._decode_with_sampling_fallbacks(
                 frame,
                 self._profile,
@@ -530,7 +525,7 @@ class ReceiverWorker(threading.Thread):
                 self._maybe_request_runtime_fallback(
                     protocol_name="fountain",
                     frames_captured=frames_captured,
-                    has_progress=session._fountain_decoder is not None,
+                    has_progress=session.has_progress,
                     low_signal_streak=low_signal_streak,
                     low_signal_duration_s=low_signal_duration_s,
                     no_progress_duration_s=max(0.0, now - started_at),
@@ -539,6 +534,7 @@ class ReceiverWorker(threading.Thread):
 
             low_signal_streak = 0
             low_signal_since = None
+            self._awaiting_payload = False
             events = session.feed_frame_result("fountain", result)
             for event in events:
                 data = dict(event.data)
@@ -549,9 +545,7 @@ class ReceiverWorker(threading.Thread):
                     continue
 
                 if event.kind == "progress":
-                    if now - last_progress > 0.2:
-                        last_progress = now
-                        self._publish("progress", data)
+                    self._publish("progress", data)
                     continue
 
                 file_content = bytes(data.pop("file_content"))
@@ -565,96 +559,6 @@ class ReceiverWorker(threading.Thread):
         self._publish("stopped", {
             "message": "Stopped by user",
             "frames_captured": frames_captured,
-        })
-
-    def _publish_fountain_progress(
-        self, decoder, K, payload, bytes_received,
-        droplets_received, unique_droplets_received, expected_droplets,
-        frames_captured, start_time,
-        *,
-        emit_indices: bool = True,
-    ) -> None:
-        decoded = len(decoder.chunks)
-        unknown = max(0, K - decoded)
-        # Fountain decoding is non-linear: BP/GE can unlock many chunks at once.
-        # Use unresolved equation count as a progress hint for smoother, more
-        # realistic ETA/percent while keeping Solved/Needed exact.
-        unresolved = sum(1 for d in decoder.droplets if len(d[0]) > 0)
-        hinted = decoded + min(unknown, int(unresolved * 0.8))
-        effective_resolved = max(decoded, min(K, hinted))
-
-        elapsed = time.time() - start_time if start_time else 0
-        speed = bytes_received / elapsed if elapsed > 2 else 0
-        remaining = max(0, K - effective_resolved) * len(payload)
-        eta = remaining / speed if speed > 0 else -1
-        percent = round(decoded / K * 100, 1)
-        # Keep 100% exclusively for the "complete" event to avoid
-        # transient UI jumps when late progress and completion race.
-        if percent >= 100.0:
-            percent = 99.9
-        acquisition_percent = round((droplets_received / K) * 100, 1)
-
-        data = {
-            "protocol": "fountain",
-            "chunks_decoded": decoded,
-            "total_chunks": K,
-            "percent": percent,
-            "droplets_received": droplets_received,
-            "unique_droplets_received": unique_droplets_received,
-            "expected_droplets": expected_droplets,
-            "acquisition_percent": acquisition_percent,
-            "speed_kbps": round(speed / 1024, 1) if speed > 0 else 0,
-            "eta_seconds": round(eta, 1) if eta >= 0 else -1,
-            "frames_captured": frames_captured,
-            "bytes_received": bytes_received,
-        }
-        if emit_indices:
-            data["decoded_indices"] = sorted(decoder.chunks.keys())
-        self._publish("progress", data)
-
-    def _finalize_fountain(
-        self, decoder, start_time, frames_captured, bytes_received,
-        droplets_received, unique_droplets_received, expected_droplets,
-    ) -> None:
-        full_data = decoder.get_file_data()
-        file_size, expected_sha256, filename, content_offset = (
-            parse_fountain_metadata(full_data)
-        )
-
-        if file_size is not None and filename is not None:
-            file_content = bytes(
-                full_data[content_offset:content_offset + file_size],
-            )
-            sha256_ok = bool(
-                expected_sha256 and verify_integrity(file_content, expected_sha256),
-            )
-        else:
-            file_content = bytes(full_data)
-            filename = f"received_{int(time.time())}.bin"
-            file_size = len(file_content)
-            sha256_ok = False
-
-        save_path = write_output(file_content, filename, self._output_dir)
-        duration = time.time() - start_time if start_time else 0
-        speed_mbps = (file_size * 8) / duration / 1_000_000 if duration > 0 else 0
-
-        self._publish("complete", {
-            "protocol": "fountain",
-            "filename": filename,
-            "size": file_size,
-            "sha256_ok": sha256_ok,
-            "sha256_available": expected_sha256 is not None,
-            "save_path": save_path,
-            "download_url": f"/api/receive/download/{filename}",
-            "duration_s": round(duration, 2),
-            "speed_mbps": round(speed_mbps, 2),
-            "frames_captured": frames_captured,
-            "bytes_received": bytes_received,
-            "droplets_received": droplets_received,
-            "unique_droplets_received": unique_droplets_received,
-            "expected_droplets": expected_droplets,
-            "chunks_decoded": len(decoder.chunks),
-            "total_chunks": decoder.K,
         })
 
     # -- sequential mode -------------------------------------------------
@@ -706,12 +610,7 @@ class ReceiverWorker(threading.Thread):
                 self._maybe_request_runtime_fallback(
                     protocol_name="sequential",
                     frames_captured=frames_captured,
-                    has_progress=(
-                        session._seq_saw_start
-                        or session._seq_saw_end
-                        or session._seq_total_expected is not None
-                        or bool(session._seq_received)
-                    ),
+                    has_progress=session.has_progress,
                     low_signal_streak=low_signal_streak,
                     low_signal_duration_s=low_signal_duration_s,
                     no_progress_duration_s=max(0.0, now - started_at),
@@ -742,67 +641,6 @@ class ReceiverWorker(threading.Thread):
         self._publish("stopped", {
             "message": "Stopped by user",
             "frames_captured": frames_captured,
-        })
-
-    def _reassemble_sequential_data(
-        self,
-        received: dict[int, bytes],
-        total_frames: int,
-    ) -> tuple[bytes, list[int]]:
-        bpf = self._profile.seq_bytes_per_frame
-        full_data = bytearray()
-        missing: list[int] = []
-        for i in range(total_frames):
-            chunk = received.get(i)
-            if chunk is None:
-                missing.append(i)
-                full_data.extend(b"\x00" * bpf)
-            else:
-                full_data.extend(chunk)
-        return bytes(full_data), missing
-
-    def _finalize_sequential(
-        self, received, total_frames, expected_size,
-        expected_sha256, expected_name,
-        start_time, frames_captured, bytes_received,
-        *,
-        saw_start: bool,
-        saw_end: bool,
-        pass_count: int,
-    ) -> None:
-        full_data, missing = self._reassemble_sequential_data(received, total_frames)
-
-        if expected_size is not None:
-            file_content = full_data[:expected_size]
-        else:
-            file_content = full_data
-
-        sha256_ok = bool(
-            expected_sha256 and verify_integrity(file_content, expected_sha256),
-        )
-        filename = expected_name or f"received_{int(time.time())}.bin"
-        save_path = write_output(file_content, filename, self._output_dir)
-        duration = time.time() - start_time
-        speed_mbps = (len(file_content) * 8) / duration / 1e6 if duration > 0 else 0
-
-        self._publish("complete", {
-            "protocol": "sequential",
-            "filename": filename,
-            "size": len(file_content),
-            "sha256_ok": sha256_ok,
-            "sha256_available": expected_sha256 is not None,
-            "save_path": save_path,
-            "download_url": f"/api/receive/download/{filename}",
-            "duration_s": round(duration, 2),
-            "speed_mbps": round(speed_mbps, 2),
-            "frames_captured": frames_captured,
-            "bytes_received": bytes_received,
-            "chunks_decoded": len(received),
-            "total_chunks": total_frames,
-            "start_seen": saw_start,
-            "end_seen": saw_end,
-            "pass_count": pass_count,
-            "missing_frames": missing,
         })
 
     # -- auto-detect mode ------------------------------------------------
@@ -839,11 +677,14 @@ class ReceiverWorker(threading.Thread):
             if not ret:
                 time.sleep(0.001)
                 continue
-            frames_probed += 1
 
             self._maybe_publish_preview(frame)
 
-            frame = self._ensure_size(frame)
+            raw_frame = frame
+            frame = self._ensure_size(raw_frame)
+            if self._is_calibration_tail(frame):
+                continue
+            frames_probed += 1
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             if float(gray.mean()) < 1.5 and float(gray.std()) < 1.0:
                 black_streak += 1
@@ -865,65 +706,50 @@ class ReceiverWorker(threading.Thread):
                         "message": "Signal restored. Auto-detecting protocol and bpc...",
                     })
 
+            for bpc, profile, seq, fount in probe_candidates:
+                detected = [None]
+
+                def decode_sample(sampled):
+                    sequential = seq.decode_frame(sampled)
+                    if sequential.is_valid and not is_preflight_start_result(sequential):
+                        detected[0] = "sequential"
+                        return sequential
+                    fountain = fount.decode_frame(sampled)
+                    if fountain.is_valid:
+                        detected[0] = "fountain"
+                    return fountain
+
+                result, geometry_cursor, sampling = self._decode_with_sampling_fallbacks(
+                    frame, profile, decode_sample, geometry_candidates, geometry_cursor,
+                )
+                if result is None or not result.is_valid:
+                    continue
+                self._profile = profile
+                protocol_name = detected[0]
+                self._publish("status", {
+                    "state": "detected",
+                    "message": self._detected_message(
+                        protocol_name=protocol_name.title(), selected_bpc=selected_bpc,
+                        detected_bpc=bpc, sampling=self._sampling,
+                    ),
+                    "protocol": protocol_name,
+                })
+                # Detection must not consume the first payload/START packet.
+                replay = _FirstFrameCapture(raw_frame, cap)
+                if protocol_name == "sequential":
+                    self._run_sequential(replay)
+                else:
+                    self._run_fountain(replay)
+                return
+
+            # Only failed payload probes count toward switching devices.
+            # A long, valid calibration pattern is not a no-progress failure.
             self._maybe_request_runtime_fallback(
                 protocol_name="auto",
                 frames_captured=frames_probed,
                 has_progress=False,
                 low_signal_streak=black_streak,
             )
-
-            # Keep per-frame probing bounded: identity + a rotating subset of
-            # alternate geometry candidates.
-            batch = [geometry_candidates[0]]
-            dynamic_sampling = self._estimate_sampling_from_frame(frame, self._profile)
-            if dynamic_sampling is not None:
-                batch.append(dynamic_sampling)
-            if len(geometry_candidates) > 1:
-                for _ in range(5):
-                    geometry_cursor = (geometry_cursor + 1) % len(geometry_candidates)
-                    if geometry_cursor == 0:
-                        geometry_cursor = 1
-                    batch.append(geometry_candidates[geometry_cursor])
-
-            for sampling in batch:
-                for bpc, profile, seq, fount in probe_candidates:
-                    sampled = self._sample_grid(frame, profile, sampling=sampling)
-
-                    sr = seq.decode_frame(sampled)
-                    if sr.is_valid:
-                        if is_preflight_start_result(sr):
-                            continue
-                        self._sampling = sampling
-                        self._profile = profile
-                        self._publish("status", {
-                            "state": "detected",
-                            "message": self._detected_message(
-                                protocol_name="Sequential",
-                                selected_bpc=selected_bpc,
-                                detected_bpc=bpc,
-                                sampling=sampling,
-                            ),
-                            "protocol": "sequential",
-                        })
-                        self._run_sequential(cap)
-                        return
-
-                    fr = fount.decode_frame(sampled)
-                    if fr.is_valid:
-                        self._sampling = sampling
-                        self._profile = profile
-                        self._publish("status", {
-                            "state": "detected",
-                            "message": self._detected_message(
-                                protocol_name="Fountain",
-                                selected_bpc=selected_bpc,
-                                detected_bpc=bpc,
-                                sampling=sampling,
-                            ),
-                            "protocol": "fountain",
-                        })
-                        self._run_fountain(cap)
-                        return
 
         self._publish("stopped", {
             "message": "Stopped by user",
@@ -932,7 +758,24 @@ class ReceiverWorker(threading.Thread):
 
     # -- helpers ---------------------------------------------------------
 
+    def _is_calibration_tail(self, frame) -> bool:
+        # Offline senders keep the pattern visible until the user confirms.
+        # Do not search other geometries while this already-validated signal
+        # is still on screen. Once payload starts this extra probe disappears.
+        if not self._awaiting_payload or self._calibration_protocol is None:
+            return False
+        sampled = sample_grid(frame, self._profile, self._sampling)
+        return is_preflight_start_result(self._calibration_protocol.decode_frame(sampled))
+
     def _ensure_size(self, frame):
+        if (self._calibration_capture_shape is not None
+                and frame.shape[:2] != self._calibration_capture_shape):
+            # A new capture size changes the cache identity. CRC-based fallback
+            # may recover the ongoing transfer, but its old hint is no longer
+            # described as calibrated and is never saved under the new size.
+            self._calibration_capture_shape = None
+            self._sampling = (0, 0, 1.0, 1.0)
+            self._set_runtime_state(calibration_state="calibrating", calibration_reused=False)
         return ensure_frame_size(frame, self._profile)
 
     def _decode_with_sampling_fallbacks(
