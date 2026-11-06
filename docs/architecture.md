@@ -27,6 +27,24 @@ src/
 | `adapters` | Persistent capture, device registry, storage and integrations | Protocol rules |
 | `interfaces` | CLI commands, web routes, preview, sender HTML generation | Protocol state machines and decoding heuristics |
 
+## Overview
+
+```mermaid
+flowchart TD
+    Sender["Browser sender\nsender.html / app.js"] -->|"HDMI frames"| Capture["USB capture card"]
+    CLISend["hdmi-send\nSendSession + renderer"] -->|"HDMI frames"| Capture
+    Capture --> CM["CaptureManager\npersistent handle"]
+    CM --> Worker["ReceiverWorker\ncalibration + sampling"]
+    Worker --> Calib[("calibration.json\nCalibrationStore")]
+    Worker --> RS["ReceiveSession\nprotocol detection + reconstruction"]
+    RS --> Files[("received_files/")]
+    Web["Flask app\nroutes + preview stream"] --> CM
+    Web --> RS
+    CLIRecv["hdmi-recv"] --> Worker
+    Settings[("settings.json\nCLI consoles")] --> CLISend
+    Settings --> CLIRecv
+```
+
 ## Sources of truth
 
 - `hdmi_transfer.domain.protocol_manifest` defines profiles, magic values, header sizes and parameters exposed to the browser sender.
@@ -41,6 +59,13 @@ src/
 3. The selected renderer displays the frames.
 4. The browser sender follows the same wire protocol through generated assets.
 
+A folder or several files selected or dropped in the browser sender are packed
+offline by `interfaces/browser_sender/archive.js` (deflate through
+`CompressionStream` when it helps, stored otherwise, 65 535 entries max) into a
+single `<folder>.zip` or `files.zip`. The archive then follows the normal
+single-file path, so the receiver and the wire protocol are unchanged and the
+result is received as one `.zip`.
+
 ## Receiving flow
 
 1. `CaptureManager` opens or reuses a persistent capture handle.
@@ -53,6 +78,20 @@ on each reception. Fountain seeds are deduplicated before reconstruction; expens
 progress snapshots are rate-limited, and JPEG previews are produced only while a
 viewer is connected. See [calibration](calibration.md) for offline confirmation,
 stored state and forced recalibration.
+
+## Persistent state
+
+- `HDMI_TRANSFER_STATE_DIR` (default `~/.hdmi-transfer`) holds `settings.json`
+  (`core.settings`, used by the CLI send/receive consoles, defaults from
+  `domain.transfer_defaults`) and
+  `calibration.json` (`adapters.calibration_store`, versioned, at most 64 entries
+  keyed by a hash of device, source, backend, profile and capture shape). Both
+  files are replaced atomically; calibration entries are hints that are always
+  revalidated against live frames.
+- Received files are written to `received_files/` (configurable output).
+- In Docker, `compose.yaml` mounts the `received-files` and `calibration-state`
+  volumes on `/app/received_files` and `/app/state`, and sets
+  `HDMI_TRANSFER_STATE_DIR=/app/state`.
 
 ## Web application
 

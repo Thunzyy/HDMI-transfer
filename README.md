@@ -17,6 +17,7 @@
   <a href="#transfer-speeds">Transfer speeds</a> ·
   <a href="docs/getting-started.md">Installation guide</a> ·
   <a href="docs/hardware-setup.md">Hardware setup</a> ·
+  <a href="docs/architecture.md">Architecture</a> ·
   <a href="#faq">FAQ</a>
 </p>
 
