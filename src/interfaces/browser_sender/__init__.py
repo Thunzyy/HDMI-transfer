@@ -96,7 +96,8 @@ def render_sender_script_body() -> str:
     protocol_js = render_protocol_javascript().rstrip()
     app_js = _read_asset_text("app.js").strip()
     calibration_js = _read_asset_text("calibration.js").strip()
-    return f"{protocol_js}\n\n{calibration_js}\n\n{app_js}\n"
+    archive_js = _read_asset_text("archive.js").strip()
+    return f"{protocol_js}\n\n{calibration_js}\n\n{archive_js}\n\n{app_js}\n"
 
 
 def render_sender_html() -> str:

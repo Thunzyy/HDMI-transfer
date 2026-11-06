@@ -94,6 +94,8 @@
   const dropZone = document.getElementById("dropZone");
   const fileInput = document.getElementById("fileInput");
   const fileInputAlt = document.getElementById("fileInputAlt");
+  const folderInput = document.getElementById("folderInput");
+  const folderInputAlt = document.getElementById("folderInputAlt");
   const fileNameEl = document.getElementById("fileName");
   const fileSizeEl = document.getElementById("fileSize");
   const fileChunksEl = document.getElementById("fileChunks");
@@ -1195,6 +1197,7 @@
     fileNameEl.textContent = fileName;
     fileSizeEl.textContent = fmtSize(raw.length);
     dropZone.classList.add("loaded");
+    if (runtimeOptions.debugTitle) window.__senderPayload = () => ({ name: state.fileName, bytes: state.rawBytes });
   }
 
   function handleFile(file) {
@@ -1205,6 +1208,35 @@
       await applyLoadedBytes(raw, file.name);
     };
     reader.readAsArrayBuffer(file);
+  }
+
+  // Folders and multi-file selections are zipped before sending.
+  async function handleZipEntries(entries, archiveName) {
+    if (!entries.length) return;
+    fileNameEl.textContent = "Zipping...";
+    try {
+      await applyLoadedBytes(await zipArchive.build(entries), archiveName);
+    } catch (err) {
+      fileNameEl.textContent = state.fileName || "--";
+      configWarningEl.textContent = err.message || String(err);
+    }
+  }
+
+  function handleFileList(files) {
+    if (!files || !files.length) return;
+    if (files.length === 1 && !files[0].webkitRelativePath) return handleFile(files[0]);
+    const root = (files[0].webkitRelativePath || "").split("/")[0];
+    return handleZipEntries(zipArchive.fromFileList(files), root ? `${root}.zip` : "files.zip");
+  }
+
+  async function handleDrop(dataTransfer) {
+    const fsEntries = Array.from(dataTransfer.items || [])
+      .map((item) => item.webkitGetAsEntry && item.webkitGetAsEntry())
+      .filter(Boolean);
+    if (!fsEntries.length) return handleFileList(dataTransfer.files);
+    if (fsEntries.length === 1 && fsEntries[0].isFile) return handleFile(dataTransfer.files[0]);
+    const name = fsEntries.length === 1 ? `${fsEntries[0].name}.zip` : "files.zip";
+    return handleZipEntries(await zipArchive.collectDropped(fsEntries), name);
   }
 
   async function loadPayloadFromUrl(url, suggestedName = "") {
@@ -1247,14 +1279,16 @@
     updateDerivedStats();
   }
 
-  fileInput.addEventListener("change", (e) => handleFile(e.target.files[0]));
-  fileInputAlt.addEventListener("change", (e) => handleFile(e.target.files[0]));
+  fileInput.addEventListener("change", (e) => handleFileList(e.target.files));
+  fileInputAlt.addEventListener("change", (e) => handleFileList(e.target.files));
+  folderInput.addEventListener("change", (e) => handleFileList(e.target.files));
+  folderInputAlt.addEventListener("change", (e) => handleFileList(e.target.files));
 
   dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("dragover"); });
   dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
   dropZone.addEventListener("drop", (e) => {
     e.preventDefault(); dropZone.classList.remove("dragover");
-    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    handleDrop(e.dataTransfer);
   });
 
   startBtn.addEventListener("click", startSending);

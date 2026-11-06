@@ -40,6 +40,6 @@ jobs:
         run: |
           ./tools/run_quality_gate.ps1
 
-      - name: Verify sender calibration in headless Chrome
+      - name: Verify browser sender in headless Chrome
         shell: pwsh
-        run: python -m pytest tests/browser/test_sender_calibration.py --browser -v
+        run: python -m pytest tests/browser --browser -v

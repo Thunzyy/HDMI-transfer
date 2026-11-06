@@ -48,6 +48,7 @@ A browser-based sender, a USB capture-card receiver, fountain codes and a local 
 
 - **Video transport**: move a file between two computers using HDMI and a USB capture card.
 - **Standalone sender**: open `sender.html` locally in a browser, with no Python installation on the sending computer.
+- **Folders**: pick or drop a folder (or several files); it is zipped in the browser and received as one `.zip`.
 - **Browser-based reception**: select a capture device, preview the signal, track progress, download files and browse history.
 - **Fountain codes**: reconstruct a file from enough packets, even when some video frames are lost.
 - **Explicit settings**: choose Balanced, Speed or Quality profiles and configure the encoding.

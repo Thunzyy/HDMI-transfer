@@ -57,7 +57,7 @@ def test_sender_routes_serve_standalone_sender_and_wrapper() -> None:
 
     sender_app = client.get("/sender/app")
     assert sender_app.status_code == 200
-    assert b"Drop a file to send" in sender_app.data
+    assert b"Drop files or a folder to send" in sender_app.data
 
     sender_page = client.get("/sender/page")
     assert sender_page.status_code == 200
