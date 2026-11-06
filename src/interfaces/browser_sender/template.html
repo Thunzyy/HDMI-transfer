@@ -97,6 +97,9 @@ body{display:flex}
 }
 .change-btn:hover{border-color:rgba(255,255,255,0.3);color:var(--bright)}
 .change-btn input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.change-group{margin-left:auto;display:flex;gap:8px;flex-shrink:0}
+.change-group .change-btn{margin-left:0}
+.dz-empty .change-btn{margin:8px 0 0;z-index:1}
 
 /* Info chips row */
 .info-row{
@@ -293,13 +296,17 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
     <span class="brand-title">HDMI Transfer</span>
   </div>
   <div id="dropZone">
-    <input type="file" id="fileInput"/>
+    <input type="file" id="fileInput" multiple/>
     <div class="dz-empty">
       <div class="dz-icon">
         <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       </div>
-      <div class="dz-title">Drop a file to send</div>
-      <div class="dz-hint">or click anywhere to browse</div>
+      <div class="dz-title">Drop files or a folder to send</div>
+      <div class="dz-hint">Click anywhere to browse files. Folders and multiple files are zipped.</div>
+      <div class="change-btn">
+        Choose folder
+        <input type="file" id="folderInput" webkitdirectory/>
+      </div>
     </div>
     <div class="dz-loaded">
       <div class="file-card">
@@ -313,9 +320,15 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
             <span id="fileChunks">--</span>
           </div>
         </div>
-        <div class="change-btn">
-          Change
-          <input type="file" id="fileInputAlt"/>
+        <div class="change-group">
+          <div class="change-btn">
+            Files
+            <input type="file" id="fileInputAlt" multiple/>
+          </div>
+          <div class="change-btn">
+            Folder
+            <input type="file" id="folderInputAlt" webkitdirectory/>
+          </div>
         </div>
       </div>
       <div class="info-row" id="infoRow">
