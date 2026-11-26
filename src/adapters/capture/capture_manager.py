@@ -201,6 +201,10 @@ class CaptureManager:
     def read(self) -> tuple[bool, Any | None]:
         """Read one frame from the persistent capture if present."""
         with self._lock:
+            # A pending prime is replacing the handle (usually a device
+            # switch): frames from the outgoing device would be misleading.
+            if not self._ready.is_set():
+                return False, None
             capture = self._capture
             if capture is None or not capture.isOpened():
                 return False, None

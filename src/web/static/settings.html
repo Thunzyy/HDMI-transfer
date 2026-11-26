@@ -329,7 +329,7 @@
 <script>
 (() => {
   const SETTINGS_KEY = "hdmi_transfer_settings";
-  const DEVICE_CACHE_KEY = "hdmi_transfer_devices";
+  const DEVICE_CACHE_KEY = "hdmi_transfer_devices_v2";
 
   const defaultDevice = document.getElementById("defaultDevice");
   const defaultProfile = document.getElementById("defaultProfile");
@@ -369,14 +369,19 @@
       devs.forEach(d => {
         const o = document.createElement("option");
         o.value = d.index;
-        o.textContent = d.name + " (" + d.width + "x" + d.height + " @ " + Math.round(d.fps) + " fps)";
+        o.dataset.name = d.name;
+        o.textContent = d.name + " · " + d.height + "p" + Math.round(d.fps);
         defaultDevice.appendChild(o);
       });
       defaultDevice.disabled = false;
 
       // Apply saved setting
       const s = loadSettings();
-      if (s.defaultDevice !== undefined) defaultDevice.value = String(s.defaultDevice);
+      // Match the saved device by name: indices change between detections.
+      const savedOpt = s.defaultDeviceName
+        ? [...defaultDevice.options].find(o => o.dataset.name === s.defaultDeviceName)
+        : null;
+      defaultDevice.value = savedOpt ? savedOpt.value : "";
       if (s.defaultProfile) defaultProfile.value = s.defaultProfile;
       if (s.defaultMode) defaultMode.value = s.defaultMode;
       if (s.defaultBpc !== undefined) defaultBpc.value = String(Number(s.defaultBpc));
@@ -397,6 +402,9 @@
   saveBtn.addEventListener("click", () => {
     const s = {
       defaultDevice: defaultDevice.value ? Number(defaultDevice.value) : null,
+      defaultDeviceName: defaultDevice.value
+        ? defaultDevice.selectedOptions[0].dataset.name
+        : null,
       defaultProfile: defaultProfile.value,
       defaultMode: defaultMode.value,
       defaultBpc: Number(defaultBpc.value),

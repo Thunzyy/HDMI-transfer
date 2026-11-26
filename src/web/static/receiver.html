@@ -478,6 +478,24 @@ body.right-collapsed #panel{display:none}
     }
   }
 
+  // Chrome does not fire "load" for each part of a multipart MJPEG stream,
+  // so watch naturalWidth to know when the first frame is on screen.
+  let previewFrameWatch = null;
+  function watchFirstPreviewFrame() {
+    clearInterval(previewFrameWatch);
+    previewFrameWatch = setInterval(() => {
+      if (previewStream.style.display === "none") {
+        clearInterval(previewFrameWatch);
+        return;
+      }
+      if (previewStream.naturalWidth > 0) {
+        clearInterval(previewFrameWatch);
+        markPreviewHeartbeat();
+        previewIdle.classList.add("hidden");
+      }
+    }, 150);
+  }
+
   function startPreviewStream(force = false) {
     const q = Number(previewQualitySelect.value || 75);
     const src = "/api/receive/preview?ts=" + Date.now() + "&quality=" + q;
@@ -485,9 +503,11 @@ body.right-collapsed #panel{display:none}
     previewStream.src = src;
     previewStream.style.display = "block";
     markPreviewHeartbeat();
+    watchFirstPreviewFrame();
   }
 
   function stopPreviewStream() {
+    clearInterval(previewFrameWatch);
     previewStream.removeAttribute("src");
     previewStream.src = "";
     previewStream.style.display = "none";
@@ -668,9 +688,18 @@ body.right-collapsed #panel{display:none}
   }
 
   /* ── Devices ───────────────────────────── */
-  const DEVICE_CACHE_KEY = "hdmi_transfer_devices";
+  const DEVICE_CACHE_KEY = "hdmi_transfer_devices_v2";
+
+  function savedDeviceName() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+      return s.defaultDeviceName || null;
+    } catch { return null; }
+  }
 
   function populateDevices(devs) {
+    // Keep the user's pick across refreshes; match by name, indices can move.
+    const previousName = deviceSelect.selectedOptions[0]?.dataset.name || null;
     deviceSelect.innerHTML = "";
     if (!devs.length) {
       deviceSelect.innerHTML = '<option value="">No devices</option>';
@@ -681,9 +710,15 @@ body.right-collapsed #panel{display:none}
       const o = document.createElement("option");
       o.value = d.index;
       o.dataset.name = d.name;
-      o.textContent = d.name + " (" + d.width + "x" + d.height + " @ " + Math.round(d.fps) + " fps)";
+      o.textContent = d.name + " · " + d.height + "p" + Math.round(d.fps);
+      o.title = d.name + " (" + d.width + "x" + d.height + " @ " + Math.round(d.fps) + " fps)";
       deviceSelect.appendChild(o);
     });
+    const wanted = previousName || savedDeviceName();
+    const match = wanted && [...deviceSelect.options].find(o => o.dataset.name === wanted);
+    if (match) deviceSelect.value = match.value;
+    // Open the selected device now so the idle preview shows without a click.
+    warmDevice(deviceSelect.value);
     statusMsg.textContent = devs.length + " device(s) found.";
     startBtn.disabled = false;
     recalibrateBtn.disabled = false;
@@ -716,7 +751,8 @@ body.right-collapsed #panel{display:none}
   }
 
   function warmDevice(idx) {
-    fetch("/api/devices/warm", {
+    if (idx === "" || idx === null || idx === undefined) return Promise.resolve();
+    return fetch("/api/devices/warm", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({device: +idx}),
     }).catch(() => {});
@@ -763,7 +799,18 @@ body.right-collapsed #panel{display:none}
     badgeRes.textContent = m[profileSelect.value] || profileSelect.value;
   }
   profileSelect.addEventListener("change", updateBadge);
-  deviceSelect.addEventListener("change", () => warmDevice(deviceSelect.value));
+  deviceSelect.addEventListener("change", async () => {
+    const name = deviceSelect.selectedOptions[0]?.dataset.name || "device";
+    if (idlePreviewEnabled && stopBtn.disabled) {
+      // Opening a capture card can take several seconds: say so instead of
+      // leaving the previous camera's last frame on screen.
+      previewIdle.textContent = "Opening " + name + "...";
+      previewIdle.classList.remove("hidden");
+      previewStream.style.display = "none";
+    }
+    await warmDevice(deviceSelect.value);
+    if (idlePreviewEnabled && stopBtn.disabled) startPreviewStream(true);
+  });
 
   /* ── Start / Stop ──────────────────────── */
   async function start(options = {}) {
@@ -1025,7 +1072,7 @@ body.right-collapsed #panel{display:none}
     deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = false;
     badgeRec.style.display = "none";
     if (idlePreviewEnabled) {
-      previewIdle.textContent = "Live preview (idle)";
+      previewIdle.textContent = "Opening preview...";
       previewIdle.classList.remove("hidden");
       startPreviewStream(true);
     } else {
@@ -1149,10 +1196,6 @@ body.right-collapsed #panel{display:none}
       const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
       autoScanEnabled = s.autoDeviceScan !== false;
       idlePreviewEnabled = s.idlePreviewEnabled !== false;
-      if (s.defaultDevice !== null && s.defaultDevice !== undefined) {
-        deviceSelect.value = String(s.defaultDevice);
-        warmDevice(s.defaultDevice);
-      }
       if (s.defaultProfile) profileSelect.value = s.defaultProfile;
       if (s.defaultMode) modeSelect.value = s.defaultMode;
       if (s.defaultBpc) bpcSelect.value = String(s.defaultBpc);
@@ -1346,7 +1389,7 @@ body.right-collapsed #panel{display:none}
     else loadDevices(false, true);
   }
   if (idlePreviewEnabled) {
-    previewIdle.textContent = "Live preview (idle)";
+    previewIdle.textContent = "Opening preview...";
     previewIdle.classList.remove("hidden");
     startPreviewStream(true);
   }
