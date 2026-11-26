@@ -98,8 +98,15 @@ class ReceiverWorker(threading.Thread):
         device_identity: str | None = None,
         calibration_store: CalibrationStore | None = None,
         history_store: HistoryStore | None = None,
+        sender_profile_id: int | None = None,
+        fallback_profile_ids: list[int] | None = None,
     ) -> None:
         super().__init__(daemon=True)
+        self._sender_profile_id = sender_profile_id
+        self._fallback_profile_ids = [
+            int(pid) for pid in (fallback_profile_ids or []) if pid != sender_profile_id
+        ]
+        self.stop_reason: str | None = None
         self._device = device
         self._profile = profile
         self._mode = mode
@@ -148,6 +155,8 @@ class ReceiverWorker(threading.Thread):
             "calibration_samples": 0,
             "active_device": self._active_device,
             "active_backend": self._active_backend,
+            "sender_profile_id": self._sender_profile_id,
+            "matched_profile_id": None,
         }
         # Latest frame for MJPEG preview stream
         self._preview_frame: bytes | None = None
@@ -196,11 +205,15 @@ class ReceiverWorker(threading.Thread):
         except Exception:  # History is best effort; never lose the complete event.
             log.exception("Unable to record transfer history")
 
-    def stop(self) -> None:
+    def stop(self, reason: str = "user") -> None:
+        """Stop the worker. ``reason`` is "user", "supervisor" or "replaced"."""
+        if self.stop_reason is None:
+            self.stop_reason = reason
         self._stop_event.set()
         with self._preview_condition:
             self._preview_condition.notify_all()
-        self.join(timeout=5.0)
+        if self.ident is not None:
+            self.join(timeout=5.0)
 
     # -- preview ---------------------------------------------------------
 
@@ -371,6 +384,7 @@ class ReceiverWorker(threading.Thread):
         geometry_candidates = self._build_geometry_candidates(self._profile)
         geometry_cursor = 0
         hints: dict[str, tuple[int, int, float, float] | None] = {}
+        other_hints: dict[str, list[tuple[int, str, tuple[int, int, float, float]]]] = {}
         current: dict[str, tuple[int, int, float, float]] = {}
         stable_match = None
         unique_frames: set[int] = set()
@@ -411,34 +425,51 @@ class ReceiverWorker(threading.Thread):
             frame = self._ensure_size(raw_frame)
             matched = False
             for bpc, profile, protocol in probe_candidates:
-                key = calibration_key(
-                    device_identity=self._device_identity, open_device=self._active_device,
-                    backend=self._active_backend, profile=profile,
-                    capture_shape=raw_frame.shape,
-                )
+                key = self._profile_calibration_key(profile, raw_frame.shape, self._sender_profile_id)
                 if key not in hints:
                     hints[key] = None if self._force_recalibration else self._calibration_store.load(key)
                     current[key] = hints[key] or (0, 0, 1.0, 1.0)
+                    other_hints[key] = [] if self._force_recalibration else [
+                        (pid, other_key, hint)
+                        for pid in self._fallback_profile_ids
+                        for other_key in [self._profile_calibration_key(profile, raw_frame.shape, pid)]
+                        for hint in [self._calibration_store.load(other_key)]
+                        if hint is not None
+                    ]
                 self._sampling = current[key]
 
                 def decode_calibration(sampled):
                     decoded = protocol.decode_frame(sampled)
                     return decoded if is_calibration_frame_valid(sampled, profile, decoded) else None
 
-                result, geometry_cursor, sampling = self._decode_with_sampling_fallbacks(
-                    frame, profile, decode_calibration, geometry_candidates, geometry_cursor,
-                )
+                # Another sender PC's saved geometry is tried before any image search.
+                result, sampling, match_pid, match_key = None, None, self._sender_profile_id, key
+                if other_hints[key]:
+                    for pid, other_key, hint in [(match_pid, key, current[key])] + other_hints[key]:
+                        candidate = decode_calibration(self._sample_grid(frame, profile, hint))
+                        if is_preflight_start_result(candidate) and candidate.frame_index is not None:
+                            result, sampling, match_pid, match_key = candidate, hint, pid, other_key
+                            break
+                if result is None:
+                    match_pid, match_key = self._sender_profile_id, key
+                    result, geometry_cursor, sampling = self._decode_with_sampling_fallbacks(
+                        frame, profile, decode_calibration, geometry_candidates, geometry_cursor,
+                    )
                 if not is_preflight_start_result(result) or result.frame_index is None:
                     continue
                 sampling = sampling or self._sampling
-                current[key] = sampling
-                match = (key, sampling)
+                if match_key == key:
+                    current[key] = sampling
+                match = (match_key, sampling)
                 if stable_match != match:
                     unique_frames.clear()
                     stable_match = match
                 unique_frames.add(result.frame_index)
                 matched = True
-                reused = hints[key] is not None and sampling == hints[key]
+                matched_hint = hints[key] if match_key == key else next(
+                    hint for pid, other_key, hint in other_hints[key] if other_key == match_key
+                )
+                reused = matched_hint is not None and sampling == matched_hint
                 self._set_runtime_state(
                     calibration_state="checking" if reused else "calibrating",
                     calibration_reused=False, calibration_samples=len(unique_frames),
@@ -450,8 +481,11 @@ class ReceiverWorker(threading.Thread):
                 self._awaiting_payload = True
                 self._calibration_protocol = protocol
                 self._calibration_capture_shape = raw_frame.shape[:2]
-                saved = self._calibration_store.save(key, sampling)
+                saved = self._calibration_store.save(match_key, sampling, sender_profile=match_pid)
                 calibration_state = "reused" if reused else ("saved" if saved else "validated")
+                matched_profile_id = match_pid if match_pid != self._sender_profile_id else None
+                if matched_profile_id is not None:
+                    self._set_runtime_state(matched_profile_id=matched_profile_id)
                 self._publish("status", {
                     "state": "preflight_ok",
                     "message": self._preflight_detected_message(
@@ -463,7 +497,7 @@ class ReceiverWorker(threading.Thread):
                     "transfer_bpc": bpc, "calibration_state": calibration_state,
                     "calibration_reused": reused, "calibration_samples": len(unique_frames),
                     "low_signal_streak": 0, "low_signal_duration_s": 0.0,
-                    "low_signal_detected": False,
+                    "low_signal_detected": False, "matched_profile_id": matched_profile_id,
                 })
                 return True
             if not matched:
@@ -782,6 +816,13 @@ class ReceiverWorker(threading.Thread):
             return False
         sampled = sample_grid(frame, self._profile, self._sampling)
         return is_preflight_start_result(self._calibration_protocol.decode_frame(sampled))
+
+    def _profile_calibration_key(self, profile: ResolutionProfile, capture_shape, sender_profile) -> str:
+        return calibration_key(
+            device_identity=self._device_identity, open_device=self._active_device,
+            backend=self._active_backend, profile=profile, capture_shape=capture_shape,
+            sender_profile=sender_profile,
+        )
 
     def _ensure_size(self, frame):
         if (self._calibration_capture_shape is not None
