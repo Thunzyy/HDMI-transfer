@@ -31,6 +31,15 @@
 .config-select{width:100%;height:30px;font-size:12.5px}
 .btn-detect{width:100%;border-style:dashed;background:transparent;box-shadow:none;color:var(--fg-light);height:28px;font-size:12.5px}
 .btn-detect:hover:not(:disabled){border-style:solid;color:var(--fg)}
+.config-link{align-self:flex-start;font-size:12px;color:var(--fg-light);text-decoration:underline;text-decoration-color:var(--border-stronger);text-underline-offset:3px}
+.config-link:hover{color:var(--fg);text-decoration-color:var(--fg-lighter)}
+.auto-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.auto-label{font-size:12.5px;font-weight:500;color:var(--fg)}
+.auto-status{font-size:12px;line-height:1.45;color:var(--fg-lighter);margin-top:-6px}
+.auto-status.armed{color:var(--green)}
+.auto-status.warn{color:var(--yellow)}
+.config-section-title + .config-field,.auto-status + .config-section-title{margin-top:2px}
+.auto-status + .config-section-title{padding-top:12px;border-top:1px solid var(--border)}
 
 /* Center */
 #center{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
@@ -169,6 +178,24 @@
       <a href="/settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h9"/><path d="M17 6h3"/><path d="M4 12h3"/><path d="M11 12h9"/><path d="M4 18h11"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Settings</span></a>
     </nav>
     <div class="config">
+      <div class="config-section-title">Sender PC</div>
+      <div class="config-field">
+        <div class="config-head">
+          <label class="config-label" for="senderProfileSelect">Saved PC</label>
+          <span class="help-tip" tabindex="0">?
+            <span class="help-bubble">Each sender PC keeps its own capture settings and calibration. Pick the PC you are sending from. Changing a setting below saves it to that PC.</span>
+          </span>
+        </div>
+        <select class="ui-field config-select" id="senderProfileSelect">
+          <option value="">No sender PC</option>
+        </select>
+        <a class="config-link" href="/settings#senderProfiles">Manage sender PCs</a>
+      </div>
+      <div class="auto-row">
+        <span class="auto-label" id="autoReceiveLabel">Auto receive</span>
+        <button class="ui-switch" id="autoReceiveSwitch" type="button" role="switch" aria-checked="false" aria-labelledby="autoReceiveLabel" aria-describedby="autoReceiveStatus"></button>
+      </div>
+      <div class="auto-status" id="autoReceiveStatus" role="status" aria-live="polite">Off. Click Start for each file.</div>
       <div class="config-section-title">Capture</div>
       <div class="config-field">
         <div class="config-head">
@@ -533,6 +560,7 @@
     devs.forEach(d => {
       const o = document.createElement("option");
       o.value = d.index;
+      o.dataset.name = d.name;
       o.textContent = d.name + " (" + d.width + "x" + d.height + " @ " + Math.round(d.fps) + " fps)";
       deviceSelect.appendChild(o);
     });
@@ -634,6 +662,7 @@
           bpc:+bpcSelect.value,
           preflight:true,
           force_recalibration: options.force === true,
+          profile_id: activeProfileId,
         }),
       });
       if (!r.ok) { const e = await r.json(); statusMsg.textContent = "Error: " + (e.error||"Failed"); log("error", e.error||"Start failed"); return; }
@@ -1007,16 +1036,171 @@
         previewQualitySelect.value = String(Number(s.defaultPreviewQuality));
       }
     } catch {}
+    applyActiveProfile();
     updateBadge();
   }
 
+  /* ── Sender PC profiles and auto receive ── */
+  const senderProfileSelect = document.getElementById("senderProfileSelect");
+  const autoReceiveSwitch = document.getElementById("autoReceiveSwitch");
+  const autoReceiveStatus = document.getElementById("autoReceiveStatus");
+  const JSON_HEADERS = {"Content-Type": "application/json"};
+  let senderProfiles = [];
+  let activeProfileId = null;
+  let applyingProfile = false;
+  let autoState = {enabled: false, paused: false, reason: "", armed: false};
+
+  function activeProfile() {
+    return senderProfiles.find(p => p.id === activeProfileId) || null;
+  }
+
+  function renderSenderProfiles() {
+    senderProfileSelect.innerHTML = "";
+    senderProfileSelect.add(new Option("No sender PC", ""));
+    senderProfiles.forEach(p => senderProfileSelect.add(new Option(p.name, String(p.id))));
+    senderProfileSelect.value = activeProfileId == null ? "" : String(activeProfileId);
+  }
+
+  function applyActiveProfile() {
+    const p = activeProfile();
+    if (!p) return;
+    applyingProfile = true;
+    try {
+      const options = [...deviceSelect.options];
+      // Same rule as the server: saved index if it still has the saved name, else first card with that name.
+      const byIndex = options.find(o => p.device_index != null && o.value === String(p.device_index));
+      const byName = options.find(o => o.dataset.name && o.dataset.name === p.device_name);
+      const pick = (byIndex && (!p.device_name || byIndex.dataset.name === p.device_name)) ? byIndex : (byName || byIndex);
+      if (pick) deviceSelect.value = pick.value;
+      profileSelect.value = p.profile;
+      modeSelect.value = p.mode;
+      bpcSelect.value = String(p.bpc);
+      previewQualitySelect.value = String(p.preview_quality);
+      [profileSelect, modeSelect, bpcSelect].forEach(el => el.dispatchEvent(new Event("change")));
+      updateBadge();
+    } finally {
+      applyingProfile = false;
+    }
+  }
+
+  async function saveActiveProfile() {
+    const p = activeProfile();
+    if (!p || applyingProfile) return;
+    const option = deviceSelect.selectedOptions[0];
+    const body = {
+      device_name: (option && option.dataset.name) || p.device_name,
+      device_index: deviceSelect.value === "" ? p.device_index : +deviceSelect.value,
+      profile: profileSelect.value, mode: modeSelect.value,
+      bpc: +bpcSelect.value, preview_quality: +previewQualitySelect.value,
+    };
+    try {
+      const r = await fetch("/api/sender-profiles/" + p.id, {method: "PUT", headers: JSON_HEADERS, body: JSON.stringify(body)});
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "save failed");
+      Object.assign(p, d);
+      log("info", "Saved to " + p.name + ".");
+    } catch (e) {
+      log("error", "Could not save to " + p.name + ": " + e.message);
+    }
+  }
+
+  function renderAuto() {
+    autoReceiveSwitch.setAttribute("aria-checked", autoState.enabled ? "true" : "false");
+    let text = "Off. Click Start for each file.";
+    let tone = "";
+    if (autoState.enabled) {
+      const p = activeProfile();
+      if (!p) { text = "Choose a sender PC to arm the receiver."; tone = "warn"; }
+      else if (autoState.paused) { text = "Paused: " + autoState.reason + ". Turn it off and on to resume."; tone = "warn"; }
+      else if (autoState.armed) { text = "Armed. Waiting for " + p.name + " to send."; tone = "armed"; }
+      else { text = "Arming for " + p.name + "..."; }
+    }
+    autoReceiveStatus.textContent = text;
+    autoReceiveStatus.className = "auto-status" + (tone ? " " + tone : "");
+  }
+
+  async function loadSenderProfiles() {
+    senderProfileSelect.disabled = true;
+    try {
+      const r = await fetch("/api/sender-profiles", {cache: "no-store"});
+      const d = await r.json();
+      senderProfiles = Array.isArray(d.profiles) ? d.profiles : [];
+      activeProfileId = d.active_profile_id ?? null;
+      renderSenderProfiles();
+      applyActiveProfile();
+    } catch (e) {
+      log("error", "Could not load sender PCs: " + e.message);
+    } finally {
+      senderProfileSelect.disabled = false;
+    }
+  }
+
+  senderProfileSelect.addEventListener("change", async () => {
+    const id = senderProfileSelect.value ? +senderProfileSelect.value : null;
+    const url = id == null ? "/api/sender-profiles/active" : "/api/sender-profiles/" + id + "/activate";
+    try {
+      const r = await fetch(url, {method: "POST", headers: JSON_HEADERS, body: JSON.stringify({id})});
+      if (!r.ok) throw new Error((await r.json()).error || "failed");
+      activeProfileId = id;
+      applyActiveProfile();
+      log("info", id == null ? "No sender PC selected." : "Sender PC: " + activeProfile().name + ".");
+    } catch (e) {
+      log("error", "Could not select the sender PC: " + e.message);
+      renderSenderProfiles();
+    }
+    renderAuto();
+  });
+
+  [deviceSelect, profileSelect, modeSelect, bpcSelect, previewQualitySelect].forEach(el => {
+    el.addEventListener("change", saveActiveProfile);
+  });
+
+  autoReceiveSwitch.addEventListener("click", async () => {
+    const enabled = autoReceiveSwitch.getAttribute("aria-checked") !== "true";
+    autoReceiveSwitch.disabled = true;
+    try {
+      const r = await fetch("/api/receive/auto", {method: "POST", headers: JSON_HEADERS, body: JSON.stringify({enabled})});
+      if (!r.ok) throw new Error((await r.json()).error || "failed");
+      autoState = await r.json();
+      log("info", enabled ? "Auto receive on." : "Auto receive off.");
+    } catch (e) {
+      log("error", "Could not change auto receive: " + e.message);
+    } finally {
+      autoReceiveSwitch.disabled = false;
+      renderAuto();
+    }
+  });
+
+  async function pollReceiverState() {
+    try {
+      const r = await fetch("/api/receive/status", {cache: "no-store"});
+      const d = await r.json();
+      if (d.auto_receive) autoState = d.auto_receive;
+      const serverActive = d.active_profile_id ?? null;
+      if (serverActive !== activeProfileId) {
+        const matched = senderProfiles.find(p => p.id === serverActive);
+        if (!matched && serverActive != null) await loadSenderProfiles();
+        activeProfileId = serverActive;
+        renderSenderProfiles();
+        applyActiveProfile();
+        if (d.matched_profile_id != null && d.matched_profile_id === serverActive && activeProfile()) {
+          log("success", "Signal matched " + activeProfile().name + ", switched sender PC.");
+        }
+      }
+      // An armed worker started by auto receive: attach to its progress without a Start click.
+      if (d.active && !sse && stopBtn.disabled) checkActiveWorker("Auto receive armed. Waiting for the sender.");
+    } catch {}
+    renderAuto();
+  }
+
   /* ── Check for active worker on page load ── */
-  async function checkActiveWorker() {
+  async function checkActiveWorker(message) {
     try {
       const r = await fetch("/api/receive/status");
       const d = await r.json();
       if (d.active) {
-        log("warn", "Previous session still active, reconnecting...");
+        if (message) log("info", message);
+        else log("warn", "Previous session still active, reconnecting...");
         startBtn.disabled = true; stopBtn.disabled = false; resetBtn.disabled = false;
         deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = true;
         badgeRec.style.display = "flex";
@@ -1077,6 +1261,8 @@
   });
   refreshBtn.addEventListener("click", () => loadDevices(true));
   checkActiveWorker();
+  loadSenderProfiles().then(pollReceiverState);
+  setInterval(pollReceiverState, 2000);
 })();
 
 // Live capture-config chips next to the title

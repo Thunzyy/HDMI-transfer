@@ -19,7 +19,8 @@ log = logging.getLogger(__name__)
 _IDLE_STATES = frozenset({
     "idle", "opening", "probing", "waiting", "preflight_wait", "no_signal", "fallback",
 })
-_NEUTRAL_STOPS = frozenset({"supervisor", "replaced"})
+# A user stop pauses auto receive instead (see the stop route), so it is not a failure either.
+_NEUTRAL_STOPS = frozenset({"supervisor", "replaced", "user"})
 
 
 class AutoReceiveSupervisor:
@@ -65,6 +66,11 @@ class AutoReceiveSupervisor:
         """New settings: clear any pause and restart an armed worker that is still idle."""
         with self._lock:
             self.clear_pause()
+            self.disarm()
+
+    def disarm(self) -> None:
+        """Stop the worker this supervisor armed, unless it is already receiving."""
+        with self._lock:
             worker = self._own_worker
             if worker is not None and worker.is_alive():
                 state = (worker.get_runtime_state() or {}).get("state")

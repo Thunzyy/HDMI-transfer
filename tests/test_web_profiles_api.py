@@ -89,3 +89,10 @@ def test_delete_active_profile_clears_active_and_calibration(client, tmp_path):
     assert client.delete(f"/api/sender-profiles/{profile_id}").status_code == 200
     assert client.get("/api/sender-profiles").get_json()["active_profile_id"] is None
     assert CalibrationStore().load("k") is None
+
+
+def test_turning_auto_off_disarms(client):
+    calls = []
+    client.application._auto_receive.disarm = lambda: calls.append("disarm")
+    client.post("/api/receive/auto", json={"enabled": False})
+    assert calls == ["disarm"]

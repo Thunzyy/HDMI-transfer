@@ -60,6 +60,36 @@
 .toast::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green)}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
+/* Sender PCs card */
+.group-title-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;padding-bottom:8px}
+.group-title-row h2{font-size:13px;font-weight:600;color:var(--fg)}
+.group-hint{padding:10px 18px 0;font-size:12px;color:var(--fg-lighter);line-height:1.5}
+.profile-empty{padding:16px 18px;font-size:13px;color:var(--fg-lighter)}
+.profile-empty.error{color:var(--red)}
+.profile-list{list-style:none;margin-top:8px}
+.profile-item{display:flex;align-items:center;gap:12px;padding:10px 12px 10px 18px;border-top:1px solid var(--border-muted)}
+.profile-item.is-active .profile-name::after{content:"Active";margin-left:8px;font-size:11px;font-weight:500;color:var(--accent);padding:1px 7px;border-radius:999px;border:1px solid var(--accent-line);background:var(--accent-dim)}
+.profile-text{flex:1;min-width:0}
+.profile-name{font-size:13px;font-weight:500;color:var(--fg)}
+.profile-meta{font-size:12px;color:var(--fg-lighter);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.profile-actions{display:flex;gap:2px;flex-shrink:0}
+.profile-form{margin:12px 18px 18px;padding:16px;border:1px solid var(--border-strong);border-radius:var(--radius-lg);background:var(--surface-75)}
+.profile-form-title{font-size:13px;font-weight:600;color:var(--fg);margin-bottom:12px}
+.profile-form-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.pf-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pf-wide{grid-column:span 2}
+.pf-field label{font-size:12px;font-weight:500;color:var(--fg-light)}
+.pf-field .ui-field{width:100%}
+.profile-form-error{margin-top:10px;font-size:12.5px;color:var(--red)}
+.profile-form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+
+@media (max-width: 760px) {
+  .profile-form-grid{grid-template-columns:1fr}
+  .pf-wide{grid-column:auto}
+  .pf-field .ui-field{height:44px}
+  .group-title-row{flex-wrap:wrap}
+}
+
 @media (max-width: 760px) {
   #center{overflow:visible}
   .center-top{padding:16px}
@@ -104,6 +134,66 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></svg>
           <span>          Recommended baseline for most 2-PC setups: Fountain + Balanced + 2 bpc, with low preview quality on the receiver. Switch to Speed only on a dedicated 120/144/240Hz HDMI path.</span>
         </div>
+
+        <section class="setting-group" id="senderProfiles" aria-labelledby="senderProfilesTitle">
+          <div class="setting-group-title group-title-row">
+            <h2 id="senderProfilesTitle">Sender PCs</h2>
+            <button class="ui-btn" id="addSenderProfileBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Add sender PC</button>
+          </div>
+          <p class="group-hint">Each PC keeps its capture settings and its own calibration. Changes here are saved right away.</p>
+          <div id="senderProfileList" aria-live="polite"><p class="profile-empty">Loading sender PCs...</p></div>
+          <form class="profile-form" id="senderProfileForm" hidden>
+            <h3 class="profile-form-title" id="senderProfileFormTitle">New sender PC</h3>
+            <div class="profile-form-grid">
+              <div class="pf-field pf-wide">
+                <label for="pfName">Name</label>
+                <input class="ui-field" id="pfName" maxlength="60" required placeholder="PC BNP" autocomplete="off"/>
+              </div>
+              <div class="pf-field pf-wide">
+                <label for="pfDevice">Capture device</label>
+                <select class="ui-field" id="pfDevice"><option value="">Loading devices...</option></select>
+              </div>
+              <div class="pf-field">
+                <label for="pfProfile">Profile</label>
+                <select class="ui-field" id="pfProfile">
+                  <option value="speed">Speed</option>
+                  <option value="balanced" selected>Balanced</option>
+                  <option value="quality">Quality</option>
+                </select>
+              </div>
+              <div class="pf-field">
+                <label for="pfMode">Mode</label>
+                <select class="ui-field" id="pfMode">
+                  <option value="fountain" selected>Fountain</option>
+                  <option value="auto">Auto-detect</option>
+                  <option value="sequential">Sequential</option>
+                </select>
+              </div>
+              <div class="pf-field">
+                <label for="pfBpc">Encoding</label>
+                <select class="ui-field" id="pfBpc">
+                  <option value="1">1 bpc</option>
+                  <option value="2" selected>2 bpc</option>
+                  <option value="3">3 bpc</option>
+                </select>
+              </div>
+              <div class="pf-field">
+                <label for="pfPreview">Preview quality</label>
+                <select class="ui-field" id="pfPreview">
+                  <option value="45" selected>Low</option>
+                  <option value="60">Balanced</option>
+                  <option value="75">High</option>
+                  <option value="90">Max</option>
+                </select>
+              </div>
+            </div>
+            <p class="profile-form-error" id="senderProfileFormError" role="alert" hidden></p>
+            <div class="profile-form-actions">
+              <button class="ui-btn ui-btn-outline" id="pfCancel" type="button">Cancel</button>
+              <button class="ui-btn ui-btn-primary" id="pfSave" type="submit">Save sender PC</button>
+            </div>
+          </form>
+        </section>
 
         <div class="setting-group">
           <div class="setting-group-title">Transfer protocol</div>
@@ -349,6 +439,164 @@
   }
   autoDeviceScan.addEventListener("change", loadDevices);
   loadDevices();
+})();
+
+// Sender PCs: saved per PC on the receiver (/api/sender-profiles)
+(() => {
+  const list = document.getElementById("senderProfileList");
+  const form = document.getElementById("senderProfileForm");
+  const formTitle = document.getElementById("senderProfileFormTitle");
+  const formError = document.getElementById("senderProfileFormError");
+  const addBtn = document.getElementById("addSenderProfileBtn");
+  const fields = {
+    name: document.getElementById("pfName"),
+    device: document.getElementById("pfDevice"),
+    profile: document.getElementById("pfProfile"),
+    mode: document.getElementById("pfMode"),
+    bpc: document.getElementById("pfBpc"),
+    preview: document.getElementById("pfPreview"),
+  };
+  const HEADERS = {"Content-Type": "application/json"};
+  const LABELS = {speed: "Speed", balanced: "Balanced", quality: "Quality", fountain: "Fountain", auto: "Auto-detect", sequential: "Sequential"};
+  const ICONS = {
+    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>',
+  };
+  let profiles = [];
+  let activeId = null;
+  let devices = [];
+  let editingId = null;
+
+  const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+
+  function render() {
+    if (!profiles.length) {
+      list.innerHTML = '<p class="profile-empty">No sender PC yet. Add one to keep its settings and calibration.</p>';
+      return;
+    }
+    list.innerHTML = '<ul class="profile-list">' + profiles.map(p => {
+      const meta = [p.device_name || "Device " + (p.device_index ?? "?"), LABELS[p.profile], LABELS[p.mode], p.bpc + " bpc"].join(" · ");
+      const name = escapeHtml(p.name);
+      return `<li class="profile-item${p.id === activeId ? " is-active" : ""}">
+        <div class="profile-text"><div class="profile-name">${name}</div><div class="profile-meta">${escapeHtml(meta)}</div></div>
+        <div class="profile-actions">
+          <button class="icon-btn" type="button" data-edit="${p.id}" data-tooltip="Edit" aria-label="Edit ${name}">${ICONS.edit}</button>
+          <button class="icon-btn is-danger" type="button" data-delete="${p.id}" data-tooltip="Delete" aria-label="Delete ${name}">${ICONS.trash}</button>
+        </div>
+      </li>`;
+    }).join("") + "</ul>";
+  }
+
+  async function load() {
+    try {
+      const r = await fetch("/api/sender-profiles", {cache: "no-store"});
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const d = await r.json();
+      profiles = d.profiles || [];
+      activeId = d.active_profile_id ?? null;
+      render();
+    } catch (e) {
+      list.innerHTML = '<p class="profile-empty error">Could not load sender PCs (' + escapeHtml(e.message) + ").</p>";
+    }
+  }
+
+  async function loadDevices() {
+    try {
+      const r = await fetch("/api/devices?cached_only=1");
+      devices = await r.json();
+    } catch { devices = []; }
+  }
+
+  function fillDeviceOptions(selected) {
+    fields.device.innerHTML = "";
+    fields.device.add(new Option("No device", ""));
+    devices.forEach(d => fields.device.add(new Option(
+      d.width ? `${d.name} (${d.width}x${d.height} @ ${Math.round(d.fps)} fps)` : d.name, String(d.index))));
+    if (selected && selected.device_name && !devices.some(d => d.name === selected.device_name)) {
+      fields.device.add(new Option(selected.device_name + " (not connected)", "saved"));
+      fields.device.value = "saved";
+    } else if (selected) {
+      const match = devices.find(d => d.index === selected.device_index && d.name === selected.device_name)
+        || devices.find(d => d.name === selected.device_name)
+        || devices.find(d => d.index === selected.device_index);
+      fields.device.value = match ? String(match.index) : "";
+    } else if (devices.length) {
+      fields.device.value = String(devices[0].index);
+    }
+  }
+
+  function openForm(profile) {
+    editingId = profile ? profile.id : null;
+    formTitle.textContent = profile ? "Edit " + profile.name : "New sender PC";
+    fields.name.value = profile ? profile.name : "";
+    fields.profile.value = profile ? profile.profile : "balanced";
+    fields.mode.value = profile ? profile.mode : "fountain";
+    fields.bpc.value = String(profile ? profile.bpc : 2);
+    fields.preview.value = String(profile ? profile.preview_quality : 45);
+    fillDeviceOptions(profile);
+    formError.hidden = true;
+    form.hidden = false;
+    addBtn.disabled = true;
+    fields.name.focus();
+  }
+
+  function closeForm() {
+    form.hidden = true;
+    addBtn.disabled = false;
+    editingId = null;
+    addBtn.focus();
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const current = profiles.find(p => p.id === editingId);
+    const deviceValue = fields.device.value;
+    const device = devices.find(d => String(d.index) === deviceValue);
+    const body = {
+      name: fields.name.value,
+      device_name: device ? device.name : (deviceValue === "saved" && current ? current.device_name : null),
+      device_index: device ? device.index : (deviceValue === "saved" && current ? current.device_index : null),
+      profile: fields.profile.value, mode: fields.mode.value,
+      bpc: +fields.bpc.value, preview_quality: +fields.preview.value,
+    };
+    const url = editingId == null ? "/api/sender-profiles" : "/api/sender-profiles/" + editingId;
+    try {
+      const r = await fetch(url, {method: editingId == null ? "POST" : "PUT", headers: HEADERS, body: JSON.stringify(body)});
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Save failed");
+      closeForm();
+      await load();
+    } catch (e) {
+      formError.textContent = e.message;
+      formError.hidden = false;
+    }
+  });
+
+  document.getElementById("pfCancel").addEventListener("click", closeForm);
+  form.addEventListener("keydown", (event) => { if (event.key === "Escape") closeForm(); });
+  addBtn.addEventListener("click", async () => { await loadDevices(); openForm(null); });
+
+  list.addEventListener("click", async (event) => {
+    const edit = event.target.closest("[data-edit]");
+    const del = event.target.closest("[data-delete]");
+    if (edit) {
+      await loadDevices();
+      openForm(profiles.find(p => p.id === +edit.dataset.edit));
+      return;
+    }
+    if (!del) return;
+    const profile = profiles.find(p => p.id === +del.dataset.delete);
+    if (!profile) return;
+    if (!window.confirm(`Delete "${profile.name}"? Its saved calibration is deleted too.`)) return;
+    const r = await fetch("/api/sender-profiles/" + profile.id, {method: "DELETE"});
+    if (!r.ok) {
+      list.insertAdjacentHTML("afterbegin", '<p class="profile-empty error">Could not delete ' + escapeHtml(profile.name) + ".</p>");
+      return;
+    }
+    await load();
+  });
+
+  load();
 })();
 </script>
 </body>

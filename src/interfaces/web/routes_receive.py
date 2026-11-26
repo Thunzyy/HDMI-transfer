@@ -28,13 +28,21 @@ def _should_prime_persistent_capture(open_device: int | str, backend: int | None
 
 
 def resolve_profile_device(devices: list[dict], profile: dict) -> int | None:
-    """Find a sender profile's capture card: by name first, the saved index otherwise."""
+    """Find a sender profile's capture card.
+
+    The saved index wins while it still points to a card with the saved name (one
+    card can be listed several times, once per mode). Otherwise the first card
+    with that name, and the saved index as a last resort.
+    """
     name = profile.get("device_name")
-    if name:
-        for device in devices:
-            if device.get("name") == name:
-                return int(device["index"])
     index = profile.get("device_index")
+    if name:
+        named = [device for device in devices if device.get("name") == name]
+        for device in named:
+            if index is not None and int(device["index"]) == int(index):
+                return int(index)
+        if named:
+            return int(named[0]["index"])
     return int(index) if index is not None else None
 
 

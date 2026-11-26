@@ -72,4 +72,6 @@ def register_profile_routes(app: Flask) -> None:
             store.set_auto_receive(enabled)
             if enabled:
                 app._auto_receive.clear_pause()
+            else:
+                app._auto_receive.disarm()
         return jsonify(app._auto_receive.status())

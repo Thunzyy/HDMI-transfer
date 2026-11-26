@@ -219,3 +219,31 @@ def test_unknown_matched_profile_is_ignored(env):
     started[0].get_runtime_state = lambda: {"state": "preflight_ok", "matched_profile_id": 999}
     supervisor.adopt_match(current["worker"])
     assert store.get_active_id() == active
+
+
+def test_disarm_stops_idle_worker_and_does_not_rearm_when_off(env):
+    store, supervisor, started, _, _ = env
+    supervisor.tick()
+    store.set_auto_receive(False)
+    supervisor.disarm()
+    assert started[0].stop_reason == "supervisor"
+    supervisor.tick()
+    assert len(started) == 1
+
+
+def test_saved_index_wins_when_two_devices_share_a_name():
+    from hdmi_transfer.interfaces.web.routes_receive import resolve_profile_device
+
+    devices = [{"index": 0, "name": "Elgato 4K X"}, {"index": 1, "name": "Webcam"},
+               {"index": 2, "name": "Elgato 4K X"}]
+    assert resolve_profile_device(devices, {"device_name": "Elgato 4K X", "device_index": 2}) == 2
+    assert resolve_profile_device(devices, {"device_name": "Elgato 4K X", "device_index": 1}) == 0
+
+
+def test_user_stop_is_not_counted_as_a_failure(env):
+    _, supervisor, started, _, _ = env
+    supervisor.tick()
+    started[0].stop(reason="user")
+    supervisor.pause("Stopped by user")
+    supervisor.tick()
+    assert supervisor.status()["consecutive_failures"] == 0
