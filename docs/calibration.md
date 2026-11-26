@@ -54,9 +54,14 @@ refresh rate or guarantee a particular transfer speed.
 
 ## Changed setup or failed verification
 
-- **Receiver: Recalibrate** restarts reception while ignoring the cached hint.
-- **Sender: Recalibrate** forgets the offline confirmation and requires Enter
-  again after the receiver confirms readiness.
+- **Calibrate without a file**: click **Calibrate** on the receiver, then
+  **Calibrate** on the sender. The sender shows the pattern with no file
+  selected. The receiver ignores the cached hint, validates three fresh frames,
+  saves the geometry, stores the encoding the sender really uses (bpc) in the
+  selected sender PC profile, and stops. Offline, press Enter on the sender once
+  the receiver shows *Calibrated*; with the receiver API the sender stops by
+  itself. The next **Start** (or auto receive) reuses this calibration at once.
+- **Sender: Calibrate** also forgets the previous offline confirmation.
 - The receiver cache separates device identity, opened source, capture backend,
   video profile, encoding and incoming image dimensions. A changed configuration
   uses another entry. A corrupt or unwritable cache does not prevent calibration.

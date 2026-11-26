@@ -303,7 +303,7 @@ body.right-collapsed #panel{display:none}
         <span class="top-sep" aria-hidden="true"></span>
         <button class="ui-btn ui-btn-danger-hover" id="stopBtn" type="button" disabled>Stop</button>
         <button class="ui-btn" id="resetBtn" type="button" disabled>Reset</button>
-        <button class="ui-btn" id="recalibrateBtn" type="button" disabled>Recalibrate</button>
+        <button class="ui-btn" id="recalibrateBtn" type="button" disabled data-tooltip="Calibrate the HDMI signal now, without receiving a file">Calibrate</button>
         <button class="ui-btn ui-btn-primary ui-btn-lg" id="startBtn" type="button" disabled>Start</button>
       </div>
     </div>
@@ -440,6 +440,7 @@ body.right-collapsed #panel{display:none}
   const LEGACY_PREVIEW_SETTINGS_KEY = "hdmi_transfer_preview_settings";
   let autoScanEnabled = true;
   let idlePreviewEnabled = true;
+  let calibrateOnlyRun = false;
   let previewLastFrameAt = 0;
   let previewLastSeq = 0;
   let previewWatchdogWarned = false;
@@ -829,6 +830,7 @@ body.right-collapsed #panel{display:none}
           bpc:+bpcSelect.value,
           preflight:true,
           force_recalibration: options.force === true,
+          calibrate_only: options.calibrateOnly === true,
           profile_id: activeProfileId,
         }),
       });
@@ -836,7 +838,10 @@ body.right-collapsed #panel{display:none}
     } catch (e) { statusMsg.textContent = "Network error: " + e.message; log("error", "Network: " + e.message); return; }
     startBtn.disabled = true; stopBtn.disabled = false; resetBtn.disabled = false;
     recalibrateBtn.disabled = false;
-    calibrationStatus.textContent = options.force === true
+    calibrateOnlyRun = options.calibrateOnly === true;
+    calibrationStatus.textContent = calibrateOnlyRun
+      ? "Calibration: click Calibrate on the sender PC. Press Enter there once this says Calibrated."
+      : options.force === true
       ? "New calibration requested. Start the calibration pattern on the sender."
       : "Checking saved settings. Start the sender to validate the signal.";
     deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = true;
@@ -845,7 +850,7 @@ body.right-collapsed #panel{display:none}
     previewLastSeq = 0;
     startPreviewStream(true);
     applyPreviewSettings();
-    log("info", "Starting capture...");
+    log("info", calibrateOnlyRun ? "Starting calibration..." : "Starting capture...");
     connectSSE();
   }
 
@@ -996,7 +1001,13 @@ body.right-collapsed #panel{display:none}
           saved: "Calibration saved. Ready for the file.",
           validated: "Signal verified. Calibration could not be saved.",
         };
-        calibrationStatus.textContent = labels[d.calibration_state] || "Checking calibration...";
+        const waiting = d.calibration_state === "checking" || d.calibration_state === "calibrating";
+        if (calibrateOnlyRun && waiting) {
+          // Fresh calibration: keep telling the user what to do on the sender.
+          calibrationStatus.textContent = "Calibration: click Calibrate on the sender PC. Press Enter there once this says Calibrated.";
+        } else {
+          calibrationStatus.textContent = labels[d.calibration_state] || "Checking calibration...";
+        }
       }
       if (
         (d.state === "waiting" || d.state === "preflight_wait")
@@ -1060,12 +1071,39 @@ body.right-collapsed #panel{display:none}
 
     sse.addEventListener("complete", e => { showComplete(JSON.parse(e.data)); cleanup(); });
     sse.addEventListener("error", e => { try { const d = JSON.parse(e.data); setLink("error"); statusMsg.textContent = "Error: " + d.message; log("error", d.message); } catch {} cleanup(); });
-    sse.addEventListener("stopped", () => { setLink("idle"); statusMsg.textContent = "Stopped."; log("info", "Receive stopped."); cleanup(); });
+    sse.addEventListener("calibrated", e => {
+      const d = JSON.parse(e.data);
+      const bpc = Number(d.transfer_bpc);
+      if ([1, 2, 3].includes(bpc)) bpcSelect.value = String(bpc);
+      const pc = activeProfile();
+      const savedFor = d.sender_profile_id != null && pc ? " Saved for " + pc.name + "." : "";
+      calibrationStatus.textContent = "Calibrated at " + bpc + " bpc." + savedFor
+        + " Press Enter on the sender, then send files with Start or Auto receive.";
+      log("success", "Calibrated: " + bpc + " bpc." + savedFor);
+      // The server stored the detected encoding in the sender PC profile.
+      if (d.sender_profile_id != null) loadSenderProfiles();
+    });
+    sse.addEventListener("stopped", e => {
+      setLink("idle");
+      let d = {};
+      try { d = JSON.parse(e.data); } catch {}
+      if (d.state === "calibrated") {
+        statusMsg.textContent = "Calibrated. Ready to receive.";
+      } else {
+        statusMsg.textContent = "Stopped.";
+        if (calibrateOnlyRun) calibrationStatus.textContent = "Calibration stopped before the signal was validated.";
+        log("info", calibrateOnlyRun ? "Calibration stopped." : "Receive stopped.");
+      }
+      cleanup();
+    });
     sse.onerror = () => { if (sse && sse.readyState === EventSource.CLOSED) cleanup(); };
   }
 
   function cleanup() {
     if (sse) { sse.close(); sse = null; }
+    calibrateOnlyRun = false;
+    // A receive releases the capture it used; reopen it for the idle preview.
+    warmDevice(deviceSelect.value);
     startBtn.disabled = !deviceSelect.value; stopBtn.disabled = true;
     resetBtn.disabled = !deviceSelect.value;
     recalibrateBtn.disabled = !deviceSelect.value;
@@ -1238,7 +1276,10 @@ body.right-collapsed #panel{display:none}
       const byIndex = options.find(o => p.device_index != null && o.value === String(p.device_index));
       const byName = options.find(o => o.dataset.name && o.dataset.name === p.device_name);
       const pick = (byIndex && (!p.device_name || byIndex.dataset.name === p.device_name)) ? byIndex : (byName || byIndex);
-      if (pick) deviceSelect.value = pick.value;
+      if (pick && deviceSelect.value !== pick.value) {
+        deviceSelect.value = pick.value;
+        warmDevice(pick.value);
+      }
       profileSelect.value = p.profile;
       modeSelect.value = p.mode;
       bpcSelect.value = String(p.bpc);
@@ -1418,7 +1459,7 @@ body.right-collapsed #panel{display:none}
     startPreviewStream(true);
   }, 2000);
   startBtn.addEventListener("click", start);
-  recalibrateBtn.addEventListener("click", () => start({ force: true }));
+  recalibrateBtn.addEventListener("click", () => start({ force: true, calibrateOnly: true }));
   resetBtn.addEventListener("click", resetConnection);
   stopBtn.addEventListener("click", stop);
   previewQualitySelect.addEventListener("change", () => {

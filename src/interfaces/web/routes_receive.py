@@ -53,6 +53,7 @@ def start_receiver_worker(
     force_recalibration: bool = False,
     profile_id: int | None = None,
     skip_identity: tuple[str, int, str] | None = None,
+    calibrate_only: bool = False,
 ):
     """Start one receiver worker. Used by ``/api/receive/start`` and auto receive.
 
@@ -139,6 +140,12 @@ def start_receiver_worker(
     if profile_id is not None:
         fallback_profile_ids = app._profile_store.matching_profile_ids(profile_id)
 
+    def save_calibrated_bpc(calibrated_profile_id: int | None, bpc: int) -> None:
+        # The sender's real encoding becomes the sender PC's setting, so the
+        # receiver UI and the next Start match the notebook.
+        if calibrated_profile_id is not None:
+            app._profile_store.update(int(calibrated_profile_id), {"bpc": int(bpc)})
+
     worker = ReceiverWorker(
         device=decode_device,
         profile=profile,
@@ -149,7 +156,9 @@ def start_receiver_worker(
         on_cap_return=on_cap_return,
         fallback_targets=fallback_targets,
         require_preflight=require_preflight,
-        force_recalibration=force_recalibration,
+        force_recalibration=force_recalibration or calibrate_only,
+        calibrate_only=calibrate_only,
+        on_calibrated=save_calibrated_bpc if calibrate_only else None,
         device_identity=str((device_info or {}).get("name") or decode_device),
         history_store=app._history_store,
         sender_profile_id=profile_id,
@@ -237,6 +246,7 @@ def register_receive_routes(app: Flask) -> None:
                     app, data,
                     force_recalibration=bool(data.get("force_recalibration", False)),
                     profile_id=profile_id,
+                    calibrate_only=bool(data.get("calibrate_only", False)),
                 )
             except ValueError as exc:
                 return jsonify({"error": str(exc)}), 400

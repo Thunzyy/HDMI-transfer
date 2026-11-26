@@ -354,3 +354,52 @@ def test_changed_content_with_same_name_is_a_new_file(tmp_path):
     receiver._output_dir = str(tmp_path / "out")
     assert receiver._finish_file({"filename": "a.bin", "size": 3}, b"abc")["duplicate"] is False
     assert history.recorded == ["a.bin"]
+
+
+def _collect(receiver):
+    events = receiver.subscribe()
+    def drain():
+        out = []
+        while not events.empty():
+            out.append(events.get_nowait())
+        return out
+    return drain
+
+
+def test_calibrate_only_stops_after_validation_and_reports_bpc(tmp_path, monkeypatch):
+    reported = []
+    receiver = worker(tmp_path, calibrate_only=True, sender_profile_id=7,
+                      on_calibrated=lambda pid, bpc: reported.append((pid, bpc)))
+    drain = _collect(receiver)
+    monkeypatch.setattr(receiver, "_run_auto",
+                        lambda cap: pytest.fail("calibration must not start a receive"))
+
+    receiver._receive_from(FiniteCapture(receiver, calibration_frames() * 3))
+
+    assert reported == [(7, 2)]
+    types = [event["type"] for event in drain()]
+    assert "calibrated" in types and types[-1] == "stopped"
+    assert receiver.get_runtime_state()["state"] == "calibrated"
+    assert receiver._calibration_store.load(profile_key(7)) == (0, 0, 1.0, 1.0)
+
+
+def test_calibrate_only_reports_the_encoding_the_sender_really_uses(tmp_path):
+    reported = []
+    receiver = worker(tmp_path, calibrate_only=True,
+                      on_calibrated=lambda pid, bpc: reported.append((pid, bpc)))
+    frames = calibration_frames(profile=replace(PROFILE, bits_per_channel=3))
+
+    receiver._receive_from(FiniteCapture(receiver, frames))
+
+    assert reported == [(None, 3)]
+
+
+def test_calibrate_only_without_signal_reports_nothing(tmp_path):
+    reported = []
+    receiver = worker(tmp_path, calibrate_only=True,
+                      on_calibrated=lambda pid, bpc: reported.append((pid, bpc)))
+    blank = np.zeros((160, 160, 3), dtype=np.uint8)
+
+    receiver._receive_from(FiniteCapture(receiver, [blank] * 5))
+
+    assert reported == []

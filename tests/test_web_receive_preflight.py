@@ -205,3 +205,34 @@ def test_api_receive_status_preserves_terminal_state_after_worker_exit(monkeypat
             "consecutive_failures": 0, "armed": False,
         },
     }
+
+
+def test_api_calibrate_only_forces_fresh_calibration_and_saves_bpc(monkeypatch, tmp_path):
+    monkeypatch.setenv("HDMI_TRANSFER_STATE_DIR", str(tmp_path))
+    app = server.create_app(output_dir=str(tmp_path), runtime=False)
+    app._device_registry = _FakeRegistry({
+        "index": 0, "name": "Elgato 4K X", "backend": int(cv2.CAP_DSHOW), "dshow_index": 0,
+    })
+    app._capture_manager = _FakeCaptureManager()
+    profile = app._profile_store.create({"name": "PC BNP", "bpc": 2})
+    captured = {}
+
+    class FakeWorker:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr("hdmi_transfer.adapters.receive_worker.ReceiverWorker", FakeWorker)
+    response = app.test_client().post("/api/receive/start", json={
+        "device": 0, "bpc": 2, "calibrate_only": True, "profile_id": profile["id"],
+    })
+
+    assert response.status_code == 200
+    assert captured["calibrate_only"] is True
+    assert captured["force_recalibration"] is True
+    captured["on_calibrated"](profile["id"], 3)
+    assert app._profile_store.get(profile["id"])["bpc"] == 3
+    captured["on_calibrated"](None, 1)
+    assert app._profile_store.get(profile["id"])["bpc"] == 3

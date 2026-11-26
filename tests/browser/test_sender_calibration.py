@@ -33,7 +33,7 @@ def browser():
         yield driver
 
 
-def prepare(browser, tmp_path, *, connected=False):
+def prepare(browser, tmp_path, *, connected=False, with_file=True):
     browser.set_window_size(1920, 1080)
     query = "?debugTitle=1&fountainAutoStop=0"
     if connected:
@@ -50,6 +50,8 @@ def prepare(browser, tmp_path, *, connected=False):
         return {ok:true, json:async () => window.receiverState};
       };
     """)
+    if not with_file:
+        return WebDriverWait(browser, 12)
     payload = tmp_path / "test.txt"
     payload.write_bytes(b"Calibration before data. " * 1000)
     browser.find_element(By.ID, "fileInput").send_keys(str(payload))
@@ -128,11 +130,16 @@ def test_offline_first_confirmation_saved_recheck_and_forced_calibration(browser
     assert " f=0 " in browser.title
     stop(browser)
     resize(browser, 1920, 1080)
+    # Calibrate shows the pattern right away, without sending the file.
     click_ready(browser, "recalibrateBtn")
     assert browser.execute_script("return localStorage.getItem('hdmi_transfer_calibration_v1')") is None
-    browser.find_element(By.ID, "startBtn").click()
     wait.until(lambda d: label(d) == "Receiver ready? Press Enter")
     assert " f=0 " in browser.title
+    browser.find_element(By.TAG_NAME, "body").send_keys(Keys.ENTER)
+    wait.until(lambda d: label(d) == "Calibrated (2 bpc)")
+    assert browser.execute_script("return localStorage.getItem('hdmi_transfer_calibration_v1')")
+    browser.find_element(By.ID, "startBtn").click()
+    wait.until(lambda d: label(d) == "Transmitting")
     stop(browser)
     assert not [e for e in browser.get_log("browser") if e["level"] == "SEVERE"]
 
@@ -315,3 +322,17 @@ def test_cancel_during_fullscreen_settle_does_not_confirm_new_run(browser, tmp_p
     browser.execute_script("window.receiverState = {active:true, preflight_required:true, preflight_state:'ok', transfer_bpc:2}")
     wait.until(lambda d: label(d) == "Transmitting")
     stop(browser)
+
+
+def test_calibrate_without_file_adopts_the_receiver_encoding(browser, tmp_path):
+    wait = prepare(browser, tmp_path, connected=True, with_file=False)
+    assert not browser.find_element(By.ID, "startBtn").is_enabled()
+    click_ready(browser, "recalibrateBtn")
+    wait.until(lambda d: "[PREFLIGHT]" in d.title)
+    # A calibrate-only receiver stops as soon as it has validated the pattern.
+    browser.execute_script(
+        "window.receiverState = {active:false, preflight_required:true, preflight_state:'ok', transfer_bpc:3}")
+    wait.until(lambda d: label(d) == "Calibrated (3 bpc)")
+    assert browser.find_element(By.ID, "bpcSelect").get_attribute("value") == "3"
+    assert " f=0 " in browser.title
+    assert not [e for e in browser.get_log("browser") if e["level"] == "SEVERE"]

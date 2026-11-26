@@ -538,8 +538,8 @@
     calibrationHint.textContent = isReceiverApiEnabled()
       ? "Calibration is confirmed automatically by the receiver before sending."
       : calibrationMemory.confirmed(config)
-        ? "Saved setup: a short signal check runs before sending. Recalibrate if the hardware or display changes."
-        : "First transfer: start the receiver, then start here. Once the receiver says Calibration saved, press Enter on this computer to send the file.";
+        ? "Calibrated: a short signal check runs before sending. Calibrate again if the hardware or display changes."
+        : "Not calibrated: click Calibrate on the receiver and here, then press Enter when the receiver shows Calibrated. Starting a file also calibrates first.";
   }
 
   async function waitForFullscreenSettle(runId) {
@@ -585,11 +585,12 @@
       try {
         const status = await getReceiverStatus();
         if (!state.running || state.runId !== runId) return { ok: false, reason: "stopped" };
-        if (status.active === false) return { ok: false, reason: "receiver_inactive" };
+        // Checked before "active": a calibrate-only receiver stops right after success.
         if (status.preflight_state === "ok" && state.preflightFrames >= 3) {
           const negotiated = Number(status.transfer_bpc);
           if ([1, 2, 3].includes(negotiated)) return { ok: true, transferBpc: negotiated };
         }
+        if (status.active === false) return { ok: false, reason: "receiver_inactive" };
         if (status.preflight_required !== true) {
           return { ok: false, reason: "calibration_disabled" };
         }
@@ -1011,9 +1012,13 @@
       && Math.abs(window.innerHeight - window.screen.height) <= 2;
   }
 
-  async function startSending() {
-    if (!state.chunks.length || !validateConfig() || state.running) return;
+  // options.calibrateOnly: show the calibration pattern without a file and
+  // stop once the receiver has validated it (Calibrate button).
+  async function startSending(options = {}) {
+    const calibrateOnly = options.calibrateOnly === true;
+    if ((!calibrateOnly && !state.chunks.length) || !validateConfig() || state.running) return;
     state.running = true; state.seed = 1; state.frame = 0;
+    state.calibrateOnly = calibrateOnly;
     const runId = ++state.runId;
     state.fullscreenSettleUntil = 0;
     recalibrateBtn.disabled = true;
@@ -1072,6 +1077,8 @@
       configWarningEl.style.display = "";
       configWarningEl.textContent = receiverConnected
         ? "Checking the signal and saved calibration on the receiver..."
+        : calibrateOnly
+        ? "Calibrating. When the receiver shows Calibrated, press Enter here."
         : "When the receiver confirms calibration, press Enter to send. No receiver confirmation is available over HDMI alone.";
       renderLoop(0);
       const preflight = receiverConnected
@@ -1085,6 +1092,11 @@
       }
       state.preflightNegotiatedBpc = preflight.transferBpc;
       applyNegotiatedTransferBpc(preflight.transferBpc);
+      if (calibrateOnly) {
+        calibrationMemory.remember(config);
+        stopSending({ saveHistory: false, statusText: `Calibrated (${config.bpc} bpc)` });
+        return;
+      }
       await sleep(PREFLIGHT_SETTLE_MS);
       if (!state.running || state.runId !== runId) return;
       state.receiverDrivenFountainStop = receiverConnected
@@ -1299,7 +1311,7 @@
   recalibrateBtn.addEventListener("click", () => {
     calibrationMemory.forget();
     updateCalibrationHint();
-    statusLabel.textContent = "Calibration required";
+    startSending({ calibrateOnly: true });
   });
 
   advToggle.addEventListener("click", () => {

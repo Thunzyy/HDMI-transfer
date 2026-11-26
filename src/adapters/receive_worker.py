@@ -22,6 +22,7 @@ import logging
 import queue
 import threading
 import time
+from typing import Callable
 
 import cv2
 
@@ -102,8 +103,14 @@ class ReceiverWorker(threading.Thread):
         sender_profile_id: int | None = None,
         fallback_profile_ids: list[int] | None = None,
         skip_identity: tuple[str, int, str] | None = None,
+        calibrate_only: bool = False,
+        on_calibrated: Callable[[int | None, int], None] | None = None,
     ) -> None:
         super().__init__(daemon=True)
+        # Calibrate only: validate and save the HDMI geometry, report the
+        # encoding the sender really uses, then stop without receiving a file.
+        self._calibrate_only = bool(calibrate_only)
+        self._on_calibrated = on_calibrated
         # (filename, size, sha256) of the file auto receive got last: the same file
         # again (a sender still looping) is not rewritten nor added to the history.
         self._skip_identity = tuple(skip_identity) if skip_identity else None
@@ -136,7 +143,7 @@ class ReceiverWorker(threading.Thread):
         self._active_device = device
         self._active_backend = backend
         self._fallback_targets: list[tuple[int | str, int | None]] = []
-        self._require_preflight = bool(require_preflight)
+        self._require_preflight = bool(require_preflight) or self._calibrate_only
         self._force_recalibration = bool(force_recalibration)
         self._awaiting_payload = False
         self._calibration_protocol = None
@@ -349,14 +356,8 @@ class ReceiverWorker(threading.Thread):
                 })
 
                 with cap:
-                    if self._require_preflight and not self._wait_for_preflight(cap):
+                    if not self._receive_from(cap):
                         return
-                    dispatch = {
-                        "fountain": self._run_fountain,
-                        "sequential": self._run_sequential,
-                    }
-                    handler = dispatch.get(self._mode, self._run_auto)
-                    handler(cap)
 
                 if keep_alive and self._on_cap_return is not None:
                     raw = cap.detach()
@@ -384,6 +385,42 @@ class ReceiverWorker(threading.Thread):
             finally:
                 with self._preview_condition:
                     self._preview_condition.notify_all()
+
+    def _receive_from(self, cap) -> bool:
+        """Calibrate, then receive a file (or stop, in calibrate-only mode).
+
+        Returns False when calibration was interrupted before it succeeded.
+        """
+        if self._require_preflight and not self._wait_for_preflight(cap):
+            return False
+        if self._calibrate_only:
+            self._finish_calibration()
+            return True
+        dispatch = {
+            "fountain": self._run_fountain,
+            "sequential": self._run_sequential,
+        }
+        dispatch.get(self._mode, self._run_auto)(cap)
+        return True
+
+    def _finish_calibration(self) -> None:
+        bpc = int(self._profile.bits_per_channel)
+        state = self.get_runtime_state()
+        profile_id = state.get("matched_profile_id") or self._sender_profile_id
+        if self._on_calibrated is not None:
+            try:
+                self._on_calibrated(profile_id, bpc)
+            except Exception:
+                log.exception("Saving the calibrated encoding failed")
+        self._publish("calibrated", {
+            "transfer_bpc": bpc,
+            "sender_profile_id": profile_id,
+            "calibration_state": state.get("calibration_state"),
+        })
+        self._publish("stopped", {
+            "state": "calibrated",
+            "message": f"Calibration complete ({bpc} bpc). Ready to receive.",
+        })
 
     # -- fountain mode ---------------------------------------------------
 
@@ -1054,10 +1091,12 @@ class ReceiverWorker(threading.Thread):
                 "state": "error",
                 "message": data.get("message", "Error"),
             })
+        elif event_type == "calibrated":
+            updates.update({"state": "calibrated", "transfer_bpc": data.get("transfer_bpc")})
         elif event_type == "stopped":
             updates.update(data)
             updates.update({
-                "state": "stopped",
+                "state": data.get("state", "stopped"),
                 "message": data.get("message", "Stopped"),
             })
         self._set_runtime_state(**updates)
