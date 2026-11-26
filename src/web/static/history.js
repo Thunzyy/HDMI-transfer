@@ -11,6 +11,21 @@
     sort: "newest",
   };
 
+  // Row action glyphs: each draws the action it triggers (save to disk, reveal folder, delete, remove from list).
+  const svgIcon = (paths) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+  const ICONS = {
+    download: svgIcon('<path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>'),
+    folder: svgIcon('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1"/><path d="M3 7v11a1 1 0 0 0 1 1h14.2a1.5 1.5 0 0 0 1.45-1.1L21.8 12a1 1 0 0 0-.97-1.26H7.6a1.5 1.5 0 0 0-1.44 1.08L3.4 19"/>'),
+    trash: svgIcon('<path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>'),
+    remove: svgIcon('<path d="M6 6l12 12"/><path d="M18 6L6 18"/>'),
+  };
+  const STATUS_BADGE = {
+    "status-ok": "ui-badge-success",
+    "status-fail": "ui-badge-danger",
+    "status-missing": "ui-badge-warning",
+    "status-disk": "ui-badge-accent",
+  };
+
   const els = {
     tbody: document.getElementById("historyBody"),
     table: document.getElementById("historyTable"),
@@ -346,34 +361,34 @@
       const canDownload = canDeleteFile;
       const deleteLabel = canDeleteFile ? "Delete file" : "Delete entry";
       const downloadUrl = item.filename ? "/api/receive/download/" + encodeURIComponent(item.filename) : "";
+      const fileLabel = escapeHtml(item.filename || "entry");
       const actionButtons = [];
       if (canDownload) {
-        actionButtons.push(`<a class="row-btn row-btn-open" href="${downloadUrl}">Download</a>`);
+        actionButtons.push(`<a class="icon-btn" href="${downloadUrl}" download data-tooltip="Download" aria-label="Download ${fileLabel}">${ICONS.download}</a>`);
       }
       if (canOpenLocation) {
-        actionButtons.push(`<button class="row-btn row-btn-open" data-action="open" data-index="${index}" type="button">Open location</button>`);
+        actionButtons.push(`<button class="icon-btn" data-action="open" data-index="${index}" type="button" data-tooltip="Open location" aria-label="Open location of ${fileLabel}">${ICONS.folder}</button>`);
       }
-      actionButtons.push(`<button class="row-btn row-btn-danger" data-action="delete" data-index="${index}" type="button">${escapeHtml(deleteLabel)}</button>`);
-      const actionClass = "actions-" + actionButtons.length;
+      actionButtons.push(`<button class="icon-btn is-danger" data-action="delete" data-index="${index}" type="button" data-tooltip="${escapeHtml(deleteLabel)}" aria-label="${escapeHtml(deleteLabel)}: ${fileLabel}">${canDeleteFile ? ICONS.trash : ICONS.remove}</button>`);
 
       const row = document.createElement("tr");
       row.innerHTML = `
         <td class="mono">${escapeHtml(dateText)}</td>
         <td>
-          <div><span class="tag ${typeClass}">${escapeHtml(typeLabel(item.type))}</span></div>
-          <div class="cell-sub"><span class="origin-tag ${originClass}">${escapeHtml(originLabel(item))}</span></div>
+          <div class="type-cell"><span class="type-dot ${typeClass}" aria-hidden="true"></span>${escapeHtml(typeLabel(item.type))}</div>
+          <div class="cell-sub origin-tag ${originClass}">${escapeHtml(originLabel(item))}</div>
         </td>
-        <td>
+        <td class="file-cell">
           <div class="cell-primary">${escapeHtml(item.filename || "--")}</div>
           <div class="cell-sub">${escapeHtml(protocolLabel(item.protocol))}</div>
         </td>
-        <td class="path-cell"><div class="path-text${item.systemPath ? "" : " dim"}">${escapeHtml(locationFor(item))}</div></td>
+        <td class="path-cell"><div class="path-text${item.systemPath ? "" : " dim"}" title="${escapeHtml(locationFor(item))}"><span dir="ltr">${escapeHtml(locationFor(item))}</span></div></td>
         <td>${formatSize(item.size)}</td>
         <td>${formatDuration(item.duration)}</td>
         <td>${formatSpeed(item.speed)}</td>
-        <td><span class="status-badge ${status.className}">${escapeHtml(status.label)}</span></td>
+        <td><span class="ui-badge ${STATUS_BADGE[status.className] || ""} ${status.className}">${escapeHtml(status.label)}</span></td>
         <td class="actions-col">
-          <div class="row-actions ${actionClass}">
+          <div class="row-actions">
             ${actionButtons.join("")}
           </div>
         </td>
