@@ -89,6 +89,21 @@ body.right-collapsed #panel{display:none}
 .preview-idle .idle-hint{font-size:12px;font-weight:400;color:var(--fg-lighter)}
 .preview-idle.hidden{display:none}
 
+/* Transfer progress bar (between preview and log) */
+.transfer-bar{
+  flex-shrink:0;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-lg);
+  background:var(--surface-100);display:flex;flex-direction:column;gap:8px;
+}
+.tb-head{display:flex;align-items:baseline;gap:12px;font-size:12px;color:var(--fg-light)}
+.tb-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tb-pct{font-weight:600;color:var(--fg);font-variant-numeric:tabular-nums}
+.tb-eta{color:var(--fg-lighter);font-variant-numeric:tabular-nums}
+.tb-eta strong{color:var(--fg-light);font-weight:500;font-family:var(--font-mono)}
+.tb-track{height:8px;border-radius:4px;background:var(--surface-300);overflow:hidden}
+.tb-fill{height:100%;width:0;border-radius:4px;background:var(--accent);transition:width .6s var(--ease)}
+.transfer-bar.done .tb-fill{background:var(--green)}
+@media (prefers-reduced-motion: reduce){.tb-fill{transition:none}}
+
 /* Log */
 #log{
   position:relative;height:150px;min-height:90px;border:1px solid var(--border);border-radius:var(--radius-lg);
@@ -325,6 +340,16 @@ body.right-collapsed #panel{display:none}
           <span>Waiting for signal</span>
         </div>
       </div>
+      <div class="transfer-bar" id="transferBar">
+        <div class="tb-head">
+          <span class="tb-label" id="tbLabel">No transfer in progress</span>
+          <span class="tb-eta">ETA <strong id="tbEta">--</strong></span>
+          <span class="tb-pct" id="tbPct">0%</span>
+        </div>
+        <div class="tb-track" role="progressbar" aria-label="Transfer progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="tbTrack">
+          <div class="tb-fill" id="tbFill"></div>
+        </div>
+      </div>
       <div id="log">
         <div class="log-resize" id="logResize" role="separator" aria-orientation="horizontal" aria-label="Resize log" aria-valuemin="90" aria-valuemax="800" aria-valuenow="150" tabindex="0"></div>
         <div class="log-bar">
@@ -429,6 +454,12 @@ body.right-collapsed #panel{display:none}
   const metricDuration = document.getElementById("metricDuration");
   const metricSpeed    = document.getElementById("metricSpeed");
   const metricEta      = document.getElementById("metricEta");
+  const transferBar    = document.getElementById("transferBar");
+  const tbLabel        = document.getElementById("tbLabel");
+  const tbEta          = document.getElementById("tbEta");
+  const tbPct          = document.getElementById("tbPct");
+  const tbTrack        = document.getElementById("tbTrack");
+  const tbFill         = document.getElementById("tbFill");
   const downloadArea   = document.getElementById("downloadArea");
   const downloadBtn    = document.getElementById("downloadBtn");
 
@@ -625,7 +656,9 @@ body.right-collapsed #panel{display:none}
   function setLogHeight(px) {
     // Never push the preview below 120 px: the column height bounds the log.
     const column = logPanel.parentElement.getBoundingClientRect().height;
-    const max = Math.max(120, Math.round(column - 120 - 12));
+    const bar = document.getElementById("transferBar");
+    const barSpace = bar ? bar.offsetHeight + 12 : 0;
+    const max = Math.max(120, Math.round(column - 120 - 12 - barSpace));
     layout.logHeight = Math.round(Math.min(max, Math.max(90, px)));
     layout.logExpanded = false;
     applyLayout();
@@ -851,6 +884,7 @@ body.right-collapsed #panel{display:none}
     startPreviewStream(true);
     applyPreviewSettings();
     log("info", calibrateOnlyRun ? "Starting calibration..." : "Starting capture...");
+    setTransferBar(0, -1, calibrateOnlyRun ? "Calibrating, no file will be received" : "Waiting for the sender...");
     connectSSE();
   }
 
@@ -897,6 +931,7 @@ body.right-collapsed #panel{display:none}
 
     pctBig.textContent = "0.0";
     fountainPct.textContent = "0%";
+    setTransferBar(0, -1, "No transfer in progress");
     speedBadge.textContent = "--";
     badgeFrm.textContent = "FRM: 0";
     renderTransferCounts(activeProtocol || "fountain", {
@@ -1046,11 +1081,15 @@ body.right-collapsed #panel{display:none}
       markPreviewHeartbeat();
       const decoded = Number(d.chunks_decoded || 0);
       const total = Number(d.total_chunks || 0);
-      // Compute percent from the exact counters shown in UI.
-      // This guarantees consistency between %, Solved and Needed.
-      const pct = total > 0 ? Math.min(99.9, (decoded / total) * 100) : 0;
+      // Progress follows received information (unique droplets for Fountain):
+      // decoded chunks lag, then cascade near the end. Solved/Needed keep the
+      // decoder counters.
+      const pct = Number.isFinite(Number(d.progress_percent))
+        ? Number(d.progress_percent)
+        : (total > 0 ? Math.min(99.9, (decoded / total) * 100) : 0);
       pctBig.textContent = pct.toFixed(1);
-      fountainPct.textContent = pct.toFixed(0) + "%";
+      // The Blocks grid shows decoded chunks, so its title uses the decoded share.
+      fountainPct.textContent = (total > 0 ? Math.min(99.9, decoded / total * 100) : 0).toFixed(0) + "%";
       badgeFrm.textContent = "FRM: " + d.frames_captured.toLocaleString();
       renderTransferCounts(protocol, d);
       totalChunks = total;
@@ -1062,7 +1101,13 @@ body.right-collapsed #panel{display:none}
         drawSpeed();
       }
       metricSpeed.textContent = spd > 0 ? spd.toFixed(1) + " KB/s" : "--";
-      metricEta.textContent = d.eta_seconds >= 0 ? fmtEta(d.eta_seconds) : "--";
+      metricEta.textContent = fmtEtaDhm(d.eta_seconds);
+      const unit = protocol === "sequential" ? " frames" : " droplets";
+      const got = protocol === "sequential" ? decoded : Number(d.unique_droplets_received || 0);
+      const need = protocol === "sequential" ? total : Number(d.droplets_needed_estimate || 0);
+      setTransferBar(pct, d.eta_seconds,
+        "Receiving: " + got.toLocaleString() + (need ? " / ~" + need.toLocaleString() : "") + unit
+        + (spd > 0 ? " · " + spd.toFixed(1) + " KB/s" : ""));
       if (d.decoded_indices) {
         updateGrid(d.decoded_indices, d.total_chunks);
         if (canvas.style.display !== "none") drawCanvas(d.decoded_indices, d.total_chunks);
@@ -1128,6 +1173,25 @@ body.right-collapsed #panel{display:none}
     else { linkLabel.textContent = "Receiving"; }
   }
 
+  // Remaining time as days:hours:minutes ("0j 02h 05min"), rounded up so a
+  // few seconds left still reads as one minute.
+  function fmtEtaDhm(s) {
+    if (!(s >= 0)) return "--";
+    const totalMin = Math.max(s > 0 ? 1 : 0, Math.ceil(s / 60));
+    const d = Math.floor(totalMin / 1440), h = Math.floor((totalMin % 1440) / 60), m = totalMin % 60;
+    return d + "j " + String(h).padStart(2, "0") + "h " + String(m).padStart(2, "0") + "min";
+  }
+
+  function setTransferBar(pct, etaSeconds, label, done = false) {
+    const clamped = Math.max(0, Math.min(100, pct));
+    tbFill.style.width = clamped + "%";
+    tbTrack.setAttribute("aria-valuenow", clamped.toFixed(0));
+    tbPct.textContent = (done ? 100 : clamped).toFixed(clamped < 10 && !done ? 1 : 0) + "%";
+    tbEta.textContent = done ? fmtEtaDhm(0) : fmtEtaDhm(etaSeconds);
+    tbLabel.textContent = label;
+    transferBar.classList.toggle("done", done);
+  }
+
   function fmtEta(s) {
     if (s < 0) return "--";
     const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.floor(s%60);
@@ -1156,6 +1220,7 @@ body.right-collapsed #panel{display:none}
     const finalKbps = Number((d.speed_mbps || 0) * 122.0703125);
     pctBig.textContent = "100.0";
     fountainPct.textContent = "100%";
+    setTransferBar(100, 0, "Complete: " + d.filename, true);
     if (Number.isFinite(finalKbps) && finalKbps > 0) {
       speedBadge.textContent = finalKbps.toFixed(1) + " KB/s";
       speedHistory.push(finalKbps);
@@ -1182,7 +1247,7 @@ body.right-collapsed #panel{display:none}
       : "m-value";
     metricDuration.textContent = d.duration_s.toFixed(2) + "s";
     metricSpeed.textContent = d.speed_mbps.toFixed(2) + " Mbps";
-    metricEta.textContent = "0:00";
+    metricEta.textContent = fmtEtaDhm(0);
     downloadBtn.href = d.download_url; downloadBtn.download = d.filename;
     downloadArea.classList.add("visible");
     previewIdle.classList.remove("hidden");
