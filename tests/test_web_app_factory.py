@@ -87,7 +87,8 @@ def test_history_page_exposes_filters_and_static_script() -> None:
     history_script = client.get("/static/history.js")
     assert history_script.status_code == 200
     assert b"hdmi_transfer_history_filters" in history_script.data
-    assert b"Clear the local browser history log?" in history_script.data
+    assert b"Clear the transfer history log?" in history_script.data
+    assert b'"/api/history"' in history_script.data
 
 
 def test_sender_app_uses_packaged_resources_without_repository_html(tmp_path, monkeypatch):

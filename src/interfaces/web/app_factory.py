@@ -102,8 +102,11 @@ def create_app(
     *,
     runtime: bool = True,
 ) -> Flask:
+    from hdmi_transfer.adapters.history_store import HistoryStore
+
     from .routes_devices import register_device_routes
     from .routes_files import register_file_routes
+    from .routes_history import register_history_routes
     from .routes_receive import register_receive_routes
 
     sender_html = _find_sender_html()
@@ -113,6 +116,7 @@ def create_app(
     app.config["SENDER_HTML"] = str(sender_html)
     app._receiver_worker = None
     app._receiver_control_lock = threading.Lock()
+    app._history_store = HistoryStore()
     app.shutdown_runtime = lambda: shutdown_runtime(app)
 
     if runtime:
@@ -161,4 +165,5 @@ def create_app(
     register_device_routes(app)
     register_receive_routes(app)
     register_file_routes(app)
+    register_history_routes(app)
     return app

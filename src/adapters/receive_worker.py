@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 from dataclasses import replace
+import logging
 import queue
 import threading
 import time
@@ -25,6 +26,7 @@ import cv2
 
 from hdmi_transfer.application.preflight import is_calibration_frame_valid, is_preflight_start_result
 from hdmi_transfer.adapters.calibration_store import CalibrationStore, calibration_key
+from hdmi_transfer.adapters.history_store import HistoryStore
 from hdmi_transfer.application.receive_geometry import (
     build_geometry_candidates,
     decode_with_sampling_fallbacks,
@@ -39,6 +41,8 @@ from hdmi_transfer.core.config import (
 from hdmi_transfer.core.file_handling.writer import write_output
 from hdmi_transfer.core.protocols import get_protocol
 from hdmi_transfer.receiver.capture.source import CaptureSource
+
+log = logging.getLogger(__name__)
 
 
 _LOW_SIGNAL_DETECTED_AFTER_S = 1.0
@@ -93,6 +97,7 @@ class ReceiverWorker(threading.Thread):
         force_recalibration: bool = False,
         device_identity: str | None = None,
         calibration_store: CalibrationStore | None = None,
+        history_store: HistoryStore | None = None,
     ) -> None:
         super().__init__(daemon=True)
         self._device = device
@@ -125,6 +130,7 @@ class ReceiverWorker(threading.Thread):
         self._calibration_capture_shape: tuple[int, int] | None = None
         self._device_identity = device_identity or str(device)
         self._calibration_store = calibration_store or CalibrationStore()
+        self._history_store = history_store
         self._stop_event = threading.Event()
         self._subscribers: list[queue.Queue] = []
         self._lock = threading.Lock()
@@ -172,6 +178,8 @@ class ReceiverWorker(threading.Thread):
 
     def _publish(self, event_type: str, data: dict) -> None:
         self._mirror_runtime_state(event_type, data)
+        if event_type == "complete":
+            self._record_history(data)
         event = {"type": event_type, "data": data}
         with self._lock:
             for q in self._subscribers:
@@ -179,6 +187,14 @@ class ReceiverWorker(threading.Thread):
                     q.put_nowait(event)
                 except queue.Full:
                     pass
+
+    def _record_history(self, data: dict) -> None:
+        if self._history_store is None:
+            return
+        try:
+            self._history_store.record_received(data)
+        except Exception:  # History is best effort; never lose the complete event.
+            log.exception("Unable to record transfer history")
 
     def stop(self) -> None:
         self._stop_event.set()

@@ -508,3 +508,35 @@ def test_worker_named_dshow_source_skips_runtime_fallback_to_msmf_after_dshow_ex
         low_signal_duration_s=0.0,
         no_progress_duration_s=7.0,
     )
+
+
+class _RecordingHistory:
+    def __init__(self, fail: bool = False) -> None:
+        self.records: list[dict] = []
+        self.fail = fail
+
+    def record_received(self, data: dict) -> int:
+        if self.fail:
+            raise RuntimeError("history down")
+        self.records.append(dict(data))
+        return len(self.records)
+
+
+def test_complete_event_is_recorded_in_history() -> None:
+    history = _RecordingHistory()
+    worker = ReceiverWorker(device=0, profile=PROFILES["balanced"], history_store=history)
+    queue_ = worker.subscribe()
+
+    worker._publish("progress", {"filename": "a.bin"})
+    worker._publish("complete", {"filename": "a.bin", "duration_s": 3.0, "speed_mbps": 1.0})
+
+    assert history.records == [{"filename": "a.bin", "duration_s": 3.0, "speed_mbps": 1.0}]
+    assert [queue_.get_nowait()["type"] for _ in range(2)] == ["progress", "complete"]
+
+
+def test_history_failure_does_not_block_complete_event() -> None:
+    worker = ReceiverWorker(device=0, profile=PROFILES["balanced"],
+                            history_store=_RecordingHistory(fail=True))
+    queue_ = worker.subscribe()
+    worker._publish("complete", {"filename": "a.bin"})
+    assert queue_.get_nowait()["type"] == "complete"

@@ -3,360 +3,184 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>HDMI Transfer — History</title>
+<title>HDMI Transfer · History</title>
 <link rel="icon" type="image/svg+xml" href="/static/images/logo.svg"/>
 <link rel="stylesheet" href="/static/shared.css" />
 <style>
-:root {
-  --green:#4ade80;
-  --yellow:#fbbf24;
-  --red:#f87171;
-  --font-mono:'SF Mono','Cascadia Code','Fira Code','Consolas',monospace;
-}
+#center{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 
-::selection{background:var(--accent);color:var(--bg2)}
-
-#center{flex:1;display:flex;flex-direction:column;overflow:hidden}
-
-.center-top{
-  padding:14px 20px 10px;
-  display:flex;justify-content:space-between;align-items:center;
-  gap:16px;
-}
-.center-top h2{
-  font-size:16px;font-weight:700;color:var(--bright);
-  text-transform:uppercase;letter-spacing:.5px;
-}
+.topbar{padding:20px 24px 14px;border-bottom:1px solid var(--border)}
+.title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
 .title-copy{min-width:0}
-.center-top .sub{font-size:12px;color:var(--muted);margin-top:3px}
-.center-top .sub.error{color:var(--red)}
-.top-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
-.btn-clear{
-  padding:8px 16px;border-radius:5px;
-  font-family:inherit;font-size:12px;font-weight:700;
-  text-transform:uppercase;letter-spacing:.8px;
-  cursor:pointer;transition:all .15s;
-  background:transparent;border:1px solid rgba(255,255,255,0.15);
-  color:var(--text);
-}
-.btn-clear:hover{border-color:var(--red);color:var(--red)}
+.title-copy .sub{font-size:13px;color:var(--fg-lighter);margin-top:2px;line-height:1.5}
+.title-copy .sub:empty{display:none}
+.title-copy .sub.error{color:var(--red)}
+.top-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
 
-.table-wrap{
-  flex:1;overflow-y:auto;padding:0 20px 20px;
-}
-table{
-  width:100%;border-collapse:collapse;
-}
-thead th{
-  position:sticky;top:0;
-  background:var(--bg2);
-  padding:10px 12px;text-align:left;
-  font-size:11px;font-weight:700;text-transform:uppercase;
-  letter-spacing:1.5px;color:var(--muted);
-  border-bottom:1px solid var(--accent-border);
-}
-tbody td{
-  padding:10px 12px;
-  border-bottom:1px solid rgba(255,255,255,0.06);
-  font-size:13px;color:var(--text);
-  white-space:nowrap;font-family:var(--font-mono);
-}
-tbody tr:hover{background:rgba(255,255,255,0.02)}
-.tag{
-  display:inline-block;padding:3px 10px;border-radius:4px;
-  font-size:11px;font-weight:700;text-transform:uppercase;
-  letter-spacing:.5px;font-family:var(--font-ui);
-}
-.tag-sent{background:rgba(124,138,255,0.15);color:var(--accent)}
-.tag-received{background:rgba(74,222,128,0.15);color:var(--green)}
-.status-badge{
-  display:inline-flex;align-items:center;justify-content:center;
-  min-width:76px;padding:4px 10px;border-radius:999px;
-  font-size:11px;font-weight:700;text-transform:uppercase;
-  letter-spacing:.8px;font-family:var(--font-ui);
-}
-.status-disk{background:rgba(124,138,255,0.14);color:var(--accent)}
-.status-ok{background:rgba(74,222,128,0.14);color:var(--green)}
-.status-fail{background:rgba(248,113,113,0.14);color:var(--red)}
-.status-missing{background:rgba(251,191,36,0.14);color:var(--yellow)}
-.cell-primary{
-  color:var(--bright);font-family:var(--font-ui);
-  font-size:13px;font-weight:600;word-break:break-word;
-}
-.cell-sub{
-  margin-top:4px;color:var(--muted);
-  font-size:11px;font-family:var(--font-ui);
-  letter-spacing:.2px;
-}
-.path-cell{
-  white-space:normal;min-width:320px;max-width:560px;
-}
-.path-text{
-  word-break:break-all;line-height:1.45;
-}
-.path-text.dim{color:var(--muted);font-family:var(--font-ui)}
-.row-actions{
-  display:grid;gap:8px;justify-content:center;margin:0 auto;
-}
-.row-actions.actions-3{
-  grid-template-columns:repeat(3, minmax(0, 1fr));
-  max-width:380px;
-}
-.row-actions.actions-2{
-  grid-template-columns:repeat(2, minmax(0, 1fr));
-  max-width:260px;
-}
-.row-actions.actions-1{
-  grid-template-columns:minmax(0, 1fr);
-  max-width:140px;
-}
-.row-btn{
-  padding:6px 10px;border-radius:5px;
-  border:1px solid rgba(255,255,255,0.12);
-  background:transparent;color:var(--text);
-  font-family:inherit;font-size:11px;font-weight:700;
-  text-transform:uppercase;letter-spacing:.7px;
-  cursor:pointer;transition:all .15s;
-}
-.row-btn:hover{border-color:rgba(255,255,255,0.26);color:var(--bright)}
-.row-btn-open:hover{border-color:var(--accent);color:var(--accent)}
-.row-btn-danger:hover{border-color:var(--red);color:var(--red)}
-.row-btn:disabled{opacity:.35;cursor:not-allowed}
-
-.modal-backdrop{
-  position:fixed;inset:0;z-index:50;
-  display:flex;align-items:center;justify-content:center;
-  padding:20px;background:rgba(4,8,16,0.72);
-  backdrop-filter:blur(8px);
-}
-.modal-backdrop.hidden{display:none}
-.modal-dialog{
-  width:min(460px, calc(100vw - 40px));
-  padding:20px;border-radius:10px;
-  background:linear-gradient(180deg, rgba(28,31,40,0.98), rgba(17,19,26,0.98));
-  border:1px solid rgba(255,255,255,0.12);
-  box-shadow:0 24px 70px rgba(0,0,0,0.42);
-}
-.modal-title{
-  color:var(--bright);font-size:16px;font-weight:700;
-  letter-spacing:.3px;text-transform:uppercase;
-}
-.modal-body{
-  margin-top:10px;color:var(--text);font-size:13px;
-  line-height:1.65;word-break:break-word;
-}
-.modal-actions{
-  margin-top:18px;display:flex;justify-content:flex-end;gap:8px;
-}
-.modal-btn{
-  min-width:108px;padding:9px 14px;border-radius:6px;
-  border:1px solid rgba(255,255,255,0.12);
-  background:transparent;color:var(--text);
-  font-family:inherit;font-size:11px;font-weight:700;
-  text-transform:uppercase;letter-spacing:.8px;
-  cursor:pointer;transition:all .15s;
-}
-.modal-btn:hover{border-color:rgba(255,255,255,0.26);color:var(--bright)}
-.modal-btn-confirm{
-  background:rgba(248,113,113,0.12);border-color:rgba(248,113,113,0.4);color:var(--red);
-}
-.modal-btn-confirm:hover{background:rgba(248,113,113,0.18);border-color:var(--red);color:#ffb3b3}
-
-.empty-state{
-  flex:1;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
-  color:var(--muted);gap:8px;
-}
-.empty-state p{font-size:14px;text-transform:uppercase;letter-spacing:2px}
-.empty-state .sub{font-size:12px;letter-spacing:1px;opacity:.7}
-
-.topbar{
-  padding:20px 24px 16px;border-bottom:1px solid rgba(255,255,255,0.06);
-  background:linear-gradient(180deg, rgba(20,23,31,0.92), rgba(15,17,23,0.92));
-}
-.title-row{
-  display:flex;align-items:center;justify-content:space-between;gap:18px;
-}
-.title-copy h2{
-  font-size:19px;font-weight:700;color:var(--bright);letter-spacing:.3px;
-  text-transform:none;
-}
-.title-copy .sub{line-height:1.5;margin-top:2px}
-.btn{
-  height:36px;padding:0 16px;border-radius:7px;
-  border:1px solid rgba(255,255,255,0.12);background:transparent;color:var(--text);
-  font-family:inherit;font-size:11px;font-weight:700;text-transform:uppercase;
-  letter-spacing:.8px;cursor:pointer;transition:all .15s;
-  display:inline-flex;align-items:center;justify-content:center;gap:8px;
-}
-.btn:hover{border-color:rgba(255,255,255,0.28);color:var(--bright)}
-.btn-accent{background:var(--accent-dim);border-color:rgba(124,138,255,0.32);color:var(--bright)}
-.btn-accent:hover{border-color:var(--accent);color:#fff}
-
+/* Summary: one bordered strip split in three, numbers lead */
 .stats-inline{
-  margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;
+  margin-top:16px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-100);
+  overflow:hidden;
 }
-.stat-chip{
-  flex:1 1 200px;min-width:180px;
-  display:flex;align-items:baseline;gap:10px;
-  padding:12px 16px;border-radius:10px;
-  background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);
-  transition:border-color .15s;
-}
-.stat-chip:hover{border-color:rgba(255,255,255,0.14)}
-.stat-chip-val{
-  font-size:20px;font-weight:700;color:var(--bright);
-  font-family:var(--font-mono);line-height:1;
-}
-.stat-chip-lbl{
-  font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;
-  font-weight:700;
-}
-.stat-chip-sub{
-  margin-left:auto;font-size:11px;color:var(--muted);text-align:right;line-height:1.4;
-}
-/* legacy stat IDs kept hidden for JS compatibility */
-.stats-grid-legacy{display:none}
+.stat-chip{display:flex;flex-direction:column;gap:6px;padding:12px 16px;min-width:0}
+.stat-chip + .stat-chip{border-left:1px solid var(--border)}
+.stat-chip-top{display:flex;align-items:baseline;gap:8px}
+.stat-chip-val{font-size:22px;font-weight:600;color:var(--fg);font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-0.02em}
+.stat-chip-lbl{font-size:13px;color:var(--fg-light)}
+.stat-chip-sub{font-size:12px;color:var(--fg-lighter);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-.search-row{
-  margin-top:14px;display:flex;gap:10px;align-items:center;
+.search-row{margin-top:14px;display:flex;gap:8px;align-items:center}
+.search-wrap{flex:1;position:relative;min-width:0}
+.search-wrap svg{
+  position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  width:15px;height:15px;color:var(--fg-lighter);pointer-events:none;
 }
-.search-wrap{
-  flex:1;position:relative;
-}
-.search-wrap::before{
-  content:"";position:absolute;left:14px;top:50%;transform:translateY(-50%);
-  width:16px;height:16px;pointer-events:none;opacity:.55;
-  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") center/contain no-repeat;
-}
-.search-big{
-  width:100%;height:44px;padding:0 14px 0 40px;border-radius:9px;
-  border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.3);
-  color:var(--bright);font-family:inherit;font-size:14px;outline:none;
-  transition:border-color .15s,background .15s;
-}
-.search-big::placeholder{color:var(--muted)}
-.search-big:focus{border-color:var(--accent);background:rgba(0,0,0,0.42)}
-.sort-inline{
-  height:44px;min-width:180px;padding:0 36px 0 14px;border-radius:9px;
-  border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.3);
-  color:var(--text);font-family:inherit;font-size:13px;outline:none;
-  appearance:none;cursor:pointer;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:right 12px center;
-}
-.sort-inline:focus{border-color:var(--accent)}
+.search-big{width:100%;padding-left:32px}
+.sort-inline{min-width:170px}
 
-.advanced-filters{
-  margin-top:12px;border:1px solid rgba(255,255,255,0.07);border-radius:10px;
-  background:rgba(255,255,255,0.02);
-}
-.advanced-filters[open]{background:rgba(255,255,255,0.028)}
+.advanced-filters{margin-top:10px}
 .advanced-filters summary{
-  list-style:none;cursor:pointer;user-select:none;
-  padding:11px 16px;display:flex;align-items:center;gap:10px;
-  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;
-  color:var(--muted);transition:color .15s;
+  list-style:none;user-select:none;width:fit-content;
+  display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px 0 6px;border-radius:var(--radius);
+  font-size:13px;font-weight:500;color:var(--fg-light);
+  transition:color .15s var(--ease),background-color .15s var(--ease);
 }
 .advanced-filters summary::-webkit-details-marker{display:none}
-.advanced-filters summary:hover{color:var(--text)}
-.advanced-filters summary::before{
-  content:"";width:8px;height:8px;
-  border-right:2px solid currentColor;border-bottom:2px solid currentColor;
-  transform:rotate(-45deg);transition:transform .2s;
-}
-.advanced-filters[open] summary::before{transform:rotate(45deg)}
+.advanced-filters summary:hover{color:var(--fg);background:var(--surface-200)}
+.advanced-filters summary svg{width:14px;height:14px;transition:transform .2s var(--ease)}
+.advanced-filters[open] summary svg{transform:rotate(90deg)}
 .filters{
-  padding:4px 16px 16px;border-top:1px solid rgba(255,255,255,0.06);
+  margin-top:8px;padding:14px 16px;border:1px solid var(--border);border-radius:var(--radius-lg);
+  background:var(--surface-100);
 }
-.filters-grid{
-  padding-top:14px;display:grid;gap:12px;
-  grid-template-columns:repeat(5, minmax(140px, 1fr));
-}
+.filters-grid{display:grid;gap:12px;grid-template-columns:repeat(5,minmax(140px,1fr))}
 .field{display:flex;flex-direction:column;gap:6px;min-width:0}
-.field label{
-  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);
-}
-.text-input,.select{
-  width:100%;height:38px;padding:0 12px;border-radius:7px;
-  border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.22);
-  color:var(--text);font-family:inherit;font-size:13px;outline:none;
-}
-.select{
-  padding-right:34px;appearance:none;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:right 10px center;
-}
-.text-input:focus,.select:focus{border-color:rgba(124,138,255,0.55)}
-.results-bar{
-  margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
-}
-.results-copy{
-  font-size:12px;color:var(--muted);line-height:1.5;flex:1 1 280px;
-}
-.results-copy strong{color:var(--bright)}
-.filter-tags{
-  display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex:1 1 auto;
-}
+.field label{font-size:12px;font-weight:500;color:var(--fg-light)}
+.field .ui-field{width:100%}
+
+.results-bar{margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.results-copy{font-size:12px;color:var(--fg-lighter);line-height:1.5;flex:1 1 280px}
+.results-copy strong{color:var(--fg);font-weight:600}
+.filter-tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.filter-tags:not(:has(.visible)){display:none}
 .filter-tag{
-  display:none;align-items:center;gap:8px;padding:5px 6px 5px 11px;border-radius:999px;
-  background:rgba(124,138,255,0.1);border:1px solid rgba(124,138,255,0.25);
-  font-size:11px;color:var(--bright);text-transform:uppercase;letter-spacing:.6px;
-  font-weight:600;
+  display:none;align-items:center;gap:4px;height:24px;padding:0 4px 0 9px;border-radius:999px;
+  background:var(--accent-dim);border:1px solid var(--accent-line);
+  font-size:12px;color:var(--fg);font-weight:500;
 }
 .filter-tag.visible{display:inline-flex}
 .filter-tag button{
-  width:18px;height:18px;border:none;border-radius:999px;cursor:pointer;
-  background:rgba(255,255,255,0.1);color:var(--muted);font-size:11px;line-height:1;
+  width:18px;height:18px;border:none;border-radius:999px;
+  background:transparent;color:var(--fg-light);font-size:13px;line-height:1;
   display:inline-flex;align-items:center;justify-content:center;
 }
-.filter-tag button:hover{background:var(--red);color:#fff}
-.origin-tag{
-  display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;
-  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
+.filter-tag button:hover{background:var(--red-dim);color:var(--red)}
+
+/* Table (Supabase Table: 40px head, hairline rows, hover surface) */
+.table-wrap{flex:1;overflow:auto;padding:0 24px 24px}
+table{width:100%;min-width:1040px;border-collapse:separate;border-spacing:0;font-size:13px}
+thead th{
+  position:sticky;top:0;z-index:2;
+  height:40px;padding:0 12px;text-align:left;vertical-align:middle;white-space:nowrap;
+  background:var(--surface-0);
+  font-size:12px;font-weight:500;color:var(--fg-lighter);
+  border-bottom:1px solid var(--border);
 }
-.origin-history{background:rgba(124,138,255,0.15);color:var(--accent)}
-.origin-disk{background:rgba(251,191,36,0.14);color:var(--yellow)}
-.table-wrap{padding:0 20px 20px}
-table{min-width:1180px}
-.actions-col{width:380px;min-width:380px;text-align:center}
-.row-btn{
-  width:100%;min-width:0;height:32px;padding:0 10px;border-radius:6px;text-decoration:none;
-  display:inline-flex;align-items:center;justify-content:center;
+tbody td{
+  padding:10px 12px;vertical-align:middle;white-space:nowrap;
+  border-bottom:1px solid var(--border-muted);color:var(--fg-light);
+  font-variant-numeric:tabular-nums;
 }
-.empty-state{
-  text-align:center;padding:36px 20px;
+tbody tr{transition:background-color .12s var(--ease)}
+tbody tr:hover{background:var(--surface-100)}
+td.mono{font-family:var(--font-mono);font-size:12px;color:var(--fg-light)}
+.type-cell{display:flex;align-items:center;gap:7px;color:var(--fg)}
+.type-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
+.tag-received{background:var(--green)}
+.tag-sent{background:var(--accent)}
+.file-cell{white-space:normal;min-width:180px;max-width:320px}
+.cell-primary{color:var(--fg);font-weight:500;overflow-wrap:anywhere;line-height:1.4}
+.cell-sub{margin-top:3px;color:var(--fg-lighter);font-size:12px}
+.origin-disk::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--yellow);margin-right:6px;vertical-align:middle}
+/* One line per path; the start is elided so the folder that matters stays visible. Full path in the title. */
+.path-cell{width:30%}
+.path-text{
+  max-width:280px;min-width:160px;
+  font-family:var(--font-mono);font-size:12px;line-height:1.5;color:var(--fg-lighter);
+  direction:rtl;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
-.empty-title{
-  color:var(--bright);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;
+.path-text > span{unicode-bidi:isolate}
+.path-text.dim{font-family:var(--font-ui);font-style:italic;direction:ltr}
+
+.actions-col{width:1%;text-align:right}
+thead th.actions-col{text-align:right}
+.row-actions{display:inline-flex;gap:2px;justify-content:flex-end}
+/* Tooltips open above the icon; the last one is right-aligned so it never runs past the table edge */
+.row-actions [data-tooltip]:last-child::after{left:auto;right:0;transform:translate(0,2px)}
+.row-actions [data-tooltip]:last-child:hover::after,
+.row-actions [data-tooltip]:last-child:focus-visible::after{transform:translate(0,0)}
+
+/* Empty state */
+.empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:56px 20px}
+.empty-state svg{width:28px;height:28px;color:var(--fg-lighter);margin-bottom:6px}
+.empty-title{color:var(--fg);font-size:15px;font-weight:600}
+.empty-sub{font-size:13px;color:var(--fg-lighter);max-width:440px;line-height:1.6}
+
+/* Confirm dialog (Supabase AlertDialog) */
+.modal-backdrop{
+  position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+  padding:20px;background:rgba(0,0,0,0.6);
 }
-.empty-sub{font-size:12px;max-width:520px;line-height:1.7}
+.modal-backdrop.hidden{display:none}
+.modal-dialog{
+  width:min(440px,calc(100vw - 40px));border-radius:var(--radius-lg);
+  background:var(--surface-100);border:1px solid var(--border-strong);
+  box-shadow:0 24px 60px rgba(0,0,0,0.55);overflow:hidden;
+}
+.modal-title{padding:18px 20px 0;color:var(--fg);font-size:15px;font-weight:600}
+.modal-body{padding:8px 20px 18px;color:var(--fg-light);font-size:13px;line-height:1.6;word-break:break-word}
+.modal-actions{
+  display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;
+  border-top:1px solid var(--border);background:var(--surface-75);
+}
+
 @media (max-width: 1200px) {
-  .filters-grid{grid-template-columns:repeat(3, minmax(0, 1fr))}
+  .filters-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 @media (max-width: 900px) {
-  .filters-grid{grid-template-columns:repeat(2, minmax(0, 1fr))}
+  .filters-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .search-row{flex-wrap:wrap}
   .sort-inline{width:100%}
+}
+@media (max-width: 760px) {
+  #center{overflow:visible}
+  .topbar{padding:16px}
+  .title-row{flex-direction:column}
+  .stats-inline{grid-template-columns:1fr}
+  .stat-chip + .stat-chip{border-left:none;border-top:1px solid var(--border)}
+  .filters-grid{grid-template-columns:1fr}
+  .table-wrap{padding:0 16px 16px;overflow:auto}
+  .ui-field{height:44px}
 }
 </style>
 </head>
 <body>
 
-<div id="header">
+<header id="header">
   <div class="h-left">
-    <img class="h-logo" src="/static/images/logo.svg" alt="" />
+    <img class="h-logo" src="/static/images/logo.svg" alt="" width="24" height="24" />
     <span class="h-title">HDMI Transfer</span>
   </div>
-</div>
+</header>
 
 <div id="layout">
   <aside id="sidebar">
-    <nav class="nav">
-      <a href="/">Receive</a>
-      <a href="/sender">Send</a>
-      <a class="active" href="/history">History</a>
-      <a href="/settings">Settings</a>
+    <nav class="nav" aria-label="Main">
+      <a href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg><span>Receive</span></a>
+      <a href="/sender"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg><span>Send</span></a>
+      <a class="active" href="/history" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg><span>History</span></a>
+      <a href="/settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h9"/><path d="M17 6h3"/><path d="M4 12h3"/><path d="M11 12h9"/><path d="M4 18h11"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Settings</span></a>
     </nav>
   </aside>
 
@@ -364,39 +188,37 @@ table{min-width:1180px}
     <section class="topbar">
       <div class="title-row">
         <div class="title-copy">
-          <h2>Transfer history</h2>
+          <h1 class="page-title">Transfer history</h1>
           <div class="sub" id="countLabel">Loading history...</div>
-          <div class="sub" id="noticeLabel"></div>
+          <div class="sub" id="noticeLabel" role="status" aria-live="polite"></div>
         </div>
         <div class="top-actions">
-          <button class="btn btn-accent" id="refreshBtn" type="button">Refresh</button>
-          <button class="btn" id="clearBtn" type="button">Clear local log</button>
+          <button class="ui-btn ui-btn-danger-hover" id="clearBtn" type="button">Clear history</button>
+          <button class="ui-btn" id="refreshBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>Refresh</button>
         </div>
       </div>
 
       <div class="stats-inline">
         <div class="stat-chip">
-          <span class="stat-chip-val" id="statVisible">0</span>
-          <span class="stat-chip-lbl">visible</span>
+          <div class="stat-chip-top"><span class="stat-chip-val" id="statVisible">0</span><span class="stat-chip-lbl">visible</span></div>
           <span class="stat-chip-sub" id="statVisibleSub">0 matching items</span>
         </div>
         <div class="stat-chip">
-          <span class="stat-chip-val" id="statReceived">0</span>
-          <span class="stat-chip-lbl">received</span>
+          <div class="stat-chip-top"><span class="stat-chip-val" id="statReceived">0</span><span class="stat-chip-lbl">received</span></div>
           <span class="stat-chip-sub" id="statReceivedSub">0 files available</span>
         </div>
         <div class="stat-chip">
-          <span class="stat-chip-val" id="statSent">0</span>
-          <span class="stat-chip-lbl">sent</span>
+          <div class="stat-chip-top"><span class="stat-chip-val" id="statSent">0</span><span class="stat-chip-lbl">sent</span></div>
           <span class="stat-chip-sub" id="statSentSub">0 locally recorded</span>
         </div>
       </div>
 
       <div class="search-row">
         <div class="search-wrap">
-          <input class="search-big" id="searchInput" type="search" placeholder="Search files, paths or protocols..." aria-label="Search history"/>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input class="ui-field search-big" id="searchInput" type="search" placeholder="Search files, paths or protocols..." aria-label="Search history"/>
         </div>
-        <select class="sort-inline" id="sortSelect" aria-label="Sort">
+        <select class="ui-field sort-inline" id="sortSelect" aria-label="Sort">
           <option value="newest">Newest first</option>
           <option value="oldest">Oldest first</option>
           <option value="name_asc">Filename A-Z</option>
@@ -409,12 +231,12 @@ table{min-width:1180px}
       </div>
 
       <details class="advanced-filters">
-        <summary>Advanced filters</summary>
+        <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>Advanced filters</summary>
         <div class="filters">
           <div class="filters-grid">
             <div class="field">
               <label for="typeFilter">Type</label>
-              <select class="select" id="typeFilter">
+              <select class="ui-field select" id="typeFilter">
                 <option value="all">All types</option>
                 <option value="received">Received</option>
                 <option value="sent">Sent</option>
@@ -422,7 +244,7 @@ table{min-width:1180px}
             </div>
             <div class="field">
               <label for="statusFilter">Status</label>
-              <select class="select" id="statusFilter">
+              <select class="ui-field select" id="statusFilter">
                 <option value="all">All statuses</option>
                 <option value="ok">Successful</option>
                 <option value="failed">Failed</option>
@@ -432,7 +254,7 @@ table{min-width:1180px}
             </div>
             <div class="field">
               <label for="protocolFilter">Protocol</label>
-              <select class="select" id="protocolFilter">
+              <select class="ui-field select" id="protocolFilter">
                 <option value="all">All protocols</option>
                 <option value="fountain">Fountain</option>
                 <option value="sequential">Sequential</option>
@@ -442,7 +264,7 @@ table{min-width:1180px}
             </div>
             <div class="field">
               <label for="originFilter">Source</label>
-              <select class="select" id="originFilter">
+              <select class="ui-field select" id="originFilter">
                 <option value="all">All sources</option>
                 <option value="history">Recorded locally</option>
                 <option value="disk">Discovered on receiver disk</option>
@@ -450,7 +272,7 @@ table{min-width:1180px}
             </div>
             <div class="field">
               <label for="rangeFilter">Period</label>
-              <select class="select" id="rangeFilter">
+              <select class="ui-field select" id="rangeFilter">
                 <option value="all">All time</option>
                 <option value="24h">Last 24 hours</option>
                 <option value="7d">Last 7 days</option>
@@ -471,7 +293,7 @@ table{min-width:1180px}
           <span class="filter-tag" id="tagRange"><span id="tagRangeText"></span><button data-clear="range" type="button" aria-label="Clear range">×</button></span>
         </div>
         <div class="results-copy" id="resultsCopy">Showing <strong>0</strong> items.</div>
-        <button class="btn" id="clearFiltersBtn" type="button">Clear filters</button>
+        <button class="ui-btn ui-btn-outline" id="clearFiltersBtn" type="button">Clear filters</button>
       </div>
     </section>
 
@@ -479,21 +301,22 @@ table{min-width:1180px}
       <table id="historyTable" style="display:none">
         <thead>
           <tr>
-            <th>Date</th>
-            <th>Type</th>
-            <th>File</th>
-            <th>Location</th>
-            <th>Size</th>
-            <th>Duration</th>
-            <th>Speed</th>
-            <th>Status</th>
-            <th class="actions-col">Actions</th>
+            <th scope="col">Date</th>
+            <th scope="col">Type</th>
+            <th scope="col">File</th>
+            <th scope="col">Location</th>
+            <th scope="col">Size</th>
+            <th scope="col">Duration</th>
+            <th scope="col">Speed</th>
+            <th scope="col">Status</th>
+            <th scope="col" class="actions-col"><span class="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody id="historyBody"></tbody>
       </table>
 
       <div class="empty-state" id="emptyState">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
         <div class="empty-title" id="emptyTitle">No history yet</div>
         <div class="empty-sub" id="emptySub">Completed transfers and receiver output files will appear here.</div>
       </div>
@@ -502,12 +325,12 @@ table{min-width:1180px}
 </div>
 
 <div class="modal-backdrop hidden" id="confirmModal" aria-hidden="true">
-  <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
-    <div class="modal-title" id="confirmModalTitle">Confirm action</div>
+  <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle" aria-describedby="confirmModalMessage">
+    <h2 class="modal-title" id="confirmModalTitle">Confirm action</h2>
     <div class="modal-body" id="confirmModalMessage"></div>
     <div class="modal-actions">
-      <button class="modal-btn" id="confirmModalCancel" type="button">Cancel</button>
-      <button class="modal-btn modal-btn-confirm" id="confirmModalConfirm" type="button">Confirm</button>
+      <button class="ui-btn" id="confirmModalCancel" type="button">Cancel</button>
+      <button class="ui-btn ui-btn-danger" id="confirmModalConfirm" type="button">Confirm</button>
     </div>
   </div>
 </div>

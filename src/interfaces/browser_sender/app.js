@@ -1,3 +1,6 @@
+  // Inside the receiver web UI the page already carries the brand and shell.
+  if (window.self !== window.top) document.documentElement.classList.add("embedded");
+
   const BPC_LEVELS = {
     1: [0, 255],
     2: [0, 85, 170, 255],
@@ -355,7 +358,7 @@
       else status = "TX";
     }
     document.title =
-      `HDMI Transfer — Sender [${status}] ` +
+      `HDMI Transfer · Sender [${status}] ` +
       `f=${state.frame} k=${state.K} ` +
       `inner=${window.innerWidth}x${window.innerHeight} ` +
       `screen=${window.screenX},${window.screenY}`;

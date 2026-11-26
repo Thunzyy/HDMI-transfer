@@ -3,52 +3,53 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>HDMI Transfer — Send Test</title>
+<title>HDMI Transfer · Send test</title>
 <link rel="icon" type="image/svg+xml" href="/static/images/logo.svg"/>
 <link rel="stylesheet" href="/static/shared.css" />
 <style>
 #banner{
-  padding:10px 16px;
-  background:rgba(251,191,36,0.08);
-  border-bottom:1px solid rgba(251,191,36,0.18);
-  color:var(--text);
-  font-size:12px;
-  line-height:1.6;
+  display:flex;gap:10px;align-items:flex-start;
+  margin:16px 28px 0;padding:10px 12px;border-radius:var(--radius-lg);
+  background:var(--yellow-dim);border:1px solid var(--yellow-line);
+  color:var(--fg-light);font-size:13px;line-height:1.55;flex-shrink:0;
 }
-#banner strong{color:var(--bright)}
+#banner svg{width:16px;height:16px;color:var(--yellow);flex-shrink:0;margin-top:2px}
+#banner strong{color:var(--fg);font-weight:600}
 
 #center{flex:1;display:flex;flex-direction:column;overflow:hidden}
-#sender-frame{
-  width:100%;flex:1;border:none;display:block;
-  background:var(--bg2);
+#sender-frame{width:100%;flex:1;border:none;display:block;background:var(--surface-0)}
+@media (max-width: 760px) {
+  #banner{margin:12px 16px 0}
+  #sender-frame{min-height:80vh}
 }
 </style>
 </head>
 <body>
 
-<div id="header">
+<header id="header">
   <div class="h-left">
-    <img class="h-logo" src="/static/images/logo.svg" alt="" />
+    <img class="h-logo" src="/static/images/logo.svg" alt="" width="24" height="24" />
     <span class="h-title">HDMI Transfer</span>
   </div>
-</div>
-
-<div id="banner">
-  <strong>Local 1-PC test wrapper.</strong> This page enables the local receiver API for bench and single-PC validation. For a real 2-PC setup, open sender.html locally on the sender PC.
-</div>
+</header>
 
 <div id="layout">
   <aside id="sidebar">
-    <nav class="nav">
-      <a href="/">Receive</a>
-      <a class="active" href="/sender">Send</a>
-      <a href="/history">History</a>
-      <a href="/settings">Settings</a>
+    <nav class="nav" aria-label="Main">
+      <a href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg><span>Receive</span></a>
+      <a class="active" href="/sender" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg><span>Send</span></a>
+      <a href="/history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg><span>History</span></a>
+      <a href="/settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h9"/><path d="M17 6h3"/><path d="M4 12h3"/><path d="M11 12h9"/><path d="M4 18h11"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Settings</span></a>
     </nav>
   </aside>
 
   <main id="center">
-    <iframe id="sender-frame" src="/sender/app?receiverApi=1" allow="fullscreen"></iframe>
+    <h1 class="sr-only">Send</h1>
+    <div id="banner" role="note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></svg>
+      <span><strong>Local 1-PC test wrapper.</strong> This page enables the local receiver API for bench and single-PC validation. For a real 2-PC setup, open sender.html locally on the sender PC.</span>
+    </div>
+    <iframe id="sender-frame" src="/sender/app?receiverApi=1" allow="fullscreen" title="HDMI Transfer sender"></iframe>
   </main>
 </div>
 

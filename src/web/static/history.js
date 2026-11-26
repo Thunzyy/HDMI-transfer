@@ -11,6 +11,21 @@
     sort: "newest",
   };
 
+  // Row action glyphs: each draws the action it triggers (save to disk, reveal folder, delete, remove from list).
+  const svgIcon = (paths) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+  const ICONS = {
+    download: svgIcon('<path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>'),
+    folder: svgIcon('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1"/><path d="M3 7v11a1 1 0 0 0 1 1h14.2a1.5 1.5 0 0 0 1.45-1.1L21.8 12a1 1 0 0 0-.97-1.26H7.6a1.5 1.5 0 0 0-1.44 1.08L3.4 19"/>'),
+    trash: svgIcon('<path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>'),
+    remove: svgIcon('<path d="M6 6l12 12"/><path d="M18 6L6 18"/>'),
+  };
+  const STATUS_BADGE = {
+    "status-ok": "ui-badge-success",
+    "status-fail": "ui-badge-danger",
+    "status-missing": "ui-badge-warning",
+    "status-disk": "ui-badge-accent",
+  };
+
   const els = {
     tbody: document.getElementById("historyBody"),
     table: document.getElementById("historyTable"),
@@ -56,6 +71,8 @@
   let prefs = loadPrefs();
   let confirmState = null;
   let serverFiles = [];
+  let serverHistory = [];
+  let serverHistoryAvailable = false;
   let serverFilesRequest = null;
   let mergedItems = [];
   let viewItems = [];
@@ -160,7 +177,7 @@
   }
 
   function originLabel(item) {
-    return originKey(item) === "disk" ? "Receiver disk" : "Local log";
+    return originKey(item) === "disk" ? "Receiver disk" : "History log";
   }
 
   function locationFor(item) {
@@ -230,7 +247,25 @@
     const localItems = getHistory();
     const filesByName = new Map(serverFiles.map((file) => [file.filename, file]));
     const seenNames = new Set();
-    const merged = localItems.map((item, localIndex) => {
+    // Receptions are recorded by the receiver in SQLite; the browser log only keeps sent entries
+    // (and received ones while the receiver history is unreachable).
+    const recorded = serverHistory.map((item) => {
+      const disk = item.filename ? filesByName.get(item.filename) : null;
+      if (disk) seenNames.add(disk.filename);
+      return {
+        ...item,
+        imported: false,
+        historyId: item.id,
+        localIndex: null,
+        size: item.size != null ? item.size : (disk ? disk.size : null),
+        systemPath: item.systemPath || (disk ? disk.system_path : ""),
+        fileExists: Boolean(disk),
+      };
+    });
+    const localOnly = localItems
+      .map((item, localIndex) => ({ item, localIndex }))
+      .filter(({ item }) => !(serverHistoryAvailable && item.type === "received"));
+    const merged = recorded.concat(localOnly.map(({ item, localIndex }) => {
       const disk = item.type === "received" && item.filename ? filesByName.get(item.filename) : null;
       if (disk) seenNames.add(disk.filename);
       return {
@@ -242,7 +277,7 @@
         fileExists: item.type === "received" && item.filename ? Boolean(disk) : item.fileExists,
         timestamp: item.timestamp != null ? item.timestamp : (disk ? disk.modified_ms : Date.now()),
       };
-    });
+    }));
 
     for (const file of serverFiles) {
       if (seenNames.has(file.filename)) continue;
@@ -286,7 +321,7 @@
     els.statReceived.textContent = String(received.length);
     els.statReceivedSub.textContent = received.filter((item) => item.fileExists !== false).length + " files currently available on receiver";
     els.statSent.textContent = String(sent.length);
-    els.statSentSub.textContent = viewItems.filter((item) => originKey(item) === "history").length + " locally recorded entries";
+    els.statSentSub.textContent = viewItems.filter((item) => originKey(item) === "history").length + " recorded entries";
   }
 
   function setTag(key, value) {
@@ -307,7 +342,7 @@
     setTag("type", prefs.type !== "all" ? "Type: " + typeLabel(prefs.type) : "");
     setTag("status", prefs.status !== "all" ? "Status: " + prefs.status.replace("_", " ") : "");
     setTag("protocol", prefs.protocol !== "all" ? "Protocol: " + protocolLabel(prefs.protocol) : "");
-    setTag("origin", prefs.origin !== "all" ? "Source: " + (prefs.origin === "disk" ? "Receiver disk" : "Local log") : "");
+    setTag("origin", prefs.origin !== "all" ? "Source: " + (prefs.origin === "disk" ? "Receiver disk" : "History log") : "");
     setTag("range", prefs.range !== "all" ? "Period: " + els.rangeFilter.selectedOptions[0].textContent : "");
   }
 
@@ -317,7 +352,7 @@
       : "Showing <strong>" + viewItems.length + "</strong> of <strong>" + mergedItems.length + "</strong> items.";
     const localCount = viewItems.filter((item) => originKey(item) === "history").length;
     const diskCount = viewItems.filter((item) => originKey(item) === "disk").length;
-    els.resultsCopy.innerHTML = text + " Local log: <strong>" + localCount + "</strong> &middot; Receiver disk: <strong>" + diskCount + "</strong>.";
+    els.resultsCopy.innerHTML = text + " History log: <strong>" + localCount + "</strong> &middot; Receiver disk: <strong>" + diskCount + "</strong>.";
   }
 
   function renderEmptyState() {
@@ -346,34 +381,34 @@
       const canDownload = canDeleteFile;
       const deleteLabel = canDeleteFile ? "Delete file" : "Delete entry";
       const downloadUrl = item.filename ? "/api/receive/download/" + encodeURIComponent(item.filename) : "";
+      const fileLabel = escapeHtml(item.filename || "entry");
       const actionButtons = [];
       if (canDownload) {
-        actionButtons.push(`<a class="row-btn row-btn-open" href="${downloadUrl}">Download</a>`);
+        actionButtons.push(`<a class="icon-btn" href="${downloadUrl}" download data-tooltip="Download" aria-label="Download ${fileLabel}">${ICONS.download}</a>`);
       }
       if (canOpenLocation) {
-        actionButtons.push(`<button class="row-btn row-btn-open" data-action="open" data-index="${index}" type="button">Open location</button>`);
+        actionButtons.push(`<button class="icon-btn" data-action="open" data-index="${index}" type="button" data-tooltip="Open location" aria-label="Open location of ${fileLabel}">${ICONS.folder}</button>`);
       }
-      actionButtons.push(`<button class="row-btn row-btn-danger" data-action="delete" data-index="${index}" type="button">${escapeHtml(deleteLabel)}</button>`);
-      const actionClass = "actions-" + actionButtons.length;
+      actionButtons.push(`<button class="icon-btn is-danger" data-action="delete" data-index="${index}" type="button" data-tooltip="${escapeHtml(deleteLabel)}" aria-label="${escapeHtml(deleteLabel)}: ${fileLabel}">${canDeleteFile ? ICONS.trash : ICONS.remove}</button>`);
 
       const row = document.createElement("tr");
       row.innerHTML = `
         <td class="mono">${escapeHtml(dateText)}</td>
         <td>
-          <div><span class="tag ${typeClass}">${escapeHtml(typeLabel(item.type))}</span></div>
-          <div class="cell-sub"><span class="origin-tag ${originClass}">${escapeHtml(originLabel(item))}</span></div>
+          <div class="type-cell"><span class="type-dot ${typeClass}" aria-hidden="true"></span>${escapeHtml(typeLabel(item.type))}</div>
+          <div class="cell-sub origin-tag ${originClass}">${escapeHtml(originLabel(item))}</div>
         </td>
-        <td>
+        <td class="file-cell">
           <div class="cell-primary">${escapeHtml(item.filename || "--")}</div>
           <div class="cell-sub">${escapeHtml(protocolLabel(item.protocol))}</div>
         </td>
-        <td class="path-cell"><div class="path-text${item.systemPath ? "" : " dim"}">${escapeHtml(locationFor(item))}</div></td>
+        <td class="path-cell"><div class="path-text${item.systemPath ? "" : " dim"}" title="${escapeHtml(locationFor(item))}"><span dir="ltr">${escapeHtml(locationFor(item))}</span></div></td>
         <td>${formatSize(item.size)}</td>
         <td>${formatDuration(item.duration)}</td>
         <td>${formatSpeed(item.speed)}</td>
-        <td><span class="status-badge ${status.className}">${escapeHtml(status.label)}</span></td>
+        <td><span class="ui-badge ${STATUS_BADGE[status.className] || ""} ${status.className}">${escapeHtml(status.label)}</span></td>
         <td class="actions-col">
-          <div class="row-actions ${actionClass}">
+          <div class="row-actions">
             ${actionButtons.join("")}
           </div>
         </td>
@@ -462,22 +497,42 @@
     });
   }
 
+  function fetchList(url) {
+    return fetch(url, { cache: "no-store" }).then(async (response) => {
+      if (!response.ok) return null;
+      const data = await parseJsonSafe(response);
+      return Array.isArray(data) ? data : null;
+    }).catch(() => null);
+  }
+
   async function refreshServerFiles({ silent = false } = {}) {
     if (!serverFilesRequest) {
-      serverFilesRequest = fetch("/api/receive/files", { cache: "no-store" })
-        .then(async (response) => {
-          if (!response.ok) return [];
-          const data = await parseJsonSafe(response);
-          return Array.isArray(data) ? data : [];
-        })
-        .catch(() => {
-          if (!silent) setNotice("Unable to refresh receiver files.", true);
-          return [];
-        })
+      serverFilesRequest = Promise.all([fetchList("/api/receive/files"), fetchList("/api/history")])
         .finally(() => { serverFilesRequest = null; });
     }
-    serverFiles = await serverFilesRequest;
+    const [files, history] = await serverFilesRequest;
+    if (files == null && !silent) setNotice("Unable to refresh receiver files.", true);
+    serverFiles = files || [];
+    serverHistoryAvailable = history != null;
+    serverHistory = history || [];
     render();
+  }
+
+  // One-time move of receptions logged in this browser by older versions into the receiver database.
+  async function migrateLocalReceived() {
+    const received = getHistory().filter((item) => item && item.type === "received");
+    if (received.length === 0) return;
+    try {
+      const response = await fetch("/api/history/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entries: received }),
+      });
+      if (!response.ok) return;
+    } catch {
+      return;
+    }
+    setHistory(getHistory().filter((item) => !(item && item.type === "received")));
   }
 
   async function deleteEntry(index) {
@@ -485,14 +540,15 @@
     if (!item) return;
     const canDeleteFile = item.type === "received" && Boolean(item.filename) && item.fileExists !== false;
     const hasLocalEntry = Number.isInteger(item.localIndex);
+    const hasHistoryEntry = Number.isInteger(item.historyId);
     const label = item.filename || "this entry";
     const confirmed = await showConfirmModal({
       title: canDeleteFile ? "Delete receiver file" : "Remove history entry",
       message: canDeleteFile
-        ? (hasLocalEntry
-          ? `Delete "${label}" from disk and remove it from the local history?`
+        ? (hasLocalEntry || hasHistoryEntry
+          ? `Delete "${label}" from disk and remove it from the history?`
           : `Delete "${label}" from the receiver output directory?`)
-        : `Remove "${label}" from the local history list?`,
+        : `Remove "${label}" from the history list?`,
       confirmLabel: canDeleteFile ? "Delete file" : "Remove entry",
     });
     if (!confirmed) return;
@@ -502,6 +558,14 @@
       if (!response.ok && response.status !== 404) {
         const data = await parseJsonSafe(response);
         setNotice(data.error || "Unable to delete the receiver file.", true);
+        return;
+      }
+    }
+
+    if (hasHistoryEntry) {
+      const response = await fetch("/api/history/" + item.historyId, { method: "DELETE" });
+      if (!response.ok && response.status !== 404) {
+        setNotice("Unable to remove the history entry.", true);
         return;
       }
     }
@@ -521,8 +585,8 @@
       return;
     }
 
+    await refreshServerFiles({ silent: true });
     setNotice("History entry removed.");
-    render();
   }
 
   async function openLocation(index) {
@@ -543,14 +607,16 @@
   });
   els.clearBtn.addEventListener("click", () => {
     showConfirmModal({
-      title: "Clear local history",
-      message: "Clear the local browser history log? Files on disk will not be deleted.",
+      title: "Clear history",
+      message: "Clear the transfer history log? Files on disk will not be deleted.",
       confirmLabel: "Clear log",
-    }).then((confirmed) => {
+    }).then(async (confirmed) => {
       if (!confirmed) return;
+      const response = await fetch("/api/history", { method: "DELETE" }).catch(() => null);
       localStorage.removeItem(STORAGE_KEY);
-      setNotice("Local history cleared.");
-      render();
+      await refreshServerFiles({ silent: true });
+      const ok = Boolean(response && response.ok);
+      setNotice(ok ? "History cleared." : "Browser log cleared; receiver history unavailable.", !ok);
     });
   });
   els.clearFiltersBtn.addEventListener("click", clearFilters);
@@ -606,7 +672,7 @@
 
   syncControls();
   render();
-  refreshServerFiles({ silent: true });
+  migrateLocalReceived().finally(() => refreshServerFiles({ silent: true }));
   window.setInterval(() => {
     if (document.visibilityState !== "visible") return;
     refreshServerFiles({ silent: true });
