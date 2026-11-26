@@ -79,9 +79,31 @@ Use `--recalibrate` on either command to force a fresh setup. For compatibility
 with older senders or specialist diagnostics, `--no-calibration` bypasses that
 phase explicitly. Video-file reception keeps its existing playback path.
 
+## Sender PC profiles and auto receive
+
+When several PCs send to the same receiver (for example a work PC and a
+personal PC), create one **sender PC** per machine in Settings. A sender PC
+keeps its capture device, profile, mode, encoding and preview quality, and its
+own calibration. Pick it in the Receive sidebar; changing a setting there saves
+it to that PC.
+
+When a transfer starts, the receiver tries the selected PC's saved geometry
+first, then the geometry of the other sender PCs on the same capture card and
+profile. If one of them matches the live signal, the receiver switches to that
+PC and says so in the log. If none matches, it calibrates as usual. A saved
+geometry is still only a hint: three fresh calibration frames must confirm it.
+
+**Auto receive** (switch in the Receive sidebar) keeps the receiver armed for
+the selected PC, with or without the page open, and re-arms it after each
+file. Stop or Reset pauses it. After 3 receptions in a row that end without a
+file, it pauses and shows why. Turn the switch off and on to resume. While it
+is on, the web server holds the capture card, so turn it off before using
+`hdmi-recv`.
+
 ## Storage
 
 - Receiver geometry: `~/.hdmi-transfer/calibration.json` (versioned, up to 64 entries).
+- Sender PCs, the selected PC and the auto receive switch: `~/.hdmi-transfer/profiles.sqlite3`.
 - CLI preferences and sender confirmation: `~/.hdmi-transfer/settings.json`.
 - Browser preferences and offline confirmation: local browser storage. Clearing
   that storage or using another browser requires confirmation again.

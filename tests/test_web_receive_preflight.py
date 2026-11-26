@@ -106,6 +106,7 @@ def test_api_receive_defaults_and_explicit_recalibration(monkeypatch, tmp_path):
 
 
 def test_api_receive_status_exposes_runtime_preflight_state(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("HDMI_TRANSFER_STATE_DIR", str(tmp_path))
     app = server.create_app(output_dir=str(tmp_path), runtime=False)
 
     class FakeWorker:
@@ -144,10 +145,16 @@ def test_api_receive_status_exposes_runtime_preflight_state(monkeypatch, tmp_pat
         "preflight_stage": "transfer",
         "requested_transfer_bpc": 3,
         "transfer_bpc": None,
+        "active_profile_id": None,
+        "auto_receive": {
+            "enabled": False, "paused": False, "reason": "",
+            "consecutive_failures": 0, "armed": False,
+        },
     }
 
 
 def test_api_receive_status_preserves_terminal_state_after_worker_exit(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("HDMI_TRANSFER_STATE_DIR", str(tmp_path))
     app = server.create_app(output_dir=str(tmp_path), runtime=False)
 
     class FakeWorker:
@@ -192,4 +199,9 @@ def test_api_receive_status_preserves_terminal_state_after_worker_exit(monkeypat
         "preflight_stage": "done",
         "requested_transfer_bpc": 2,
         "transfer_bpc": 1,
+        "active_profile_id": None,
+        "auto_receive": {
+            "enabled": False, "paused": False, "reason": "",
+            "consecutive_failures": 0, "armed": False,
+        },
     }
