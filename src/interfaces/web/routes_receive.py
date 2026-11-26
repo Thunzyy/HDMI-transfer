@@ -160,10 +160,25 @@ def start_receiver_worker(
 
 
 def start_worker_for_profile(app: Flask, profile: dict):
-    """Auto receive entry point: arm a worker with a sender profile's saved settings."""
+    """Auto receive entry point: arm a worker with a sender profile's saved settings.
+
+    Returns None without starting when a worker is already running (a manual
+    Start or Recalibrate wins) or when auto receive was turned off or paused
+    while this call waited for the control lock.
+    """
     with app._receiver_control_lock:
-        registry = app._device_registry
-        devices = registry.list_devices() if registry is not None else []
+        current = app._receiver_worker
+        if current is not None and current.is_alive():
+            return None
+        if not app._profile_store.get_auto_receive() or app._auto_receive.status()["paused"]:
+            return None
+        if not getattr(app, "_auto_receive_scanned", False):
+            # The device cache can be stale after a reboot: scan once before arming unattended.
+            app._auto_receive_scanned = True
+            devices = app._detect_and_cache()
+        else:
+            registry = app._device_registry
+            devices = registry.list_devices() if registry is not None else []
         device = resolve_profile_device(devices, profile)
         if device is None:
             raise RuntimeError(f"No capture device for {profile.get('name')}")
@@ -228,26 +243,28 @@ def register_receive_routes(app: Flask) -> None:
 
     @app.route("/api/receive/stop", methods=["POST"])
     def api_receive_stop():
+        # Pause first, outside the control lock: auto receive must not re-arm in between.
+        worker = app._receiver_worker
+        if worker is not None and worker.is_alive() and app._profile_store.get_auto_receive():
+            app._auto_receive.pause("Stopped by user")
         with app._receiver_control_lock:
             worker = app._receiver_worker
             if worker is None or not worker.is_alive():
                 return jsonify({"error": "Not receiving"}), 409
             worker.stop(reason="user")
-        if app._profile_store.get_auto_receive():
-            app._auto_receive.pause("Stopped by user")
         return jsonify({"status": "stopped"})
 
     @app.route("/api/receive/reset", methods=["POST"])
     def api_receive_reset():
         import cv2
 
+        if app._profile_store.get_auto_receive():
+            app._auto_receive.pause("Paused by reset")
         with app._receiver_control_lock:
             worker = app._receiver_worker
             if worker is not None and worker.is_alive():
                 worker.stop(reason="user")
             app._receiver_worker = None
-            if app._profile_store.get_auto_receive():
-                app._auto_receive.pause("Paused by reset")
 
             app._capture_manager.release()
 

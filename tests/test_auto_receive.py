@@ -247,3 +247,53 @@ def test_user_stop_is_not_counted_as_a_failure(env):
     supervisor.pause("Stopped by user")
     supervisor.tick()
     assert supervisor.status()["consecutive_failures"] == 0
+
+
+def _call_in_thread(fn, timeout=1.0):
+    import threading
+
+    done = threading.Event()
+    threading.Thread(target=lambda: (fn(), done.set()), daemon=True).start()
+    return done.wait(timeout)
+
+
+def test_tick_does_not_hold_the_lock_while_starting(env):
+    store, _, _, current, clock = env
+    seen = {}
+
+    def slow_start(profile):
+        seen["status_free"] = _call_in_thread(lambda: supervisor.status())
+        worker = FakeWorker(profile)
+        current["worker"] = worker
+        return worker
+
+    supervisor = AutoReceiveSupervisor(store, slow_start, lambda: current["worker"], clock=clock)
+    supervisor.tick()
+    assert seen["status_free"] is True
+    assert supervisor.status()["armed"] is True
+
+
+def test_disarm_stops_the_worker_outside_the_lock(env):
+    _, supervisor, started, _, _ = env
+    supervisor.tick()
+    seen = {}
+    original_stop = started[0].stop
+
+    def stop(reason="user"):
+        seen["status_free"] = _call_in_thread(lambda: supervisor.status())
+        original_stop(reason)
+
+    started[0].stop = stop
+    supervisor.disarm()
+    assert seen["status_free"] is True
+
+
+def test_skipped_start_is_not_a_failure(env):
+    store, _, _, _, clock = env
+    supervisor = AutoReceiveSupervisor(store, lambda profile: None, lambda: None, clock=clock)
+    for _ in range(4):
+        supervisor.tick()
+    status = supervisor.status()
+    assert status["consecutive_failures"] == 0
+    assert status["paused"] is False
+    assert status["armed"] is False

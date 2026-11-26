@@ -43,6 +43,7 @@ class AutoReceiveSupervisor:
         self._clock = clock
         self._interval_s = interval_s
         self._lock = threading.RLock()
+        self._tick_lock = threading.Lock()
         self._paused = False
         self._reason = ""
         self._failures = 0
@@ -64,18 +65,18 @@ class AutoReceiveSupervisor:
 
     def on_profile_changed(self) -> None:
         """New settings: clear any pause and restart an armed worker that is still idle."""
-        with self._lock:
-            self.clear_pause()
-            self.disarm()
+        self.clear_pause()
+        self.disarm()
 
     def disarm(self) -> None:
         """Stop the worker this supervisor armed, unless it is already receiving."""
         with self._lock:
             worker = self._own_worker
-            if worker is not None and worker.is_alive():
-                state = (worker.get_runtime_state() or {}).get("state")
-                if state in _IDLE_STATES:
-                    worker.stop(reason="supervisor")
+        # Stopping joins the worker thread: never do it while holding the lock.
+        if worker is not None and worker.is_alive():
+            state = (worker.get_runtime_state() or {}).get("state")
+            if state in _IDLE_STATES:
+                worker.stop(reason="supervisor")
 
     def adopt_match(self, worker) -> None:
         """Make the profile whose calibration matched the live signal the active one."""
@@ -90,10 +91,11 @@ class AutoReceiveSupervisor:
         self._store.set_active_id(matched)
 
     def status(self) -> dict:
+        enabled = bool(self._store.get_auto_receive())
         with self._lock:
             worker = self._own_worker
             return {
-                "enabled": bool(self._store.get_auto_receive()),
+                "enabled": enabled,
                 "paused": self._paused,
                 "reason": self._reason,
                 "consecutive_failures": self._failures,
@@ -123,24 +125,32 @@ class AutoReceiveSupervisor:
             self._fail(f"reception ended without a file (state: {state})")
 
     def tick(self) -> None:
-        with self._lock:
+        # Lock order: the state lock is only held for short bookkeeping, never while
+        # starting or stopping a worker. Starting takes the app's control lock, and the
+        # Stop and Reset routes call pause() before taking it, so the two never cross.
+        with self._tick_lock:
             current = self._get_worker()
             if current is not None and current.is_alive():
                 self.adopt_match(current)
                 return
-            self._judge_last()
-            if self._paused or not self._store.get_auto_receive():
-                return
+            enabled = self._store.get_auto_receive()
             profile_id = self._store.get_active_id()
             profile = self._store.get(profile_id) if profile_id is not None else None
-            if profile is None or self._clock() < self._rearm_at:
-                return
+            with self._lock:
+                self._judge_last()
+                if self._paused or not enabled or profile is None or self._clock() < self._rearm_at:
+                    return
             try:
-                self._own_worker = self._start_worker(profile)
-                self._judged = False
+                worker = self._start_worker(profile)
             except Exception as exc:  # a missing device must not kill the supervisor
-                self._own_worker = None
-                self._fail(f"could not start ({exc})")
+                with self._lock:
+                    self._own_worker = None
+                    self._fail(f"could not start ({exc})")
+                return
+            with self._lock:
+                # None means the start was skipped (a manual worker runs, or auto was turned off).
+                self._own_worker = worker
+                self._judged = worker is None
 
     # -- thread -----------------------------------------------------------
 
