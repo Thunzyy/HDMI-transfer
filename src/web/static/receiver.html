@@ -31,6 +31,22 @@
 .config-select{width:100%;height:30px;font-size:12.5px}
 .btn-detect{width:100%;border-style:dashed;background:transparent;box-shadow:none;color:var(--fg-light);height:28px;font-size:12.5px}
 .btn-detect:hover:not(:disabled){border-style:solid;color:var(--fg)}
+.config-link{align-self:flex-start;font-size:12px;color:var(--fg-light);text-decoration:underline;text-decoration-color:var(--border-stronger);text-underline-offset:3px}
+.config-link:hover{color:var(--fg);text-decoration-color:var(--fg-lighter)}
+.capture-title{margin-top:2px;padding-top:12px;border-top:1px solid var(--border)}
+
+/* Auto receive switch in the action bar, its status under the title */
+.auto-toggle{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 2px;font-size:13px;font-weight:500;color:var(--fg);cursor:pointer;user-select:none}
+.top-sep{width:1px;height:20px;background:var(--border-strong);margin:0 4px}
+.auto-status{margin-top:8px;font-size:12px;line-height:1.45;color:var(--fg-lighter)}
+.auto-status.armed{color:var(--green)}
+.auto-status.warn{color:var(--yellow)}
+
+/* Collapsible side panels */
+body.left-collapsed #sidebar{display:none}
+body.right-collapsed #panel{display:none}
+#header .h-left .icon-btn{margin-left:-6px}
+#header .h-pill{margin-left:auto;margin-right:8px}
 
 /* Center */
 #center{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
@@ -73,18 +89,48 @@
 .preview-idle .idle-hint{font-size:12px;font-weight:400;color:var(--fg-lighter)}
 .preview-idle.hidden{display:none}
 
+/* Transfer progress bar (between preview and log) */
+.transfer-bar{
+  flex-shrink:0;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-lg);
+  background:var(--surface-100);display:flex;flex-direction:column;gap:8px;
+}
+.tb-head{display:flex;align-items:baseline;gap:12px;font-size:12px;color:var(--fg-light)}
+.tb-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tb-pct{font-weight:600;color:var(--fg);font-variant-numeric:tabular-nums}
+.tb-eta{color:var(--fg-lighter);font-variant-numeric:tabular-nums}
+.tb-eta strong{color:var(--fg-light);font-weight:500;font-family:var(--font-mono)}
+.tb-track{height:8px;border-radius:4px;background:var(--surface-300);overflow:hidden}
+.tb-fill{height:100%;width:0;border-radius:4px;background:var(--accent);transition:width .6s var(--ease)}
+.transfer-bar.done .tb-fill{background:var(--green)}
+@media (prefers-reduced-motion: reduce){.tb-fill{transition:none}}
+
 /* Log */
 #log{
-  height:150px;border:1px solid var(--border);border-radius:var(--radius-lg);
-  background:var(--surface-100);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;
+  position:relative;height:150px;min-height:90px;border:1px solid var(--border);border-radius:var(--radius-lg);
+  background:var(--surface-100);display:flex;flex-direction:column;flex-shrink:0;
 }
+/* Expanded: the log takes most of the column, the preview keeps a usable strip */
+#log.expanded{height:auto !important;flex:3 1 0}
+#log.expanded ~ *,.center-body:has(#log.expanded) #preview{min-height:120px}
+.log-resize{position:absolute;left:0;right:0;top:-6px;height:10px;cursor:ns-resize;z-index:3;border-radius:var(--radius)}
+.log-resize::after{content:"";position:absolute;left:50%;top:3px;width:36px;height:4px;margin-left:-18px;border-radius:4px;background:var(--border-stronger);opacity:0;transition:opacity .15s var(--ease)}
+#log:hover .log-resize::after,.log-resize:focus-visible::after,.log-resize.dragging::after{opacity:1}
 .log-bar{
-  height:34px;padding:0 12px;border-bottom:1px solid var(--border);
-  display:flex;justify-content:space-between;align-items:center;
+  height:36px;padding:0 6px 0 12px;border-bottom:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center;gap:8px;flex-shrink:0;
 }
-.log-bar span{font-size:12px;font-weight:500;color:var(--fg-light)}
-.log-bar span + span{color:var(--fg-lighter);font-weight:400}
-#logBody{flex:1;overflow-y:auto;padding:8px 12px;display:flex;flex-direction:column;gap:2px}
+.log-title{font-size:12px;font-weight:500;color:var(--fg-light)}
+.log-tools{display:flex;align-items:center;gap:2px}
+.log-tool{
+  height:24px;padding:0 8px;border-radius:var(--radius);border:1px solid var(--border-strong);
+  background:transparent;color:var(--fg-lighter);font:inherit;font-size:12px;font-weight:500;
+  transition:background-color .15s var(--ease),color .15s var(--ease),border-color .15s var(--ease);
+}
+.log-tool:hover{color:var(--fg);border-color:var(--border-stronger)}
+.log-tool[aria-pressed="true"]{color:var(--accent);border-color:var(--accent-line);background:var(--accent-dim)}
+.log-tools .icon-btn{width:26px;height:26px}
+.log-tools .icon-btn[aria-pressed="true"]{color:var(--accent)}
+#logBody{flex:1;min-height:0;overflow-y:auto;padding:8px 12px;display:flex;flex-direction:column;gap:2px;border-radius:0 0 var(--radius-lg) var(--radius-lg)}
 .log-entry{display:flex;gap:10px;font-size:12px;line-height:1.55;font-family:var(--font-mono)}
 .log-ts{color:var(--fg-lighter);flex-shrink:0;min-width:80px}
 .log-lv{flex-shrink:0;min-width:60px;font-weight:600}
@@ -150,6 +196,7 @@
 
 <header id="header">
   <div class="h-left">
+    <button class="icon-btn" id="toggleLeftPanel" type="button" aria-controls="sidebar" aria-expanded="true" data-tooltip-below data-tooltip="Hide sidebar" aria-label="Hide sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button>
     <img class="h-logo" src="/static/images/logo.svg" alt="" width="24" height="24" />
     <span class="h-title">HDMI Transfer</span>
   </div>
@@ -157,6 +204,7 @@
     <span class="h-dot idle" id="linkDot" aria-hidden="true"></span>
     <span id="linkLabel">Idle</span>
   </div>
+  <button class="icon-btn" id="toggleRightPanel" type="button" aria-controls="panel" aria-expanded="true" data-tooltip-below data-tooltip="Hide transfer panel" aria-label="Hide transfer panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg></button>
 </header>
 
 <div id="layout">
@@ -169,7 +217,20 @@
       <a href="/settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h9"/><path d="M17 6h3"/><path d="M4 12h3"/><path d="M11 12h9"/><path d="M4 18h11"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Settings</span></a>
     </nav>
     <div class="config">
-      <div class="config-section-title">Capture</div>
+      <div class="config-section-title">Sender PC</div>
+      <div class="config-field">
+        <div class="config-head">
+          <label class="config-label" for="senderProfileSelect">Saved PC</label>
+          <span class="help-tip" tabindex="0">?
+            <span class="help-bubble">Each sender PC keeps its own capture settings and calibration. Pick the PC you are sending from. Changing a setting below saves it to that PC.</span>
+          </span>
+        </div>
+        <select class="ui-field config-select" id="senderProfileSelect">
+          <option value="">No sender PC</option>
+        </select>
+        <a class="config-link" href="/settings#senderProfiles">Manage sender PCs</a>
+      </div>
+      <div class="config-section-title capture-title">Capture</div>
       <div class="config-field">
         <div class="config-head">
           <label class="config-label" for="deviceSelect">Device</label>
@@ -247,11 +308,17 @@
           <span class="ui-badge cfg-chip" id="cfgChipMode">Fountain</span>
           <span class="ui-badge cfg-chip" id="cfgChipBpc">2 bpc</span>
         </div>
+        <div class="auto-status" id="autoReceiveStatus" role="status" aria-live="polite">Auto receive is off. Click Start for each file.</div>
       </div>
       <div class="top-btns">
+        <label class="auto-toggle" for="autoReceiveSwitch">
+          <span id="autoReceiveLabel">Auto receive</span>
+          <button class="ui-switch" id="autoReceiveSwitch" type="button" role="switch" aria-checked="false" aria-labelledby="autoReceiveLabel" aria-describedby="autoReceiveStatus"></button>
+        </label>
+        <span class="top-sep" aria-hidden="true"></span>
         <button class="ui-btn ui-btn-danger-hover" id="stopBtn" type="button" disabled>Stop</button>
         <button class="ui-btn" id="resetBtn" type="button" disabled>Reset</button>
-        <button class="ui-btn" id="recalibrateBtn" type="button" disabled>Recalibrate</button>
+        <button class="ui-btn" id="recalibrateBtn" type="button" disabled data-tooltip="Calibrate the HDMI signal now, without receiving a file">Calibrate</button>
         <button class="ui-btn ui-btn-primary ui-btn-lg" id="startBtn" type="button" disabled>Start</button>
       </div>
     </div>
@@ -273,10 +340,25 @@
           <span>Waiting for signal</span>
         </div>
       </div>
+      <div class="transfer-bar" id="transferBar">
+        <div class="tb-head">
+          <span class="tb-label" id="tbLabel">No transfer in progress</span>
+          <span class="tb-eta">ETA <strong id="tbEta">--</strong></span>
+          <span class="tb-pct" id="tbPct">0%</span>
+        </div>
+        <div class="tb-track" role="progressbar" aria-label="Transfer progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="tbTrack">
+          <div class="tb-fill" id="tbFill"></div>
+        </div>
+      </div>
       <div id="log">
+        <div class="log-resize" id="logResize" role="separator" aria-orientation="horizontal" aria-label="Resize log" aria-valuemin="90" aria-valuemax="800" aria-valuenow="150" tabindex="0"></div>
         <div class="log-bar">
-          <span>Log</span>
-          <span>Auto-scroll</span>
+          <span class="log-title">Log</span>
+          <div class="log-tools">
+            <button class="log-tool" id="logAutoScroll" type="button" aria-pressed="true">Auto-scroll</button>
+            <button class="icon-btn" id="logClear" type="button" data-tooltip="Clear log" aria-label="Clear log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+            <button class="icon-btn" id="logExpand" type="button" aria-pressed="false" data-tooltip="Expand log" aria-label="Expand log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5"/><path d="M16 3h5v5"/><path d="M8 21H3v-5"/><path d="M16 21h5v-5"/></svg></button>
+          </div>
         </div>
         <div id="logBody" role="log" aria-live="polite"></div>
       </div>
@@ -372,6 +454,12 @@
   const metricDuration = document.getElementById("metricDuration");
   const metricSpeed    = document.getElementById("metricSpeed");
   const metricEta      = document.getElementById("metricEta");
+  const transferBar    = document.getElementById("transferBar");
+  const tbLabel        = document.getElementById("tbLabel");
+  const tbEta          = document.getElementById("tbEta");
+  const tbPct          = document.getElementById("tbPct");
+  const tbTrack        = document.getElementById("tbTrack");
+  const tbFill         = document.getElementById("tbFill");
   const downloadArea   = document.getElementById("downloadArea");
   const downloadBtn    = document.getElementById("downloadBtn");
 
@@ -383,6 +471,7 @@
   const LEGACY_PREVIEW_SETTINGS_KEY = "hdmi_transfer_preview_settings";
   let autoScanEnabled = true;
   let idlePreviewEnabled = true;
+  let calibrateOnlyRun = false;
   let previewLastFrameAt = 0;
   let previewLastSeq = 0;
   let previewWatchdogWarned = false;
@@ -421,6 +510,24 @@
     }
   }
 
+  // Chrome does not fire "load" for each part of a multipart MJPEG stream,
+  // so watch naturalWidth to know when the first frame is on screen.
+  let previewFrameWatch = null;
+  function watchFirstPreviewFrame() {
+    clearInterval(previewFrameWatch);
+    previewFrameWatch = setInterval(() => {
+      if (previewStream.style.display === "none") {
+        clearInterval(previewFrameWatch);
+        return;
+      }
+      if (previewStream.naturalWidth > 0) {
+        clearInterval(previewFrameWatch);
+        markPreviewHeartbeat();
+        previewIdle.classList.add("hidden");
+      }
+    }, 150);
+  }
+
   function startPreviewStream(force = false) {
     const q = Number(previewQualitySelect.value || 75);
     const src = "/api/receive/preview?ts=" + Date.now() + "&quality=" + q;
@@ -428,9 +535,11 @@
     previewStream.src = src;
     previewStream.style.display = "block";
     markPreviewHeartbeat();
+    watchFirstPreviewFrame();
   }
 
   function stopPreviewStream() {
+    clearInterval(previewFrameWatch);
     previewStream.removeAttribute("src");
     previewStream.src = "";
     previewStream.style.display = "none";
@@ -510,20 +619,121 @@
   initGrid(GRID_N);
 
   /* ── Log ────────────────────────────────── */
+  /* ── Layout: log size, auto-scroll, side panels (kept per browser) ── */
+  const LAYOUT_KEY = "hdmi_transfer_receive_layout";
+  const layout = Object.assign(
+    {autoScroll: true, logHeight: 150, logExpanded: false, leftCollapsed: false, rightCollapsed: false},
+    (() => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY) || "{}"); } catch { return {}; } })(),
+  );
+  const saveLayout = () => { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch {} };
+  const logPanel = document.getElementById("log");
+  const logResize = document.getElementById("logResize");
+  const logAutoScrollBtn = document.getElementById("logAutoScroll");
+  const logExpandBtn = document.getElementById("logExpand");
+  const toggleLeftBtn = document.getElementById("toggleLeftPanel");
+  const toggleRightBtn = document.getElementById("toggleRightPanel");
+
+  function applyLayout() {
+    logAutoScrollBtn.setAttribute("aria-pressed", String(layout.autoScroll));
+    logPanel.style.height = layout.logHeight + "px";
+    logPanel.classList.toggle("expanded", layout.logExpanded);
+    logExpandBtn.setAttribute("aria-pressed", String(layout.logExpanded));
+    const expandLabel = layout.logExpanded ? "Shrink log" : "Expand log";
+    logExpandBtn.dataset.tooltip = expandLabel;
+    logExpandBtn.setAttribute("aria-label", expandLabel);
+    logResize.setAttribute("aria-valuenow", String(layout.logHeight));
+    document.body.classList.toggle("left-collapsed", layout.leftCollapsed);
+    document.body.classList.toggle("right-collapsed", layout.rightCollapsed);
+    for (const [btn, collapsed, name] of [[toggleLeftBtn, layout.leftCollapsed, "sidebar"], [toggleRightBtn, layout.rightCollapsed, "transfer panel"]]) {
+      const label = (collapsed ? "Show " : "Hide ") + name;
+      btn.setAttribute("aria-expanded", String(!collapsed));
+      btn.setAttribute("aria-label", label);
+      btn.dataset.tooltip = label;
+    }
+    if (typeof sizeCanvas === "function") requestAnimationFrame(sizeCanvas);
+  }
+
+  function setLogHeight(px) {
+    // Never push the preview below 120 px: the column height bounds the log.
+    const column = logPanel.parentElement.getBoundingClientRect().height;
+    const bar = document.getElementById("transferBar");
+    const barSpace = bar ? bar.offsetHeight + 12 : 0;
+    const max = Math.max(120, Math.round(column - 120 - 12 - barSpace));
+    layout.logHeight = Math.round(Math.min(max, Math.max(90, px)));
+    layout.logExpanded = false;
+    applyLayout();
+  }
+
+  logAutoScrollBtn.addEventListener("click", () => {
+    layout.autoScroll = !layout.autoScroll;
+    if (layout.autoScroll) logBody.scrollTop = logBody.scrollHeight;
+    applyLayout(); saveLayout();
+  });
+  logExpandBtn.addEventListener("click", () => { layout.logExpanded = !layout.logExpanded; applyLayout(); saveLayout(); });
+  document.getElementById("logClear").addEventListener("click", () => { logBody.innerHTML = ""; });
+  toggleLeftBtn.addEventListener("click", () => { layout.leftCollapsed = !layout.leftCollapsed; applyLayout(); saveLayout(); });
+  toggleRightBtn.addEventListener("click", () => { layout.rightCollapsed = !layout.rightCollapsed; applyLayout(); saveLayout(); });
+
+  // Drag the top edge of the log to resize it; arrow keys do the same from the keyboard.
+  logResize.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = logPanel.getBoundingClientRect().height;
+    logResize.setPointerCapture(event.pointerId);
+    logResize.classList.add("dragging");
+    const move = (e) => setLogHeight(startHeight + (startY - e.clientY));
+    const up = () => {
+      logResize.classList.remove("dragging");
+      logResize.removeEventListener("pointermove", move);
+      logResize.removeEventListener("pointerup", up);
+      saveLayout();
+    };
+    logResize.addEventListener("pointermove", move);
+    logResize.addEventListener("pointerup", up);
+  });
+  logResize.addEventListener("keydown", (event) => {
+    const step = event.shiftKey ? 80 : 20;
+    if (event.key === "ArrowUp") { setLogHeight(logPanel.getBoundingClientRect().height + step); saveLayout(); event.preventDefault(); }
+    if (event.key === "ArrowDown") { setLogHeight(logPanel.getBoundingClientRect().height - step); saveLayout(); event.preventDefault(); }
+  });
+  // Scrolling up to read pauses auto-scroll; scrolling back to the bottom resumes it.
+  logBody.addEventListener("scroll", () => {
+    const atBottom = logBody.scrollHeight - logBody.scrollTop - logBody.clientHeight < 8;
+    if (atBottom !== layout.autoScroll && document.activeElement !== logAutoScrollBtn) {
+      layout.autoScroll = atBottom; applyLayout(); saveLayout();
+    }
+  }, {passive: true});
+  applyLayout();
+
   function log(level, msg) {
     const t = new Date();
     const ts = t.toLocaleTimeString("en-US", {hour12:false}) + "." + String(t.getMilliseconds()).padStart(3,"0");
     const el = document.createElement("div");
     el.className = "log-entry";
-    el.innerHTML = `<span class="log-ts">[${ts}]</span><span class="log-lv ${level}">${level.toUpperCase()}</span><span class="log-msg">${msg}</span>`;
+    const parts = [["log-ts", "[" + ts + "]"], ["log-lv " + level, level.toUpperCase()], ["log-msg", String(msg)]];
+    for (const [cls, text] of parts) {
+      const span = document.createElement("span");
+      span.className = cls;
+      span.textContent = text;
+      el.appendChild(span);
+    }
     logBody.appendChild(el);
-    logBody.scrollTop = logBody.scrollHeight;
+    if (layout.autoScroll) logBody.scrollTop = logBody.scrollHeight;
   }
 
   /* ── Devices ───────────────────────────── */
-  const DEVICE_CACHE_KEY = "hdmi_transfer_devices";
+  const DEVICE_CACHE_KEY = "hdmi_transfer_devices_v2";
+
+  function savedDeviceName() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+      return s.defaultDeviceName || null;
+    } catch { return null; }
+  }
 
   function populateDevices(devs) {
+    // Keep the user's pick across refreshes; match by name, indices can move.
+    const previousName = deviceSelect.selectedOptions[0]?.dataset.name || null;
     deviceSelect.innerHTML = "";
     if (!devs.length) {
       deviceSelect.innerHTML = '<option value="">No devices</option>';
@@ -533,9 +743,16 @@
     devs.forEach(d => {
       const o = document.createElement("option");
       o.value = d.index;
-      o.textContent = d.name + " (" + d.width + "x" + d.height + " @ " + Math.round(d.fps) + " fps)";
+      o.dataset.name = d.name;
+      o.textContent = d.name + " · " + d.height + "p" + Math.round(d.fps);
+      o.title = d.name + " (" + d.width + "x" + d.height + " @ " + Math.round(d.fps) + " fps)";
       deviceSelect.appendChild(o);
     });
+    const wanted = previousName || savedDeviceName();
+    const match = wanted && [...deviceSelect.options].find(o => o.dataset.name === wanted);
+    if (match) deviceSelect.value = match.value;
+    // Open the selected device now so the idle preview shows without a click.
+    warmDevice(deviceSelect.value);
     statusMsg.textContent = devs.length + " device(s) found.";
     startBtn.disabled = false;
     recalibrateBtn.disabled = false;
@@ -568,7 +785,8 @@
   }
 
   function warmDevice(idx) {
-    fetch("/api/devices/warm", {
+    if (idx === "" || idx === null || idx === undefined) return Promise.resolve();
+    return fetch("/api/devices/warm", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({device: +idx}),
     }).catch(() => {});
@@ -615,7 +833,18 @@
     badgeRes.textContent = m[profileSelect.value] || profileSelect.value;
   }
   profileSelect.addEventListener("change", updateBadge);
-  deviceSelect.addEventListener("change", () => warmDevice(deviceSelect.value));
+  deviceSelect.addEventListener("change", async () => {
+    const name = deviceSelect.selectedOptions[0]?.dataset.name || "device";
+    if (idlePreviewEnabled && stopBtn.disabled) {
+      // Opening a capture card can take several seconds: say so instead of
+      // leaving the previous camera's last frame on screen.
+      previewIdle.textContent = "Opening " + name + "...";
+      previewIdle.classList.remove("hidden");
+      previewStream.style.display = "none";
+    }
+    await warmDevice(deviceSelect.value);
+    if (idlePreviewEnabled && stopBtn.disabled) startPreviewStream(true);
+  });
 
   /* ── Start / Stop ──────────────────────── */
   async function start(options = {}) {
@@ -634,13 +863,18 @@
           bpc:+bpcSelect.value,
           preflight:true,
           force_recalibration: options.force === true,
+          calibrate_only: options.calibrateOnly === true,
+          profile_id: activeProfileId,
         }),
       });
       if (!r.ok) { const e = await r.json(); statusMsg.textContent = "Error: " + (e.error||"Failed"); log("error", e.error||"Start failed"); return; }
     } catch (e) { statusMsg.textContent = "Network error: " + e.message; log("error", "Network: " + e.message); return; }
     startBtn.disabled = true; stopBtn.disabled = false; resetBtn.disabled = false;
     recalibrateBtn.disabled = false;
-    calibrationStatus.textContent = options.force === true
+    calibrateOnlyRun = options.calibrateOnly === true;
+    calibrationStatus.textContent = calibrateOnlyRun
+      ? "Calibration: click Calibrate on the sender PC. Press Enter there once this says Calibrated."
+      : options.force === true
       ? "New calibration requested. Start the calibration pattern on the sender."
       : "Checking saved settings. Start the sender to validate the signal.";
     deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = true;
@@ -649,7 +883,8 @@
     previewLastSeq = 0;
     startPreviewStream(true);
     applyPreviewSettings();
-    log("info", "Starting capture...");
+    log("info", calibrateOnlyRun ? "Starting calibration..." : "Starting capture...");
+    setTransferBar(0, -1, calibrateOnlyRun ? "Calibrating, no file will be received" : "Waiting for the sender...");
     connectSSE();
   }
 
@@ -696,6 +931,7 @@
 
     pctBig.textContent = "0.0";
     fountainPct.textContent = "0%";
+    setTransferBar(0, -1, "No transfer in progress");
     speedBadge.textContent = "--";
     badgeFrm.textContent = "FRM: 0";
     renderTransferCounts(activeProtocol || "fountain", {
@@ -800,7 +1036,13 @@
           saved: "Calibration saved. Ready for the file.",
           validated: "Signal verified. Calibration could not be saved.",
         };
-        calibrationStatus.textContent = labels[d.calibration_state] || "Checking calibration...";
+        const waiting = d.calibration_state === "checking" || d.calibration_state === "calibrating";
+        if (calibrateOnlyRun && waiting) {
+          // Fresh calibration: keep telling the user what to do on the sender.
+          calibrationStatus.textContent = "Calibration: click Calibrate on the sender PC. Press Enter there once this says Calibrated.";
+        } else {
+          calibrationStatus.textContent = labels[d.calibration_state] || "Checking calibration...";
+        }
       }
       if (
         (d.state === "waiting" || d.state === "preflight_wait")
@@ -839,11 +1081,15 @@
       markPreviewHeartbeat();
       const decoded = Number(d.chunks_decoded || 0);
       const total = Number(d.total_chunks || 0);
-      // Compute percent from the exact counters shown in UI.
-      // This guarantees consistency between %, Solved and Needed.
-      const pct = total > 0 ? Math.min(99.9, (decoded / total) * 100) : 0;
+      // Progress follows received information (unique droplets for Fountain):
+      // decoded chunks lag, then cascade near the end. Solved/Needed keep the
+      // decoder counters.
+      const pct = Number.isFinite(Number(d.progress_percent))
+        ? Number(d.progress_percent)
+        : (total > 0 ? Math.min(99.9, (decoded / total) * 100) : 0);
       pctBig.textContent = pct.toFixed(1);
-      fountainPct.textContent = pct.toFixed(0) + "%";
+      // The Blocks grid shows decoded chunks, so its title uses the decoded share.
+      fountainPct.textContent = (total > 0 ? Math.min(99.9, decoded / total * 100) : 0).toFixed(0) + "%";
       badgeFrm.textContent = "FRM: " + d.frames_captured.toLocaleString();
       renderTransferCounts(protocol, d);
       totalChunks = total;
@@ -855,7 +1101,13 @@
         drawSpeed();
       }
       metricSpeed.textContent = spd > 0 ? spd.toFixed(1) + " KB/s" : "--";
-      metricEta.textContent = d.eta_seconds >= 0 ? fmtEta(d.eta_seconds) : "--";
+      metricEta.textContent = fmtEtaDhm(d.eta_seconds);
+      const unit = protocol === "sequential" ? " frames" : " droplets";
+      const got = protocol === "sequential" ? decoded : Number(d.unique_droplets_received || 0);
+      const need = protocol === "sequential" ? total : Number(d.droplets_needed_estimate || 0);
+      setTransferBar(pct, d.eta_seconds,
+        "Receiving: " + got.toLocaleString() + (need ? " / ~" + need.toLocaleString() : "") + unit
+        + (spd > 0 ? " · " + spd.toFixed(1) + " KB/s" : ""));
       if (d.decoded_indices) {
         updateGrid(d.decoded_indices, d.total_chunks);
         if (canvas.style.display !== "none") drawCanvas(d.decoded_indices, d.total_chunks);
@@ -864,19 +1116,46 @@
 
     sse.addEventListener("complete", e => { showComplete(JSON.parse(e.data)); cleanup(); });
     sse.addEventListener("error", e => { try { const d = JSON.parse(e.data); setLink("error"); statusMsg.textContent = "Error: " + d.message; log("error", d.message); } catch {} cleanup(); });
-    sse.addEventListener("stopped", () => { setLink("idle"); statusMsg.textContent = "Stopped."; log("info", "Receive stopped."); cleanup(); });
+    sse.addEventListener("calibrated", e => {
+      const d = JSON.parse(e.data);
+      const bpc = Number(d.transfer_bpc);
+      if ([1, 2, 3].includes(bpc)) bpcSelect.value = String(bpc);
+      const pc = activeProfile();
+      const savedFor = d.sender_profile_id != null && pc ? " Saved for " + pc.name + "." : "";
+      calibrationStatus.textContent = "Calibrated at " + bpc + " bpc." + savedFor
+        + " Press Enter on the sender, then send files with Start or Auto receive.";
+      log("success", "Calibrated: " + bpc + " bpc." + savedFor);
+      // The server stored the detected encoding in the sender PC profile.
+      if (d.sender_profile_id != null) loadSenderProfiles();
+    });
+    sse.addEventListener("stopped", e => {
+      setLink("idle");
+      let d = {};
+      try { d = JSON.parse(e.data); } catch {}
+      if (d.state === "calibrated") {
+        statusMsg.textContent = "Calibrated. Ready to receive.";
+      } else {
+        statusMsg.textContent = "Stopped.";
+        if (calibrateOnlyRun) calibrationStatus.textContent = "Calibration stopped before the signal was validated.";
+        log("info", calibrateOnlyRun ? "Calibration stopped." : "Receive stopped.");
+      }
+      cleanup();
+    });
     sse.onerror = () => { if (sse && sse.readyState === EventSource.CLOSED) cleanup(); };
   }
 
   function cleanup() {
     if (sse) { sse.close(); sse = null; }
+    calibrateOnlyRun = false;
+    // A receive releases the capture it used; reopen it for the idle preview.
+    warmDevice(deviceSelect.value);
     startBtn.disabled = !deviceSelect.value; stopBtn.disabled = true;
     resetBtn.disabled = !deviceSelect.value;
     recalibrateBtn.disabled = !deviceSelect.value;
     deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = false;
     badgeRec.style.display = "none";
     if (idlePreviewEnabled) {
-      previewIdle.textContent = "Live preview (idle)";
+      previewIdle.textContent = "Opening preview...";
       previewIdle.classList.remove("hidden");
       startPreviewStream(true);
     } else {
@@ -892,6 +1171,25 @@
     if (s === "idle" || s === "opening" || s === "probing" || s === "waiting" || s === "preflight_wait") { linkDot.classList.add("idle"); linkLabel.textContent = "Idle"; }
     else if (s === "error") { linkDot.classList.add("error"); linkLabel.textContent = "Error"; }
     else { linkLabel.textContent = "Receiving"; }
+  }
+
+  // Remaining time as days:hours:minutes ("0j 02h 05min"), rounded up so a
+  // few seconds left still reads as one minute.
+  function fmtEtaDhm(s) {
+    if (!(s >= 0)) return "--";
+    const totalMin = Math.max(s > 0 ? 1 : 0, Math.ceil(s / 60));
+    const d = Math.floor(totalMin / 1440), h = Math.floor((totalMin % 1440) / 60), m = totalMin % 60;
+    return d + "j " + String(h).padStart(2, "0") + "h " + String(m).padStart(2, "0") + "min";
+  }
+
+  function setTransferBar(pct, etaSeconds, label, done = false) {
+    const clamped = Math.max(0, Math.min(100, pct));
+    tbFill.style.width = clamped + "%";
+    tbTrack.setAttribute("aria-valuenow", clamped.toFixed(0));
+    tbPct.textContent = (done ? 100 : clamped).toFixed(clamped < 10 && !done ? 1 : 0) + "%";
+    tbEta.textContent = done ? fmtEtaDhm(0) : fmtEtaDhm(etaSeconds);
+    tbLabel.textContent = label;
+    transferBar.classList.toggle("done", done);
   }
 
   function fmtEta(s) {
@@ -910,7 +1208,11 @@
   function showComplete(d) {
     const protocol = getDisplayProtocol(d);
     setLink("idle");
-    log("success", "Complete: " + d.filename + " (" + fmtBytes(d.size) + ")");
+    if (d.duplicate) {
+      log("info", "Same file as the last one (" + d.filename + "), not saved again. The sender is probably still looping.");
+    } else {
+      log("success", "Complete: " + d.filename + " (" + fmtBytes(d.size) + ")");
+    }
     const shaSummary = d.sha256_available ? (d.sha256_ok ? "OK" : "MISMATCH") : "UNAVAILABLE";
     log("success", "SHA-256: " + shaSummary + " | " + d.speed_mbps.toFixed(2) + " Mbps");
     const total = Number(d.total_chunks || totalChunks || 0);
@@ -918,6 +1220,7 @@
     const finalKbps = Number((d.speed_mbps || 0) * 122.0703125);
     pctBig.textContent = "100.0";
     fountainPct.textContent = "100%";
+    setTransferBar(100, 0, "Complete: " + d.filename, true);
     if (Number.isFinite(finalKbps) && finalKbps > 0) {
       speedBadge.textContent = finalKbps.toFixed(1) + " KB/s";
       speedHistory.push(finalKbps);
@@ -944,7 +1247,7 @@
       : "m-value";
     metricDuration.textContent = d.duration_s.toFixed(2) + "s";
     metricSpeed.textContent = d.speed_mbps.toFixed(2) + " Mbps";
-    metricEta.textContent = "0:00";
+    metricEta.textContent = fmtEtaDhm(0);
     downloadBtn.href = d.download_url; downloadBtn.download = d.filename;
     downloadArea.classList.add("visible");
     previewIdle.classList.remove("hidden");
@@ -996,10 +1299,6 @@
       const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
       autoScanEnabled = s.autoDeviceScan !== false;
       idlePreviewEnabled = s.idlePreviewEnabled !== false;
-      if (s.defaultDevice !== null && s.defaultDevice !== undefined) {
-        deviceSelect.value = String(s.defaultDevice);
-        warmDevice(s.defaultDevice);
-      }
       if (s.defaultProfile) profileSelect.value = s.defaultProfile;
       if (s.defaultMode) modeSelect.value = s.defaultMode;
       if (s.defaultBpc) bpcSelect.value = String(s.defaultBpc);
@@ -1007,16 +1306,174 @@
         previewQualitySelect.value = String(Number(s.defaultPreviewQuality));
       }
     } catch {}
+    applyActiveProfile();
     updateBadge();
   }
 
+  /* ── Sender PC profiles and auto receive ── */
+  const senderProfileSelect = document.getElementById("senderProfileSelect");
+  const autoReceiveSwitch = document.getElementById("autoReceiveSwitch");
+  const autoReceiveStatus = document.getElementById("autoReceiveStatus");
+  const JSON_HEADERS = {"Content-Type": "application/json"};
+  let senderProfiles = [];
+  let activeProfileId = null;
+  let applyingProfile = false;
+  let autoState = {enabled: false, paused: false, reason: "", armed: false};
+
+  function activeProfile() {
+    return senderProfiles.find(p => p.id === activeProfileId) || null;
+  }
+
+  function renderSenderProfiles() {
+    senderProfileSelect.innerHTML = "";
+    senderProfileSelect.add(new Option("No sender PC", ""));
+    senderProfiles.forEach(p => senderProfileSelect.add(new Option(p.name, String(p.id))));
+    senderProfileSelect.value = activeProfileId == null ? "" : String(activeProfileId);
+  }
+
+  function applyActiveProfile() {
+    const p = activeProfile();
+    if (!p) return;
+    applyingProfile = true;
+    try {
+      const options = [...deviceSelect.options];
+      // Same rule as the server: saved index if it still has the saved name, else first card with that name.
+      const byIndex = options.find(o => p.device_index != null && o.value === String(p.device_index));
+      const byName = options.find(o => o.dataset.name && o.dataset.name === p.device_name);
+      const pick = (byIndex && (!p.device_name || byIndex.dataset.name === p.device_name)) ? byIndex : (byName || byIndex);
+      if (pick && deviceSelect.value !== pick.value) {
+        deviceSelect.value = pick.value;
+        warmDevice(pick.value);
+      }
+      profileSelect.value = p.profile;
+      modeSelect.value = p.mode;
+      bpcSelect.value = String(p.bpc);
+      previewQualitySelect.value = String(p.preview_quality);
+      [profileSelect, modeSelect, bpcSelect].forEach(el => el.dispatchEvent(new Event("change")));
+      updateBadge();
+    } finally {
+      applyingProfile = false;
+    }
+  }
+
+  async function saveActiveProfile() {
+    const p = activeProfile();
+    if (!p || applyingProfile) return;
+    const option = deviceSelect.selectedOptions[0];
+    const body = {
+      device_name: (option && option.dataset.name) || p.device_name,
+      device_index: deviceSelect.value === "" ? p.device_index : +deviceSelect.value,
+      profile: profileSelect.value, mode: modeSelect.value,
+      bpc: +bpcSelect.value, preview_quality: +previewQualitySelect.value,
+    };
+    try {
+      const r = await fetch("/api/sender-profiles/" + p.id, {method: "PUT", headers: JSON_HEADERS, body: JSON.stringify(body)});
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "save failed");
+      Object.assign(p, d);
+      log("info", "Saved to " + p.name + ".");
+    } catch (e) {
+      log("error", "Could not save to " + p.name + ": " + e.message);
+    }
+  }
+
+  function renderAuto() {
+    autoReceiveSwitch.setAttribute("aria-checked", autoState.enabled ? "true" : "false");
+    let text = "Off. Click Start for each file.";
+    let tone = "";
+    if (autoState.enabled) {
+      const p = activeProfile();
+      if (!p) { text = "Choose a sender PC to arm the receiver."; tone = "warn"; }
+      else if (autoState.paused) { text = "Paused: " + autoState.reason + ". Turn it off and on to resume."; tone = "warn"; }
+      else if (autoState.armed) { text = "Armed. Waiting for " + p.name + " to send."; tone = "armed"; }
+      else { text = "Arming for " + p.name + "..."; }
+    }
+    autoReceiveStatus.textContent = text;
+    autoReceiveStatus.className = "auto-status" + (tone ? " " + tone : "");
+  }
+
+  async function loadSenderProfiles() {
+    senderProfileSelect.disabled = true;
+    try {
+      const r = await fetch("/api/sender-profiles", {cache: "no-store"});
+      const d = await r.json();
+      senderProfiles = Array.isArray(d.profiles) ? d.profiles : [];
+      activeProfileId = d.active_profile_id ?? null;
+      renderSenderProfiles();
+      applyActiveProfile();
+    } catch (e) {
+      log("error", "Could not load sender PCs: " + e.message);
+    } finally {
+      senderProfileSelect.disabled = false;
+    }
+  }
+
+  senderProfileSelect.addEventListener("change", async () => {
+    const id = senderProfileSelect.value ? +senderProfileSelect.value : null;
+    const url = id == null ? "/api/sender-profiles/active" : "/api/sender-profiles/" + id + "/activate";
+    try {
+      const r = await fetch(url, {method: "POST", headers: JSON_HEADERS, body: JSON.stringify({id})});
+      if (!r.ok) throw new Error((await r.json()).error || "failed");
+      activeProfileId = id;
+      applyActiveProfile();
+      log("info", id == null ? "No sender PC selected." : "Sender PC: " + activeProfile().name + ".");
+    } catch (e) {
+      log("error", "Could not select the sender PC: " + e.message);
+      renderSenderProfiles();
+    }
+    renderAuto();
+  });
+
+  [deviceSelect, profileSelect, modeSelect, bpcSelect, previewQualitySelect].forEach(el => {
+    el.addEventListener("change", saveActiveProfile);
+  });
+
+  autoReceiveSwitch.addEventListener("click", async () => {
+    const enabled = autoReceiveSwitch.getAttribute("aria-checked") !== "true";
+    autoReceiveSwitch.disabled = true;
+    try {
+      const r = await fetch("/api/receive/auto", {method: "POST", headers: JSON_HEADERS, body: JSON.stringify({enabled})});
+      if (!r.ok) throw new Error((await r.json()).error || "failed");
+      autoState = await r.json();
+      log("info", enabled ? "Auto receive on." : "Auto receive off.");
+    } catch (e) {
+      log("error", "Could not change auto receive: " + e.message);
+    } finally {
+      autoReceiveSwitch.disabled = false;
+      renderAuto();
+    }
+  });
+
+  async function pollReceiverState() {
+    try {
+      const r = await fetch("/api/receive/status", {cache: "no-store"});
+      const d = await r.json();
+      if (d.auto_receive) autoState = d.auto_receive;
+      const serverActive = d.active_profile_id ?? null;
+      if (serverActive !== activeProfileId) {
+        const matched = senderProfiles.find(p => p.id === serverActive);
+        if (!matched && serverActive != null) await loadSenderProfiles();
+        activeProfileId = serverActive;
+        renderSenderProfiles();
+        applyActiveProfile();
+        if (d.matched_profile_id != null && d.matched_profile_id === serverActive && activeProfile()) {
+          log("success", "Signal matched " + activeProfile().name + ", switched sender PC.");
+        }
+      }
+      // An armed worker started by auto receive: attach to its progress without a Start click.
+      if (d.active && !sse && stopBtn.disabled) checkActiveWorker("Auto receive armed. Waiting for the sender.");
+    } catch {}
+    renderAuto();
+  }
+
   /* ── Check for active worker on page load ── */
-  async function checkActiveWorker() {
+  async function checkActiveWorker(message) {
     try {
       const r = await fetch("/api/receive/status");
       const d = await r.json();
       if (d.active) {
-        log("warn", "Previous session still active, reconnecting...");
+        if (message) log("info", message);
+        else log("warn", "Previous session still active, reconnecting...");
         startBtn.disabled = true; stopBtn.disabled = false; resetBtn.disabled = false;
         deviceSelect.disabled = profileSelect.disabled = modeSelect.disabled = bpcSelect.disabled = refreshBtn.disabled = true;
         badgeRec.style.display = "flex";
@@ -1038,7 +1495,7 @@
     else loadDevices(false, true);
   }
   if (idlePreviewEnabled) {
-    previewIdle.textContent = "Live preview (idle)";
+    previewIdle.textContent = "Opening preview...";
     previewIdle.classList.remove("hidden");
     startPreviewStream(true);
   }
@@ -1067,7 +1524,7 @@
     startPreviewStream(true);
   }, 2000);
   startBtn.addEventListener("click", start);
-  recalibrateBtn.addEventListener("click", () => start({ force: true }));
+  recalibrateBtn.addEventListener("click", () => start({ force: true, calibrateOnly: true }));
   resetBtn.addEventListener("click", resetConnection);
   stopBtn.addEventListener("click", stop);
   previewQualitySelect.addEventListener("change", () => {
@@ -1077,6 +1534,8 @@
   });
   refreshBtn.addEventListener("click", () => loadDevices(true));
   checkActiveWorker();
+  loadSenderProfiles().then(pollReceiverState);
+  setInterval(pollReceiverState, 2000);
 })();
 
 // Live capture-config chips next to the title

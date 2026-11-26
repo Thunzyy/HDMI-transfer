@@ -245,3 +245,161 @@ def test_worker_never_saves_calibration_with_a_corrupt_4k_tail(tmp_path):
     assert not receiver._wait_for_preflight(FiniteCapture(receiver, frames))
     assert receiver.get_runtime_state()["preflight_state"] != "ok"
     assert not receiver._calibration_store.path.exists()
+
+
+def letterboxed_frames():
+    frames = []
+    for source in calibration_frames():
+        frame = np.zeros_like(source)
+        frame[8:152, 8:152] = cv2.resize(source, (144, 144), interpolation=cv2.INTER_NEAREST)
+        frames.append(frame)
+    return frames
+
+
+def profile_key(sender_profile, profile=PROFILE):
+    return calibration_key(device_identity="Test card", open_device=0, backend=None,
+                           profile=profile, capture_shape=(160, 160, 3),
+                           sender_profile=sender_profile)
+
+
+def learned_letterbox_sampling(tmp_path):
+    learner = worker(tmp_path / "learn")
+    assert learner._wait_for_preflight(FiniteCapture(learner, letterboxed_frames() * 20))
+    return learner._calibration_store.load(key())
+
+
+def test_profile_hint_is_used_and_saved_under_profile(tmp_path):
+    receiver = worker(tmp_path, sender_profile_id=1)
+    assert receiver._wait_for_preflight(FiniteCapture(receiver, letterboxed_frames() * 20))
+    assert receiver._calibration_store.load(profile_key(1)) is not None
+    assert receiver._calibration_store.load(key()) is None
+    assert receiver.get_runtime_state()["sender_profile_id"] == 1
+    assert receiver.get_runtime_state()["matched_profile_id"] is None
+
+
+def test_fallback_profile_hint_matches_and_is_reported(tmp_path, monkeypatch):
+    sampling = learned_letterbox_sampling(tmp_path)
+    assert sampling != (0, 0, 1.0, 1.0)
+    receiver = worker(tmp_path, sender_profile_id=1, fallback_profile_ids=[3, 2])
+    receiver._calibration_store.save(profile_key(2), sampling, sender_profile=2)
+    monkeypatch.setattr("hdmi_transfer.application.receive_geometry.estimate_sampling_from_frame",
+                        lambda *args: pytest.fail("A matching profile must avoid a full search"))
+    assert receiver._wait_for_preflight(FiniteCapture(receiver, letterboxed_frames()))
+    state = receiver.get_runtime_state()
+    assert state["matched_profile_id"] == 2
+    assert state["calibration_reused"] is True
+    assert receiver._calibration_store.load(profile_key(1)) is None
+
+
+def test_no_profile_hint_falls_back_to_full_calibration(tmp_path):
+    receiver = worker(tmp_path, sender_profile_id=1, fallback_profile_ids=[2])
+    assert receiver._wait_for_preflight(FiniteCapture(receiver, letterboxed_frames() * 20))
+    assert receiver._calibration_store.load(profile_key(1)) is not None
+    assert receiver.get_runtime_state()["matched_profile_id"] is None
+
+
+def test_recalibrate_ignores_other_profiles_hints(tmp_path):
+    receiver = worker(tmp_path, sender_profile_id=1, fallback_profile_ids=[2], force_recalibration=True)
+    receiver._calibration_store.save(profile_key(2), (0, 0, 1.0, 1.0), sender_profile=2)
+    assert receiver._wait_for_preflight(FiniteCapture(receiver, calibration_frames()))
+    assert receiver.get_runtime_state()["matched_profile_id"] is None
+    assert receiver._calibration_store.load(profile_key(1)) == (0, 0, 1.0, 1.0)
+
+
+def test_stop_reason_defaults_to_user(tmp_path):
+    receiver = worker(tmp_path)
+    assert receiver.stop_reason is None
+    receiver.stop()
+    assert receiver.stop_reason == "user"
+    other = worker(tmp_path)
+    other.stop(reason="replaced")
+    assert other.stop_reason == "replaced"
+
+
+class RecordingHistory:
+    def __init__(self):
+        self.recorded = []
+
+    def record_received(self, data):
+        self.recorded.append(data["filename"])
+
+
+def test_finished_file_is_written_recorded_and_identified(tmp_path):
+    history = RecordingHistory()
+    receiver = worker(tmp_path, history_store=history)
+    receiver._output_dir = str(tmp_path / "out")
+    data = receiver._finish_file({"filename": "a.bin", "size": 3}, b"abc")
+    assert data["duplicate"] is False
+    assert (tmp_path / "out" / "a.bin").read_bytes() == b"abc"
+    assert history.recorded == ["a.bin"]
+    assert receiver.completed_identity == ("a.bin", 3, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+
+
+def test_same_file_again_is_not_rewritten_nor_recorded(tmp_path):
+    history = RecordingHistory()
+    identity = ("a.bin", 3, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    receiver = worker(tmp_path, history_store=history, skip_identity=identity)
+    receiver._output_dir = str(tmp_path / "out")
+    data = receiver._finish_file({"filename": "a.bin", "size": 3}, b"abc")
+    assert data["duplicate"] is True
+    assert not (tmp_path / "out" / "a.bin").exists()
+    assert history.recorded == []
+    assert receiver.get_runtime_state()["state"] == "complete"
+
+
+def test_changed_content_with_same_name_is_a_new_file(tmp_path):
+    history = RecordingHistory()
+    identity = ("a.bin", 3, "0" * 64)
+    receiver = worker(tmp_path, history_store=history, skip_identity=identity)
+    receiver._output_dir = str(tmp_path / "out")
+    assert receiver._finish_file({"filename": "a.bin", "size": 3}, b"abc")["duplicate"] is False
+    assert history.recorded == ["a.bin"]
+
+
+def _collect(receiver):
+    events = receiver.subscribe()
+    def drain():
+        out = []
+        while not events.empty():
+            out.append(events.get_nowait())
+        return out
+    return drain
+
+
+def test_calibrate_only_stops_after_validation_and_reports_bpc(tmp_path, monkeypatch):
+    reported = []
+    receiver = worker(tmp_path, calibrate_only=True, sender_profile_id=7,
+                      on_calibrated=lambda pid, bpc: reported.append((pid, bpc)))
+    drain = _collect(receiver)
+    monkeypatch.setattr(receiver, "_run_auto",
+                        lambda cap: pytest.fail("calibration must not start a receive"))
+
+    receiver._receive_from(FiniteCapture(receiver, calibration_frames() * 3))
+
+    assert reported == [(7, 2)]
+    types = [event["type"] for event in drain()]
+    assert "calibrated" in types and types[-1] == "stopped"
+    assert receiver.get_runtime_state()["state"] == "calibrated"
+    assert receiver._calibration_store.load(profile_key(7)) == (0, 0, 1.0, 1.0)
+
+
+def test_calibrate_only_reports_the_encoding_the_sender_really_uses(tmp_path):
+    reported = []
+    receiver = worker(tmp_path, calibrate_only=True,
+                      on_calibrated=lambda pid, bpc: reported.append((pid, bpc)))
+    frames = calibration_frames(profile=replace(PROFILE, bits_per_channel=3))
+
+    receiver._receive_from(FiniteCapture(receiver, frames))
+
+    assert reported == [(None, 3)]
+
+
+def test_calibrate_only_without_signal_reports_nothing(tmp_path):
+    reported = []
+    receiver = worker(tmp_path, calibrate_only=True,
+                      on_calibrated=lambda pid, bpc: reported.append((pid, bpc)))
+    blank = np.zeros((160, 160, 3), dtype=np.uint8)
+
+    receiver._receive_from(FiniteCapture(receiver, [blank] * 5))
+
+    assert reported == []

@@ -188,8 +188,9 @@ def test_shutdown_runtime_stops_worker_and_releases_capture() -> None:
         def is_alive(self) -> bool:
             return True
 
-        def stop(self) -> None:
+        def stop(self, reason: str = "user") -> None:
             self.stop_calls += 1
+            self.stop_reason = reason
 
     class FakeCaptureManager:
         def __init__(self) -> None:

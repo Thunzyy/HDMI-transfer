@@ -58,3 +58,26 @@ def test_unwritable_store_is_nonfatal(tmp_path):
     store = CalibrationStore(blocker / "calibration.json")
     assert store.load("key") is None
     assert not store.save("key", (0, 0, 1.0, 1.0))
+
+
+def test_key_without_profile_is_unchanged():
+    # Hash produced before sender profiles existed: old caches must keep working.
+    assert key() == "dbf888a718861827a6b20c2c92b621c81e5582eeb2b71b26e514223260871bf1"
+    assert key(sender_profile=None) == key()
+
+
+def test_key_differs_per_profile():
+    assert key(sender_profile=1) != key()
+    assert key(sender_profile=1) != key(sender_profile=2)
+
+
+def test_delete_profile_removes_only_its_entries(tmp_path):
+    store = CalibrationStore(tmp_path / "calibration.json")
+    assert store.save(key(sender_profile=1), (8, 4, 0.9, 0.8), sender_profile=1)
+    assert store.save(key(sender_profile=2), (8, 4, 0.9, 0.8), sender_profile=2)
+    assert store.save(key(), (0, 0, 1.0, 1.0))
+    assert store.delete_profile(1) == 1
+    assert store.load(key(sender_profile=1)) is None
+    assert store.load(key(sender_profile=2)) == (8, 4, 0.9, 0.8)
+    assert store.load(key()) == (0, 0, 1.0, 1.0)
+    assert store.delete_profile(1) == 0

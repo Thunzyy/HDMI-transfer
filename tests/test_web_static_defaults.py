@@ -61,3 +61,17 @@ def test_settings_html_exposes_default_bpc_and_fountain_defaults() -> None:
     assert "defaultBpc: Number(defaultBpc.value)," in text
     assert 'Shared defaults used by Send and Receive' in text
     assert '<span class="help-tip" tabindex="0">?' in text
+
+
+def test_receiver_exposes_profile_and_auto_controls() -> None:
+    from hdmi_transfer.interfaces.web.app_factory import create_app
+
+    client = create_app(runtime=False).test_client()
+    receiver = client.get("/").get_data(as_text=True)
+    assert 'id="senderProfileSelect"' in receiver
+    assert 'id="autoReceiveSwitch"' in receiver
+    assert 'role="switch"' in receiver
+    assert "/api/sender-profiles" in receiver
+    settings = client.get("/settings").get_data(as_text=True)
+    assert 'id="senderProfiles"' in settings
+    assert "/api/sender-profiles" in settings

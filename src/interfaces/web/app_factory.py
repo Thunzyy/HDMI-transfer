@@ -32,6 +32,9 @@ def _should_prime_persistent_capture(open_device: int | str, backend: int | None
 
 def shutdown_runtime(app: Flask) -> None:
     """Stop background worker and release persistent capture resources."""
+    supervisor = getattr(app, "_auto_receive", None)
+    if supervisor is not None:
+        supervisor.shutdown()
     lock = getattr(app, "_receiver_control_lock", None)
     worker = getattr(app, "_receiver_worker", None)
     capture_manager = getattr(app, "_capture_manager", None)
@@ -42,7 +45,7 @@ def shutdown_runtime(app: Flask) -> None:
         if worker is not None:
             try:
                 if worker.is_alive():
-                    worker.stop()
+                    worker.stop(reason="supervisor")
             finally:
                 app._receiver_worker = None
         if capture_manager is not None:
@@ -103,11 +106,14 @@ def create_app(
     runtime: bool = True,
 ) -> Flask:
     from hdmi_transfer.adapters.history_store import HistoryStore
+    from hdmi_transfer.adapters.profile_store import ProfileStore
+    from hdmi_transfer.application.auto_receive import AutoReceiveSupervisor
 
     from .routes_devices import register_device_routes
     from .routes_files import register_file_routes
     from .routes_history import register_history_routes
-    from .routes_receive import register_receive_routes
+    from .routes_profiles import register_profile_routes
+    from .routes_receive import register_receive_routes, start_worker_for_profile
 
     sender_html = _find_sender_html()
 
@@ -117,6 +123,12 @@ def create_app(
     app._receiver_worker = None
     app._receiver_control_lock = threading.Lock()
     app._history_store = HistoryStore()
+    app._profile_store = ProfileStore()
+    app._auto_receive = AutoReceiveSupervisor(
+        app._profile_store,
+        lambda profile: start_worker_for_profile(app, profile),
+        lambda: app._receiver_worker,
+    )
     app.shutdown_runtime = lambda: shutdown_runtime(app)
 
     if runtime:
@@ -166,4 +178,7 @@ def create_app(
     register_receive_routes(app)
     register_file_routes(app)
     register_history_routes(app)
+    register_profile_routes(app)
+    if runtime:
+        app._auto_receive.start()
     return app

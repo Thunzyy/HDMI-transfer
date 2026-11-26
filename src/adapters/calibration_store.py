@@ -27,14 +27,21 @@ Sampling = tuple[int, int, float, float]
 def calibration_key(
     *, device_identity: str, open_device: int | str, backend: int | None,
     profile: ResolutionProfile, capture_shape: tuple[int, ...],
+    sender_profile: int | None = None,
 ) -> str:
-    """Bind a hint to the actual capture path and incoming/encoded geometry."""
+    """Bind a hint to the actual capture path and incoming/encoded geometry.
+
+    ``sender_profile`` scopes the hint to one sender PC. Without it the key is
+    exactly the pre-profile key, so existing caches keep working.
+    """
     context = {
         "device": device_identity, "source": str(open_device), "backend": backend,
         "profile": profile.name, "width": profile.width, "height": profile.height,
         "block_size": profile.block_size, "bpc": profile.bits_per_channel,
         "fps": profile.target_fps, "capture": list(capture_shape[:2]),
     }
+    if sender_profile is not None:
+        context["sender_profile"] = int(sender_profile)
     return hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
 
 
@@ -78,15 +85,33 @@ class CalibrationStore:
         entry = self._read().get(key)
         return _sampling(entry.get("sampling")) if isinstance(entry, dict) else None
 
-    def save(self, key: str, sampling: Sampling) -> bool:
+    def save(self, key: str, sampling: Sampling, *, sender_profile: int | None = None) -> bool:
         validated = _sampling(sampling)
         if validated is None:
             return False
+        entry: dict = {"sampling": validated, "saved_at": time.time()}
+        if sender_profile is not None:
+            entry["sender_profile"] = int(sender_profile)
+        return self._rewrite(lambda entries: entries.__setitem__(key, entry))
+
+    def delete_profile(self, sender_profile: int) -> int:
+        """Forget every hint saved for one sender profile. Returns how many."""
+        removed: list[str] = []
+
+        def operation(entries: dict) -> None:
+            for key, value in list(entries.items()):
+                if isinstance(value, dict) and value.get("sender_profile") == int(sender_profile):
+                    removed.append(key)
+                    del entries[key]
+
+        return len(removed) if self._rewrite(operation) else 0
+
+    def _rewrite(self, change) -> bool:
         temporary: str | None = None
         try:
             with _LOCK:
                 entries = self._read()
-                entries[key] = {"sampling": validated, "saved_at": time.time()}
+                change(entries)
                 # Preserve newest entries; discard malformed records as well.
                 valid = [(k, v) for k, v in entries.items() if isinstance(v, dict)
                          and _sampling(v.get("sampling")) is not None

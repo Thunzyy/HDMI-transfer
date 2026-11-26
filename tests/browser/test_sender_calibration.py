@@ -11,6 +11,7 @@ import pytest
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from hdmi_transfer.application.preflight import build_calibration_payload, is_preflight_start_result
@@ -32,7 +33,7 @@ def browser():
         yield driver
 
 
-def prepare(browser, tmp_path, *, connected=False):
+def prepare(browser, tmp_path, *, connected=False, with_file=True):
     browser.set_window_size(1920, 1080)
     query = "?debugTitle=1&fountainAutoStop=0"
     if connected:
@@ -49,6 +50,8 @@ def prepare(browser, tmp_path, *, connected=False):
         return {ok:true, json:async () => window.receiverState};
       };
     """)
+    if not with_file:
+        return WebDriverWait(browser, 12)
     payload = tmp_path / "test.txt"
     payload.write_bytes(b"Calibration before data. " * 1000)
     browser.find_element(By.ID, "fileInput").send_keys(str(payload))
@@ -58,6 +61,25 @@ def prepare(browser, tmp_path, *, connected=False):
 
 def label(browser):
     return browser.execute_script("return document.getElementById('statusLabel').textContent")
+
+
+def resize(browser, width, height):
+    """Resize and wait until the page has laid out at the new size.
+
+    Headless Chrome applies a window resize asynchronously; clicking before the
+    relayout lands can hit a control that is momentarily not interactable.
+    """
+    before = browser.execute_script("return [window.innerWidth, window.innerHeight]")
+    browser.set_window_size(width, height)
+    wait = WebDriverWait(browser, 10)
+    wait.until(lambda d: d.execute_script("return [window.innerWidth, window.innerHeight]") != before
+               or d.get_window_size() == {"width": width, "height": height})
+    wait.until(lambda d: d.execute_script(
+        "return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))"))
+
+
+def click_ready(browser, element_id):
+    WebDriverWait(browser, 10).until(EC.element_to_be_clickable((By.ID, element_id))).click()
 
 
 def stop(browser):
@@ -102,17 +124,22 @@ def test_offline_first_confirmation_saved_recheck_and_forced_calibration(browser
     # A confirmed setup proceeds without a second Enter press.
     wait.until(lambda d: label(d) == "Transmitting")
     stop(browser)
-    browser.set_window_size(1600, 900)
-    browser.find_element(By.ID, "startBtn").click()
+    resize(browser, 1600, 900)
+    click_ready(browser, "startBtn")
     wait.until(lambda d: label(d) == "Receiver ready? Press Enter")
     assert " f=0 " in browser.title
     stop(browser)
-    browser.set_window_size(1920, 1080)
-    browser.find_element(By.ID, "recalibrateBtn").click()
+    resize(browser, 1920, 1080)
+    # Calibrate shows the pattern right away, without sending the file.
+    click_ready(browser, "recalibrateBtn")
     assert browser.execute_script("return localStorage.getItem('hdmi_transfer_calibration_v1')") is None
-    browser.find_element(By.ID, "startBtn").click()
     wait.until(lambda d: label(d) == "Receiver ready? Press Enter")
     assert " f=0 " in browser.title
+    browser.find_element(By.TAG_NAME, "body").send_keys(Keys.ENTER)
+    wait.until(lambda d: label(d) == "Calibrated (2 bpc)")
+    assert browser.execute_script("return localStorage.getItem('hdmi_transfer_calibration_v1')")
+    browser.find_element(By.ID, "startBtn").click()
+    wait.until(lambda d: label(d) == "Transmitting")
     stop(browser)
     assert not [e for e in browser.get_log("browser") if e["level"] == "SEVERE"]
 
@@ -295,3 +322,17 @@ def test_cancel_during_fullscreen_settle_does_not_confirm_new_run(browser, tmp_p
     browser.execute_script("window.receiverState = {active:true, preflight_required:true, preflight_state:'ok', transfer_bpc:2}")
     wait.until(lambda d: label(d) == "Transmitting")
     stop(browser)
+
+
+def test_calibrate_without_file_adopts_the_receiver_encoding(browser, tmp_path):
+    wait = prepare(browser, tmp_path, connected=True, with_file=False)
+    assert not browser.find_element(By.ID, "startBtn").is_enabled()
+    click_ready(browser, "recalibrateBtn")
+    wait.until(lambda d: "[PREFLIGHT]" in d.title)
+    # A calibrate-only receiver stops as soon as it has validated the pattern.
+    browser.execute_script(
+        "window.receiverState = {active:false, preflight_required:true, preflight_state:'ok', transfer_bpc:3}")
+    wait.until(lambda d: label(d) == "Calibrated (3 bpc)")
+    assert browser.find_element(By.ID, "bpcSelect").get_attribute("value") == "3"
+    assert " f=0 " in browser.title
+    assert not [e for e in browser.get_log("browser") if e["level"] == "SEVERE"]

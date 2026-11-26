@@ -382,3 +382,22 @@ def test_failed_open_releases_previous_capture_and_restores_ready():
     assert previous.released
     assert manager.wait_until_ready(timeout=0)
     assert manager.take(device=0) == (None, None)
+
+
+def test_read_returns_no_frame_while_switching_to_another_device(monkeypatch):
+    """The idle preview must not keep showing the old camera during a switch."""
+    from hdmi_transfer.adapters.capture.capture_manager import CaptureManager
+
+    class _ReadableCapture(_FakeCapture):
+        def read(self):
+            return True, "old-frame"
+
+    scheduled = _defer_prime_threads(monkeypatch)
+    manager = CaptureManager(opener=lambda *args: _FakeCapture())
+    manager.prime(device=1, backend=700, capture=_ReadableCapture())
+    assert manager.read() == (True, "old-frame")
+
+    manager.prime_async(device=0, open_device=0, backend=700)
+
+    assert manager.read() == (False, None)
+    scheduled[0]()

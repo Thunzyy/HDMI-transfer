@@ -9,6 +9,10 @@ import numpy as np
 
 from hdmi_transfer.application.events import ReceiveEvent
 from hdmi_transfer.application.preflight import is_preflight_start_result
+from hdmi_transfer.application.progress_estimate import (
+    ProgressEstimator,
+    fountain_droplets_needed,
+)
 from hdmi_transfer.core.config import (
     DEFAULT_PROFILE,
     FRAME_TYPE_DATA,
@@ -189,6 +193,7 @@ class ReceiveSession:
         return None
 
     def _reset_sequential_state(self) -> None:
+        self._seq_progress = ProgressEstimator()
         self._seq_received: dict[int, bytes] = {}
         self._seq_expected_sha256: bytes | None = None
         self._seq_expected_size: int | None = None
@@ -289,6 +294,11 @@ class ReceiveSession:
                 )
                 if percent >= 100.0:
                     percent = 99.9
+                progress_percent, eta_seconds = self._seq_progress.update(
+                    now=time.monotonic(),
+                    done=len(self._seq_received),
+                    total=self._seq_total_expected,
+                )
                 events.append(ReceiveEvent(
                     kind="progress",
                     data={
@@ -296,12 +306,13 @@ class ReceiveSession:
                         "chunks_decoded": len(self._seq_received),
                         "total_chunks": self._seq_total_expected,
                         "percent": percent,
+                        "progress_percent": progress_percent,
                         "bytes_received": self._seq_bytes_received,
                         "speed_kbps": round(
                             self._seq_bytes_received / duration / 1024,
                             1,
                         ) if duration > 2 else 0,
-                        "eta_seconds": -1,
+                        "eta_seconds": eta_seconds,
                         "decoded_indices": sorted(self._seq_received.keys()),
                         "start_seen": self._seq_saw_start,
                         "end_seen": self._seq_saw_end,
@@ -379,6 +390,7 @@ class ReceiveSession:
         return bytes(full_data), missing
 
     def _reset_fountain_state(self) -> None:
+        self._fountain_progress = ProgressEstimator()
         self._fountain_decoder: FountainDecoder | None = None
         self._fountain_bytes_received = 0
         self._fountain_unique_bytes_received = 0
@@ -492,16 +504,27 @@ class ReceiveSession:
         unique_speed = (
             self._fountain_unique_bytes_received / duration if duration > 2 else 0
         )
-        percent = round(decoded / self._fountain_decoder.K * 100, 1)
+        total_chunks = self._fountain_decoder.K
+        percent = round(decoded / total_chunks * 100, 1)
         if percent >= 100.0:
             percent = 99.9
+        unique = self._fountain_unique_droplets_received
+        needed = fountain_droplets_needed(total_chunks, unique=unique)
+        progress_percent, eta_seconds = self._fountain_progress.update(
+            now=time.monotonic(), done=unique, total=needed,
+            decoded_fraction=decoded / total_chunks,
+        )
         return ReceiveEvent(
             kind="progress",
             data={
                 "protocol": "fountain",
                 "chunks_decoded": decoded,
                 "total_chunks": self._fountain_decoder.K,
+                # Decoded chunks lag then cascade; progress_percent follows the
+                # received information and is what progress bars should show.
                 "percent": percent,
+                "progress_percent": progress_percent,
+                "droplets_needed_estimate": needed,
                 "droplets_received": self._fountain_droplets_received,
                 "unique_droplets_received": (
                     self._fountain_unique_droplets_received
@@ -518,9 +541,7 @@ class ReceiveSession:
                 "speed_kbps": round(speed / 1024, 1) if speed > 0 else 0,
                 "captured_speed_kbps": round(captured_speed / 1024, 1),
                 "unique_speed_kbps": round(unique_speed / 1024, 1),
-                # Fountain progress can jump when equations resolve; captured
-                # bandwidth cannot predict how many useful equations remain.
-                "eta_seconds": -1,
+                "eta_seconds": eta_seconds,
                 "decoded_indices": decoded_indices,
             },
         )

@@ -54,9 +54,14 @@ refresh rate or guarantee a particular transfer speed.
 
 ## Changed setup or failed verification
 
-- **Receiver: Recalibrate** restarts reception while ignoring the cached hint.
-- **Sender: Recalibrate** forgets the offline confirmation and requires Enter
-  again after the receiver confirms readiness.
+- **Calibrate without a file**: click **Calibrate** on the receiver, then
+  **Calibrate** on the sender. The sender shows the pattern with no file
+  selected. The receiver ignores the cached hint, validates three fresh frames,
+  saves the geometry, stores the encoding the sender really uses (bpc) in the
+  selected sender PC profile, and stops. Offline, press Enter on the sender once
+  the receiver shows *Calibrated*; with the receiver API the sender stops by
+  itself. The next **Start** (or auto receive) reuses this calibration at once.
+- **Sender: Calibrate** also forgets the previous offline confirmation.
 - The receiver cache separates device identity, opened source, capture backend,
   video profile, encoding and incoming image dimensions. A changed configuration
   uses another entry. A corrupt or unwritable cache does not prevent calibration.
@@ -79,9 +84,31 @@ Use `--recalibrate` on either command to force a fresh setup. For compatibility
 with older senders or specialist diagnostics, `--no-calibration` bypasses that
 phase explicitly. Video-file reception keeps its existing playback path.
 
+## Sender PC profiles and auto receive
+
+When several PCs send to the same receiver (for example a work PC and a
+personal PC), create one **sender PC** per machine in Settings. A sender PC
+keeps its capture device, profile, mode, encoding and preview quality, and its
+own calibration. Pick it in the Receive sidebar; changing a setting there saves
+it to that PC.
+
+When a transfer starts, the receiver tries the selected PC's saved geometry
+first, then the geometry of the other sender PCs on the same capture card and
+profile. If one of them matches the live signal, the receiver switches to that
+PC and says so in the log. If none matches, it calibrates as usual. A saved
+geometry is still only a hint: three fresh calibration frames must confirm it.
+
+**Auto receive** (switch in the Receive sidebar) keeps the receiver armed for
+the selected PC, with or without the page open, and re-arms it after each
+file. Stop or Reset pauses it. After 3 receptions in a row that end without a
+file, it pauses and shows why. Turn the switch off and on to resume. While it
+is on, the web server holds the capture card, so turn it off before using
+`hdmi-recv`.
+
 ## Storage
 
 - Receiver geometry: `~/.hdmi-transfer/calibration.json` (versioned, up to 64 entries).
+- Sender PCs, the selected PC and the auto receive switch: `~/.hdmi-transfer/profiles.sqlite3`.
 - CLI preferences and sender confirmation: `~/.hdmi-transfer/settings.json`.
 - Browser preferences and offline confirmation: local browser storage. Clearing
   that storage or using another browser requires confirmation again.

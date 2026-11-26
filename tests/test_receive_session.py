@@ -300,3 +300,35 @@ def test_progress_interval_rejects_invalid_values(interval):
 
     with pytest.raises(ValueError, match="progress_interval_s"):
         ReceiveSession(progress_interval_s=interval)
+
+
+def test_fountain_progress_is_steady_while_decoding_lags(monkeypatch):
+    """Regression: the bar jumped from ~5 % to ~70 % when peeling cascaded."""
+    import random
+
+    import hdmi_transfer.application.receive_session as receive_module
+
+    clock = [0.0]
+    monkeypatch.setattr(receive_module.time, "monotonic", lambda: clock[0])
+    session = receive_module.ReceiveSession(mode="fountain", profile_name="balanced")
+    total = 200
+    seeds = random.Random(4).sample(range(1, 10**6), total * 2)
+    reported = []
+    for seed in seeds:
+        clock[0] += 0.1
+        events = session.feed_frame_result(
+            "fountain", _fountain_result(seed, total_chunks=total, payload=b"\0" * 64),
+        )
+        for event in events:
+            if event.kind == "progress":
+                reported.append(event.data)
+        if any(event.kind == "complete" for event in events):
+            break
+
+    percents = [p["progress_percent"] for p in reported]
+    assert percents == sorted(percents)
+    halfway = next(p for p in reported if p["unique_droplets_received"] >= total // 2)
+    assert 40 <= halfway["progress_percent"] <= 55
+    assert halfway["eta_seconds"] > 0
+    steps = [b - a for a, b in zip(percents, percents[1:])]
+    assert max(steps) < 5
