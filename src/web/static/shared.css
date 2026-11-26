@@ -159,6 +159,12 @@ button:disabled,select:disabled{cursor:not-allowed}
   transition:opacity .12s var(--ease),transform .12s var(--ease);
 }
 [data-tooltip]:hover::after,[data-tooltip]:focus-visible::after{opacity:1;transform:translate(-50%,0);transition-delay:.15s}
+/* Tooltips for controls at the top edge open below them */
+[data-tooltip-below]::after{bottom:auto;top:calc(100% + 6px);transform:translate(-50%,-2px)}
+#header [data-tooltip-below]:first-child::after{left:0;transform:translate(0,-2px)}
+#header > [data-tooltip-below]:last-child::after{left:auto;right:0;transform:translate(0,-2px)}
+[data-tooltip-below]:hover::after,[data-tooltip-below]:focus-visible::after{transform:translate(-50%,0)}
+#header [data-tooltip-below]:first-child:hover::after,#header [data-tooltip-below]:first-child:focus-visible::after,#header > [data-tooltip-below]:last-child:hover::after,#header > [data-tooltip-below]:last-child:focus-visible::after{transform:translate(0,0)}
 
 /* Badges (Supabase Badge: tinted fill, toned border, full radius) */
 .ui-badge{

@@ -297,3 +297,14 @@ def test_skipped_start_is_not_a_failure(env):
     assert status["consecutive_failures"] == 0
     assert status["paused"] is False
     assert status["armed"] is False
+
+
+def test_last_identity_follows_completed_files(env):
+    _, supervisor, started, _, clock = env
+    assert supervisor.last_identity is None
+    supervisor.tick()
+    started[0].completed_identity = ("a.bin", 3, "f" * 64)
+    started[0].finish("complete")
+    supervisor.tick()
+    assert supervisor.last_identity == ("a.bin", 3, "f" * 64)
+

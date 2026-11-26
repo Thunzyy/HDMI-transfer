@@ -50,6 +50,7 @@ class AutoReceiveSupervisor:
         self._own_worker = None
         self._judged = True
         self._rearm_at = 0.0
+        self._last_identity = None
         self._shutdown = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -77,6 +78,12 @@ class AutoReceiveSupervisor:
             state = (worker.get_runtime_state() or {}).get("state")
             if state in _IDLE_STATES:
                 worker.stop(reason="supervisor")
+
+    @property
+    def last_identity(self):
+        """(filename, size, sha256) of the last file auto receive got, to skip repeats."""
+        with self._lock:
+            return self._last_identity
 
     def adopt_match(self, worker) -> None:
         """Make the profile whose calibration matched the live signal the active one."""
@@ -120,6 +127,7 @@ class AutoReceiveSupervisor:
         state = (worker.get_runtime_state() or {}).get("state")
         if state == "complete":
             self._failures = 0
+            self._last_identity = getattr(worker, "completed_identity", None) or self._last_identity
             self._rearm_at = self._clock() + self._rearm_delay_s
         else:
             self._fail(f"reception ended without a file (state: {state})")

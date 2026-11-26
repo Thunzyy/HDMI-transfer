@@ -16,6 +16,7 @@ Events published::
 from __future__ import annotations
 
 import contextlib
+import hashlib
 from dataclasses import replace
 import logging
 import queue
@@ -100,8 +101,13 @@ class ReceiverWorker(threading.Thread):
         history_store: HistoryStore | None = None,
         sender_profile_id: int | None = None,
         fallback_profile_ids: list[int] | None = None,
+        skip_identity: tuple[str, int, str] | None = None,
     ) -> None:
         super().__init__(daemon=True)
+        # (filename, size, sha256) of the file auto receive got last: the same file
+        # again (a sender still looping) is not rewritten nor added to the history.
+        self._skip_identity = tuple(skip_identity) if skip_identity else None
+        self.completed_identity: tuple[str, int, str] | None = None
         self._sender_profile_id = sender_profile_id
         self._fallback_profile_ids = [
             int(pid) for pid in (fallback_profile_ids or []) if pid != sender_profile_id
@@ -197,8 +203,20 @@ class ReceiverWorker(threading.Thread):
                 except queue.Full:
                     pass
 
+    def _finish_file(self, data: dict, file_content: bytes) -> dict:
+        """Save a completed file (unless it repeats the last one) and publish ``complete``."""
+        filename = str(data["filename"])
+        identity = (filename, len(file_content), hashlib.sha256(file_content).hexdigest())
+        self.completed_identity = identity
+        data["duplicate"] = identity == self._skip_identity
+        if not data["duplicate"]:
+            data["save_path"] = write_output(file_content, filename, self._output_dir)
+        data["download_url"] = f"/api/receive/download/{filename}"
+        self._publish("complete", data)
+        return data
+
     def _record_history(self, data: dict) -> None:
-        if self._history_store is None:
+        if self._history_store is None or data.get("duplicate"):
             return
         try:
             self._history_store.record_received(data)
@@ -598,12 +616,7 @@ class ReceiverWorker(threading.Thread):
                     self._publish("progress", data)
                     continue
 
-                file_content = bytes(data.pop("file_content"))
-                filename = str(data["filename"])
-                save_path = write_output(file_content, filename, self._output_dir)
-                data["save_path"] = save_path
-                data["download_url"] = f"/api/receive/download/{filename}"
-                self._publish("complete", data)
+                self._finish_file(data, bytes(data.pop("file_content")))
                 return
 
         self._publish("stopped", {
@@ -680,12 +693,7 @@ class ReceiverWorker(threading.Thread):
                     self._publish(event.kind, data)
                     continue
 
-                file_content = bytes(data.pop("file_content"))
-                filename = str(data["filename"])
-                save_path = write_output(file_content, filename, self._output_dir)
-                data["save_path"] = save_path
-                data["download_url"] = f"/api/receive/download/{filename}"
-                self._publish("complete", data)
+                self._finish_file(data, bytes(data.pop("file_content")))
                 return
 
         self._publish("stopped", {

@@ -52,6 +52,7 @@ def start_receiver_worker(
     *,
     force_recalibration: bool = False,
     profile_id: int | None = None,
+    skip_identity: tuple[str, int, str] | None = None,
 ):
     """Start one receiver worker. Used by ``/api/receive/start`` and auto receive.
 
@@ -153,6 +154,7 @@ def start_receiver_worker(
         history_store=app._history_store,
         sender_profile_id=profile_id,
         fallback_profile_ids=fallback_profile_ids,
+        skip_identity=skip_identity,
     )
     app._receiver_worker = worker
     worker.start()
@@ -185,7 +187,7 @@ def start_worker_for_profile(app: Flask, profile: dict):
         return start_receiver_worker(app, {
             "device": device, "profile": profile["profile"], "mode": profile["mode"],
             "bpc": profile["bpc"], "preflight": True,
-        }, profile_id=profile["id"])
+        }, profile_id=profile["id"], skip_identity=app._auto_receive.last_identity)
 
 
 def register_receive_routes(app: Flask) -> None:

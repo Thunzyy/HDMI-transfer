@@ -191,3 +191,19 @@ def test_auto_start_skips_when_auto_was_turned_off_meanwhile(client, monkeypatch
     profile = {"id": 1, "name": "PC", "device_name": None, "device_index": 0,
                "profile": "balanced", "mode": "fountain", "bpc": 2}
     assert routes_receive.start_worker_for_profile(app, profile) is None
+
+
+def test_auto_start_passes_the_last_identity(client, monkeypatch):
+    from hdmi_transfer.interfaces.web import routes_receive
+
+    app = client.application
+    app._profile_store.set_auto_receive(True)
+    app._auto_receive_scanned = True
+    app._auto_receive._last_identity = ("a.bin", 3, "f" * 64)
+    seen = {}
+    monkeypatch.setattr(routes_receive, "start_receiver_worker",
+                        lambda app_, settings, **k: seen.update(k) or "worker")
+    profile = {"id": 1, "name": "PC", "device_name": None, "device_index": 0,
+               "profile": "balanced", "mode": "fountain", "bpc": 2}
+    routes_receive.start_worker_for_profile(app, profile)
+    assert seen["skip_identity"] == ("a.bin", 3, "f" * 64)

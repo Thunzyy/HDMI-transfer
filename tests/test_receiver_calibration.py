@@ -314,3 +314,43 @@ def test_stop_reason_defaults_to_user(tmp_path):
     other = worker(tmp_path)
     other.stop(reason="replaced")
     assert other.stop_reason == "replaced"
+
+
+class RecordingHistory:
+    def __init__(self):
+        self.recorded = []
+
+    def record_received(self, data):
+        self.recorded.append(data["filename"])
+
+
+def test_finished_file_is_written_recorded_and_identified(tmp_path):
+    history = RecordingHistory()
+    receiver = worker(tmp_path, history_store=history)
+    receiver._output_dir = str(tmp_path / "out")
+    data = receiver._finish_file({"filename": "a.bin", "size": 3}, b"abc")
+    assert data["duplicate"] is False
+    assert (tmp_path / "out" / "a.bin").read_bytes() == b"abc"
+    assert history.recorded == ["a.bin"]
+    assert receiver.completed_identity == ("a.bin", 3, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+
+
+def test_same_file_again_is_not_rewritten_nor_recorded(tmp_path):
+    history = RecordingHistory()
+    identity = ("a.bin", 3, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    receiver = worker(tmp_path, history_store=history, skip_identity=identity)
+    receiver._output_dir = str(tmp_path / "out")
+    data = receiver._finish_file({"filename": "a.bin", "size": 3}, b"abc")
+    assert data["duplicate"] is True
+    assert not (tmp_path / "out" / "a.bin").exists()
+    assert history.recorded == []
+    assert receiver.get_runtime_state()["state"] == "complete"
+
+
+def test_changed_content_with_same_name_is_a_new_file(tmp_path):
+    history = RecordingHistory()
+    identity = ("a.bin", 3, "0" * 64)
+    receiver = worker(tmp_path, history_store=history, skip_identity=identity)
+    receiver._output_dir = str(tmp_path / "out")
+    assert receiver._finish_file({"filename": "a.bin", "size": 3}, b"abc")["duplicate"] is False
+    assert history.recorded == ["a.bin"]
