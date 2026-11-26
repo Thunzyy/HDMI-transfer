@@ -43,14 +43,13 @@
 .callout svg{width:16px;height:16px;color:var(--accent);flex-shrink:0;margin-top:2px}
 .setting-select{min-width:220px;max-width:260px}
 
-.save-bar{
-  flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;gap:14px;
-  padding:12px 28px;background:var(--surface-75);border-top:1px solid var(--border);
-}
+/* Save lives in the page header: always visible, no footer strip */
+.center-top{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.save-bar{display:flex;align-items:center;gap:12px;flex-shrink:0}
 .save-hint{font-size:12px;color:var(--fg-lighter)}
 
 .toast{
-  position:fixed;bottom:72px;left:50%;transform:translate(-50%,6px);
+  position:fixed;bottom:24px;left:50%;transform:translate(-50%,6px);
   display:flex;align-items:center;gap:8px;
   padding:10px 14px;border-radius:var(--radius-lg);
   background:var(--surface-100);border:1px solid var(--green-line);color:var(--fg);
@@ -97,7 +96,8 @@
   .settings-body{padding:16px}
   .setting-row{flex-direction:column;align-items:stretch;gap:10px}
   .setting-select{min-width:0;max-width:none;width:100%;height:44px}
-  .save-bar{padding:12px 16px;position:sticky;bottom:0}
+  .center-top{flex-wrap:wrap}
+  .save-hint{display:none}
 }
 </style>
 </head>
@@ -125,6 +125,10 @@
       <div>
         <h1 class="page-title">Settings</h1>
         <div class="sub">Shared defaults used by Send and Receive</div>
+      </div>
+      <div class="save-bar">
+        <span class="save-hint">Defaults apply after saving</span>
+        <button class="ui-btn ui-btn-primary" id="saveBtn" type="button">Save settings</button>
       </div>
     </div>
 
@@ -316,11 +320,6 @@
           </div>
         </div>
       </div>
-    </div>
-
-    <div class="save-bar">
-      <span class="save-hint">Changes apply after saving</span>
-      <button class="ui-btn ui-btn-primary ui-btn-lg" id="saveBtn" type="button">Save settings</button>
     </div>
   </main>
 </div>
