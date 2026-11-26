@@ -949,25 +949,7 @@
     downloadArea.classList.add("visible");
     previewIdle.classList.remove("hidden");
     previewIdle.textContent = "Transfer complete";
-    saveHistory({
-      type: "received", filename: d.filename, size: d.size,
-      duration: d.duration_s, speed: d.speed_mbps * 125000,
-      success: d.sha256_ok, timestamp: Date.now(),
-      protocol,
-      systemPath: d.save_path || "",
-      downloadUrl: d.download_url || "",
-      fileExists: true,
-    });
-  }
-
-  function saveHistory(entry) {
-    try {
-      const key = "hdmi_transfer_history";
-      const items = JSON.parse(localStorage.getItem(key) || "[]");
-      items.push(entry);
-      if (items.length > 200) items.splice(0, items.length - 200);
-      localStorage.setItem(key, JSON.stringify(items));
-    } catch {}
+    // The receiver records this transfer (duration, speed, checksum) in its SQLite history.
   }
 
   /* ── Speed graph ────────────────────────── */

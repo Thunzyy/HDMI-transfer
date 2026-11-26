@@ -71,6 +71,8 @@
   let prefs = loadPrefs();
   let confirmState = null;
   let serverFiles = [];
+  let serverHistory = [];
+  let serverHistoryAvailable = false;
   let serverFilesRequest = null;
   let mergedItems = [];
   let viewItems = [];
@@ -175,7 +177,7 @@
   }
 
   function originLabel(item) {
-    return originKey(item) === "disk" ? "Receiver disk" : "Local log";
+    return originKey(item) === "disk" ? "Receiver disk" : "History log";
   }
 
   function locationFor(item) {
@@ -245,7 +247,25 @@
     const localItems = getHistory();
     const filesByName = new Map(serverFiles.map((file) => [file.filename, file]));
     const seenNames = new Set();
-    const merged = localItems.map((item, localIndex) => {
+    // Receptions are recorded by the receiver in SQLite; the browser log only keeps sent entries
+    // (and received ones while the receiver history is unreachable).
+    const recorded = serverHistory.map((item) => {
+      const disk = item.filename ? filesByName.get(item.filename) : null;
+      if (disk) seenNames.add(disk.filename);
+      return {
+        ...item,
+        imported: false,
+        historyId: item.id,
+        localIndex: null,
+        size: item.size != null ? item.size : (disk ? disk.size : null),
+        systemPath: item.systemPath || (disk ? disk.system_path : ""),
+        fileExists: Boolean(disk),
+      };
+    });
+    const localOnly = localItems
+      .map((item, localIndex) => ({ item, localIndex }))
+      .filter(({ item }) => !(serverHistoryAvailable && item.type === "received"));
+    const merged = recorded.concat(localOnly.map(({ item, localIndex }) => {
       const disk = item.type === "received" && item.filename ? filesByName.get(item.filename) : null;
       if (disk) seenNames.add(disk.filename);
       return {
@@ -257,7 +277,7 @@
         fileExists: item.type === "received" && item.filename ? Boolean(disk) : item.fileExists,
         timestamp: item.timestamp != null ? item.timestamp : (disk ? disk.modified_ms : Date.now()),
       };
-    });
+    }));
 
     for (const file of serverFiles) {
       if (seenNames.has(file.filename)) continue;
@@ -301,7 +321,7 @@
     els.statReceived.textContent = String(received.length);
     els.statReceivedSub.textContent = received.filter((item) => item.fileExists !== false).length + " files currently available on receiver";
     els.statSent.textContent = String(sent.length);
-    els.statSentSub.textContent = viewItems.filter((item) => originKey(item) === "history").length + " locally recorded entries";
+    els.statSentSub.textContent = viewItems.filter((item) => originKey(item) === "history").length + " recorded entries";
   }
 
   function setTag(key, value) {
@@ -322,7 +342,7 @@
     setTag("type", prefs.type !== "all" ? "Type: " + typeLabel(prefs.type) : "");
     setTag("status", prefs.status !== "all" ? "Status: " + prefs.status.replace("_", " ") : "");
     setTag("protocol", prefs.protocol !== "all" ? "Protocol: " + protocolLabel(prefs.protocol) : "");
-    setTag("origin", prefs.origin !== "all" ? "Source: " + (prefs.origin === "disk" ? "Receiver disk" : "Local log") : "");
+    setTag("origin", prefs.origin !== "all" ? "Source: " + (prefs.origin === "disk" ? "Receiver disk" : "History log") : "");
     setTag("range", prefs.range !== "all" ? "Period: " + els.rangeFilter.selectedOptions[0].textContent : "");
   }
 
@@ -332,7 +352,7 @@
       : "Showing <strong>" + viewItems.length + "</strong> of <strong>" + mergedItems.length + "</strong> items.";
     const localCount = viewItems.filter((item) => originKey(item) === "history").length;
     const diskCount = viewItems.filter((item) => originKey(item) === "disk").length;
-    els.resultsCopy.innerHTML = text + " Local log: <strong>" + localCount + "</strong> &middot; Receiver disk: <strong>" + diskCount + "</strong>.";
+    els.resultsCopy.innerHTML = text + " History log: <strong>" + localCount + "</strong> &middot; Receiver disk: <strong>" + diskCount + "</strong>.";
   }
 
   function renderEmptyState() {
@@ -477,22 +497,42 @@
     });
   }
 
+  function fetchList(url) {
+    return fetch(url, { cache: "no-store" }).then(async (response) => {
+      if (!response.ok) return null;
+      const data = await parseJsonSafe(response);
+      return Array.isArray(data) ? data : null;
+    }).catch(() => null);
+  }
+
   async function refreshServerFiles({ silent = false } = {}) {
     if (!serverFilesRequest) {
-      serverFilesRequest = fetch("/api/receive/files", { cache: "no-store" })
-        .then(async (response) => {
-          if (!response.ok) return [];
-          const data = await parseJsonSafe(response);
-          return Array.isArray(data) ? data : [];
-        })
-        .catch(() => {
-          if (!silent) setNotice("Unable to refresh receiver files.", true);
-          return [];
-        })
+      serverFilesRequest = Promise.all([fetchList("/api/receive/files"), fetchList("/api/history")])
         .finally(() => { serverFilesRequest = null; });
     }
-    serverFiles = await serverFilesRequest;
+    const [files, history] = await serverFilesRequest;
+    if (files == null && !silent) setNotice("Unable to refresh receiver files.", true);
+    serverFiles = files || [];
+    serverHistoryAvailable = history != null;
+    serverHistory = history || [];
     render();
+  }
+
+  // One-time move of receptions logged in this browser by older versions into the receiver database.
+  async function migrateLocalReceived() {
+    const received = getHistory().filter((item) => item && item.type === "received");
+    if (received.length === 0) return;
+    try {
+      const response = await fetch("/api/history/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entries: received }),
+      });
+      if (!response.ok) return;
+    } catch {
+      return;
+    }
+    setHistory(getHistory().filter((item) => !(item && item.type === "received")));
   }
 
   async function deleteEntry(index) {
@@ -500,14 +540,15 @@
     if (!item) return;
     const canDeleteFile = item.type === "received" && Boolean(item.filename) && item.fileExists !== false;
     const hasLocalEntry = Number.isInteger(item.localIndex);
+    const hasHistoryEntry = Number.isInteger(item.historyId);
     const label = item.filename || "this entry";
     const confirmed = await showConfirmModal({
       title: canDeleteFile ? "Delete receiver file" : "Remove history entry",
       message: canDeleteFile
-        ? (hasLocalEntry
-          ? `Delete "${label}" from disk and remove it from the local history?`
+        ? (hasLocalEntry || hasHistoryEntry
+          ? `Delete "${label}" from disk and remove it from the history?`
           : `Delete "${label}" from the receiver output directory?`)
-        : `Remove "${label}" from the local history list?`,
+        : `Remove "${label}" from the history list?`,
       confirmLabel: canDeleteFile ? "Delete file" : "Remove entry",
     });
     if (!confirmed) return;
@@ -517,6 +558,14 @@
       if (!response.ok && response.status !== 404) {
         const data = await parseJsonSafe(response);
         setNotice(data.error || "Unable to delete the receiver file.", true);
+        return;
+      }
+    }
+
+    if (hasHistoryEntry) {
+      const response = await fetch("/api/history/" + item.historyId, { method: "DELETE" });
+      if (!response.ok && response.status !== 404) {
+        setNotice("Unable to remove the history entry.", true);
         return;
       }
     }
@@ -536,8 +585,8 @@
       return;
     }
 
+    await refreshServerFiles({ silent: true });
     setNotice("History entry removed.");
-    render();
   }
 
   async function openLocation(index) {
@@ -558,14 +607,16 @@
   });
   els.clearBtn.addEventListener("click", () => {
     showConfirmModal({
-      title: "Clear local history",
-      message: "Clear the local browser history log? Files on disk will not be deleted.",
+      title: "Clear history",
+      message: "Clear the transfer history log? Files on disk will not be deleted.",
       confirmLabel: "Clear log",
-    }).then((confirmed) => {
+    }).then(async (confirmed) => {
       if (!confirmed) return;
+      const response = await fetch("/api/history", { method: "DELETE" }).catch(() => null);
       localStorage.removeItem(STORAGE_KEY);
-      setNotice("Local history cleared.");
-      render();
+      await refreshServerFiles({ silent: true });
+      const ok = Boolean(response && response.ok);
+      setNotice(ok ? "History cleared." : "Browser log cleared; receiver history unavailable.", !ok);
     });
   });
   els.clearFiltersBtn.addEventListener("click", clearFilters);
@@ -621,7 +672,7 @@
 
   syncControls();
   render();
-  refreshServerFiles({ silent: true });
+  migrateLocalReceived().finally(() => refreshServerFiles({ silent: true }));
   window.setInterval(() => {
     if (document.visibilityState !== "visible") return;
     refreshServerFiles({ silent: true });

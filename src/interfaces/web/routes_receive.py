@@ -148,6 +148,7 @@ def register_receive_routes(app: Flask) -> None:
                 require_preflight=require_preflight,
                 force_recalibration=force_recalibration,
                 device_identity=str((device_info or {}).get("name") or decode_device),
+                history_store=app._history_store,
             )
             app._receiver_worker = worker
             worker.start()
