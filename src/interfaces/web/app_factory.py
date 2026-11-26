@@ -32,6 +32,9 @@ def _should_prime_persistent_capture(open_device: int | str, backend: int | None
 
 def shutdown_runtime(app: Flask) -> None:
     """Stop background worker and release persistent capture resources."""
+    supervisor = getattr(app, "_auto_receive", None)
+    if supervisor is not None:
+        supervisor.shutdown()
     lock = getattr(app, "_receiver_control_lock", None)
     worker = getattr(app, "_receiver_worker", None)
     capture_manager = getattr(app, "_capture_manager", None)
@@ -42,7 +45,7 @@ def shutdown_runtime(app: Flask) -> None:
         if worker is not None:
             try:
                 if worker.is_alive():
-                    worker.stop()
+                    worker.stop(reason="supervisor")
             finally:
                 app._receiver_worker = None
         if capture_manager is not None:
