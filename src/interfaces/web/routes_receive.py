@@ -183,14 +183,18 @@ def register_receive_routes(app: Flask) -> None:
                 pass
             try:
                 payload.update(worker.get_runtime_state())
+                app._auto_receive.adopt_match(worker)
             except Exception:
                 pass
-            return _json_with_sender_cors(payload)
-        return _json_with_sender_cors({
-            "active": False,
-            "preflight_required": False,
-            "preflight_state": "inactive",
-        })
+        else:
+            payload = {
+                "active": False,
+                "preflight_required": False,
+                "preflight_state": "inactive",
+            }
+        payload["active_profile_id"] = app._profile_store.get_active_id()
+        payload["auto_receive"] = app._auto_receive.status()
+        return _json_with_sender_cors(payload)
 
     @app.route("/api/receive/start", methods=["POST"])
     def api_receive_start():

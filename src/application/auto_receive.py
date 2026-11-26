@@ -71,6 +71,18 @@ class AutoReceiveSupervisor:
                 if state in _IDLE_STATES:
                     worker.stop(reason="supervisor")
 
+    def adopt_match(self, worker) -> None:
+        """Make the profile whose calibration matched the live signal the active one."""
+        if worker is None:
+            return
+        matched = (worker.get_runtime_state() or {}).get("matched_profile_id")
+        if matched is None or self._store.get_active_id() == matched:
+            return
+        if self._store.get(matched) is None:
+            return
+        log.info("Auto receive: signal matched sender profile %s, switching", matched)
+        self._store.set_active_id(matched)
+
     def status(self) -> dict:
         with self._lock:
             worker = self._own_worker
@@ -108,6 +120,7 @@ class AutoReceiveSupervisor:
         with self._lock:
             current = self._get_worker()
             if current is not None and current.is_alive():
+                self.adopt_match(current)
                 return
             self._judge_last()
             if self._paused or not self._store.get_auto_receive():

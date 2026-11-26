@@ -199,3 +199,23 @@ def test_profile_device_is_found_by_name_first():
     assert resolve_profile_device(devices, {"device_name": "Gone", "device_index": 0}) == 0
     assert resolve_profile_device(devices, {"device_name": "Gone", "device_index": None}) is None
     assert resolve_profile_device([], {"device_name": None, "device_index": 2}) == 2
+
+
+def test_matched_profile_becomes_active(env):
+    store, supervisor, started, current, _ = env
+    perso = store.create({"name": "PC PERSO", "device_name": "Card", "device_index": 0})
+    supervisor.tick()
+    started[0].matched = perso["id"]
+    started[0].get_runtime_state = lambda: {"state": "preflight_ok", "matched_profile_id": perso["id"]}
+    supervisor.adopt_match(current["worker"])
+    assert store.get_active_id() == perso["id"]
+    assert started[0].alive is True
+
+
+def test_unknown_matched_profile_is_ignored(env):
+    store, supervisor, started, current, _ = env
+    active = store.get_active_id()
+    supervisor.tick()
+    started[0].get_runtime_state = lambda: {"state": "preflight_ok", "matched_profile_id": 999}
+    supervisor.adopt_match(current["worker"])
+    assert store.get_active_id() == active
